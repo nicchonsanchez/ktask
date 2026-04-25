@@ -16,6 +16,7 @@ import { logout } from '@/lib/auth';
 const NAV = [
   { href: '/', label: 'Início' },
   { href: '/quadros', label: 'Quadros' },
+  { href: '/empresa', label: 'Empresa' },
   { href: '/configuracoes/membros', label: 'Membros' },
 ];
 
