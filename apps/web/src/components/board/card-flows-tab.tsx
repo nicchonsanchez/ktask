@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, History, Lock, Loader2, MoreHorizontal, Plus } from 'lucide-react';
+import { CheckCircle2, Eye, History, Lock, Loader2, MoreHorizontal, Plus } from 'lucide-react';
 
 import {
   boardsQueries,
@@ -34,27 +35,9 @@ export function CardFlowsTab({ card }: { card: CardDetail }) {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <div className="border-border/60 flex items-center justify-between gap-3 border-b px-6 py-4">
+      <div className="border-border/60 flex items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6">
         <h2 className="text-base font-semibold">Fluxos</h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="Em breve — disponível com cards multi-fluxo na Fase 2"
-            className="bg-primary-subtle text-primary inline-flex cursor-not-allowed items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium opacity-70"
-          >
-            <Plus size={14} />
-            Vincular a outro fluxo
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Em breve"
-            className="border-border text-fg-muted inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium opacity-70"
-          >
-            Exibir fluxos inativados
-          </button>
-        </div>
+        <FlowsHeaderMenu />
       </div>
 
       <div className="flex flex-col gap-6 px-6 py-6">
@@ -178,6 +161,55 @@ function FlowRow({
           <CheckCircle2 size={14} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Menu kebab do header da aba Fluxos. Abriga ações que antes eram botões
+ * grandes ("Vincular a outro fluxo", "Exibir fluxos inativados") — ambas
+ * disabled enquanto cards multi-fluxo (Fase 2) não chega.
+ */
+function FlowsHeaderMenu() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary inline-flex size-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2"
+        aria-label="Mais ações dos fluxos"
+        title="Mais ações"
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="border-border bg-bg absolute right-0 top-full z-20 mt-1 flex w-60 flex-col rounded-md border p-1 text-xs shadow-lg">
+            <button
+              type="button"
+              disabled
+              title="Em breve — disponível com cards multi-fluxo na Fase 2"
+              className="text-fg-subtle flex cursor-not-allowed items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+            >
+              <Plus size={13} />
+              <span className="flex-1">Vincular a outro fluxo</span>
+              <span className="text-fg-subtle text-[10px]">em breve</span>
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Em breve"
+              className="text-fg-subtle flex cursor-not-allowed items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+            >
+              <Eye size={13} />
+              <span className="flex-1">Exibir fluxos inativados</span>
+              <span className="text-fg-subtle text-[10px]">em breve</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

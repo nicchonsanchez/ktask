@@ -209,10 +209,13 @@ function CurrentCardRow({ card, indent }: { card: CardDetail; indent: number }) 
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{card.title}</p>
-            {/* Em mobile, fluxo+tempo aparecem como meta linha embaixo do título */}
-            <p className="text-fg-muted mt-0.5 truncate text-[11px] sm:hidden">
-              {board?.name ?? '...'} · {formatRelativeTime(card.updatedAt)}
-            </p>
+            {/* Mobile: nome do board + etapa do fluxo (Minicolumns) embaixo do título */}
+            <div className="mt-1.5 flex flex-col gap-1 sm:hidden">
+              <p className="text-fg-muted truncate text-[11px]">
+                {board?.name ?? '...'} · {formatRelativeTime(card.updatedAt)}
+              </p>
+              <Minicolumns lists={lists} currentIdx={currentIdx} isCompleted={isCompleted} />
+            </div>
           </div>
           <div className="hidden min-w-0 sm:block">
             <p className="text-fg-muted mb-1.5 truncate text-[11px]">{board?.name ?? '...'}</p>
@@ -386,9 +389,12 @@ function FamilyRow({
         >
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{family.title}</p>
-            <p className="text-fg-muted mt-0.5 truncate text-[11px] sm:hidden">
-              {family.board.name} · {formatRelativeTime(family.updatedAt)}
-            </p>
+            <div className="mt-1.5 flex flex-col gap-1 sm:hidden">
+              <p className="text-fg-muted truncate text-[11px]">
+                {family.board.name} · {formatRelativeTime(family.updatedAt)}
+              </p>
+              <Minicolumns lists={lists} currentIdx={currentIdx} isCompleted={isCompleted} />
+            </div>
           </div>
           <div className="hidden min-w-0 sm:block">
             <p className="text-fg-muted mb-1.5 truncate text-[11px]">{family.board.name}</p>

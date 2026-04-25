@@ -1,16 +1,19 @@
 'use client';
 
-import { Calendar, Cloud, GitBranch, Home, Layout } from 'lucide-react';
+import { Calendar, Cloud, GitBranch, History, Home, Layout } from 'lucide-react';
 
-export type CardTab = 'home' | 'flows' | 'files' | 'calendar' | 'family';
+export type CardTab = 'home' | 'flows' | 'family' | 'timeline' | 'files' | 'calendar';
 
 const TABS: Array<{
   key: CardTab;
   label: string;
   icon: React.ComponentType<{ size?: number }>;
   comingSoon?: boolean;
+  /** Se true, a aba só aparece em telas <lg (desktop tem outra forma de exibir). */
+  mobileOnly?: boolean;
 }> = [
   { key: 'home', label: 'Início', icon: Home },
+  { key: 'timeline', label: 'Timeline', icon: History, mobileOnly: true },
   { key: 'flows', label: 'Fluxos', icon: Layout },
   { key: 'family', label: 'Família', icon: GitBranch },
   { key: 'files', label: 'Arquivos', icon: Cloud, comingSoon: true },
@@ -39,6 +42,8 @@ export function CardTabsBar({ tab, onChange }: { tab: CardTab; onChange: (t: Car
             disabled={disabled}
             title={disabled ? `${t.label} (em breve)` : t.label}
             className={`relative inline-flex shrink-0 items-center gap-1.5 px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none ${
+              t.mobileOnly ? 'lg:hidden' : ''
+            } ${
               active
                 ? 'text-primary'
                 : disabled

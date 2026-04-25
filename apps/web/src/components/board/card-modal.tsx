@@ -159,6 +159,19 @@ function CardModalContent({
   const [createChildOpen, setCreateChildOpen] = useState(false);
   const [tab, setTab] = useState<CardTab>('home');
 
+  // Tab "Timeline" só existe em mobile (em desktop ela vira coluna lateral).
+  // Se o usuário está nela e a tela cresce pra lg+, redireciona pra Início.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(min-width: 1024px)');
+    const handler = () => {
+      if (mql.matches && tab === 'timeline') setTab('home');
+    };
+    handler();
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [tab]);
+
   const deleteMut = useMutation({
     mutationFn: () => deleteCardPermanent(card.id),
     onSuccess: () => {
@@ -244,11 +257,27 @@ function CardModalContent({
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {tab === 'flows' && <CardFlowsTab card={card} />}
             {tab === 'family' && <CardFamilyTab card={card} />}
+            {tab === 'timeline' && (
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 sm:px-6 lg:hidden">
+                <h2 className="text-fg mb-3 text-base font-semibold">
+                  Timeline
+                  <span className="text-fg-subtle ml-1.5 text-[12px] font-normal">
+                    · {card.comments.length + card.activities.length}
+                  </span>
+                </h2>
+                <TimelineFeed
+                  cardId={card.id}
+                  boardId={boardId}
+                  comments={card.comments}
+                  activities={card.activities}
+                />
+              </div>
+            )}
           </div>
         )}
 
         {tab === 'home' && (
-          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_400px]">
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_400px]">
             {/* Coluna esquerda — dados. Ordem: pessoas → conteúdo (descrição) →
                 organização (detalhes/tags) → execução (tarefas/anexos).
                 Divisores sutis separam blocos; respiração generosa. */}
@@ -365,8 +394,9 @@ function CardModalContent({
               </div>
             </div>
 
-            {/* Coluna direita — Timeline (atividade + comentários) */}
-            <aside className="border-border/60 bg-bg-subtle flex min-h-0 flex-col overflow-hidden border-t md:border-l md:border-t-0">
+            {/* Coluna direita — Timeline (atividade + comentários). No mobile,
+                Timeline tem aba própria, então essa coluna só aparece em lg+. */}
+            <aside className="border-border/60 bg-bg-subtle hidden min-h-0 flex-col overflow-hidden lg:flex lg:border-l">
               <div className="flex shrink-0 items-center gap-2 px-5 pb-2 pt-5">
                 <h3 className="text-fg text-[13px] font-medium">Timeline</h3>
                 <span className="text-fg-subtle text-[11px]">
