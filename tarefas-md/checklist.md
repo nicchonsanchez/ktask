@@ -130,10 +130,10 @@ Ver detalhes em `06-roadmap-mvp.md`.
 - [x] Atribuir/remover membros
 - [x] Adicionar/remover labels
 - [ ] Labels CRUD (service criado, falta controller de gerenciamento)
-- [ ] Checklists CRUD
-- [ ] Anexos com URL pré-assinada S3/MinIO
-- [ ] Capa de card
-- [ ] Duplicar card
+- [x] Checklists CRUD (módulo `checklists` + `ChecklistBlock` UI)
+- [x] Anexos com URL pré-assinada S3/MinIO (módulo `attachments` + `storage` com MinIO)
+- [ ] Capa de card (schema tem `coverAttachmentId` mas UI não usa)
+- [x] Duplicar card (`DuplicateCardDialog` + `duplicateCard` service)
 - [x] Activity log em todas operações (BOARD_CREATED, CARD_MOVED, etc)
 
 ### Web UI ⏳ em andamento
@@ -144,12 +144,12 @@ Ver detalhes em `06-roadmap-mvp.md`.
 - [x] Home dashboard (Org atual, papel, membros)
 - [x] API client com auto-refresh 401
 - [x] Zustand store pra session + TanStack Query
-- [ ] Lista de quadros
-- [ ] Tela do quadro (Kanban com dnd-kit)
+- [x] Lista de quadros (`apps/web/src/app/(app)/quadros/page.tsx`)
+- [x] Tela do quadro (Kanban com dnd-kit) (`b/[boardId]/page.tsx` + `list-column.tsx` + `card-item.tsx`)
 - [x] Cabeçalho do fluxo (avatars, privacidade, gear, menu) — ver `15-cabecalho-fluxo.md`
-- [ ] Modal de card
-- [ ] Formulário de convite de membro
-- [ ] Tela de "aceitar convite"
+- [x] Modal de card (`card-modal.tsx` redesigned em 22 — Ummense-inspired)
+- [x] Formulário de convite de membro (`configuracoes/membros/page.tsx`)
+- [x] Tela de "aceitar convite" (`(auth)/convite/[token]/page.tsx`)
 
 #### Prefigurados pendentes (UI presente, lógica em outra tarefa)
 
@@ -158,17 +158,17 @@ Ver detalhes em `06-roadmap-mvp.md`.
 
 ### Interação
 
-- [ ] Comentários com menções `@`
-- [ ] Notificações in-app (sininho com contador + lista)
-- [ ] Busca global (`Ctrl+K`)
+- [x] Comentários com menções `@` (`MentionTextarea` + backend `resolveMentions`)
+- [x] Notificações in-app (sininho com contador + lista) — `notifications-bell.tsx` + módulo `notifications`
+- [x] Busca global (`Ctrl+K`) — `SearchHost` no layout
 - [x] Activity log por card (30 últimas em GET /cards/:id)
 
 ### Real-time
 
-- [ ] Gateway Socket.IO com JWT no handshake
-- [ ] Canais `board:{id}`, `user:{id}`
+- [x] Gateway Socket.IO com JWT no handshake (`realtime.gateway.ts`)
+- [x] Canais `board:{id}`, `user:{id}` (auditar cobertura completa numa sessão dedicada)
 - [ ] Presença no quadro (avatares online)
-- [ ] Eventos: card.created/moved/updated, list._, comment._, notification.\*
+- [x] Eventos: card.created/moved/updated, list._, comment._, notification.\* (auditar `events.types.ts` + emissões)
 - [ ] Reconexão com re-sync (`GET /boards/{id}?since={ts}`)
 
 ### Qualidade
@@ -196,8 +196,8 @@ Ver `09-engine-automacoes.md` para detalhamento.
 - [ ] MessageTemplate + WhatsAppMessage
 - [ ] Campos personalizados (tipos core: text, number, date, select, multiselect, email, phone, user)
 - [ ] **Cards multi-fluxo** (`CardPresence` M:N) — placeholder visual da aba existe; ver [13-cards-multi-fluxo.md](13-cards-multi-fluxo.md)
-- [ ] **Família de cards** (pai/filho com UI completa) — placeholder visual existe; ver [17-familia-cards.md](17-familia-cards.md)
-- [ ] **Time tracking** (cronômetro de cards + entradas manuais + histórico) — botão placeholder existe; ver [18-time-tracking.md](18-time-tracking.md)
+- [x] **Família de cards** (pai/filho com UI completa) — `card-family-tab.tsx` + endpoints de family/parent; ver [17-familia-cards.md](17-familia-cards.md)
+- [x] **Time tracking** (cronômetro de cards + entradas manuais + histórico) — módulo `time-tracking` + `timer-widget` + popover ver [18-time-tracking.md](18-time-tracking.md)
 - [ ] **Aprovações por cliente** (role REVIEWER + branching) — ver [14-aprovacoes-cliente.md](14-aprovacoes-cliente.md)
 - [ ] SLA por lista + alertas
 - [ ] Templates de quadro/card/checklist
@@ -235,3 +235,25 @@ Ver `09-engine-automacoes.md` para detalhamento.
 ## Workflow & colaboração com Claude
 
 - [ ] **Migrar cron de retomada do Modo Independente da máquina local pra agente remoto na nuvem (Anthropic CCR + GitHub).** Hoje (2026-04-25) optei por cron local via Windows Task Scheduler porque não precisa `/web-setup` e usa `git` local que já está autenticado. Migrar quando: (a) precisar rodar Modo Independente com notebook desligado / em viagem, OU (b) ficar incômodo deixar a máquina ligada toda noite. Pré-requisito: rodar `/web-setup` no Claude Code e autorizar GitHub. Detalhes técnicos do protocolo no `feedback_modo_independente.md` (memória).
+
+---
+
+## Pra fazer com user acordado (decisões + acessos)
+
+- [ ] **Subdomínio dev online (`dev.ktask.agenciakharis.com.br`)** — ambiente de teste online separado da prod. Envolve: DNS Cloudflare (registro A), Caddyfile na VM Hetzner, docker-compose.prod.yml estendido com containers de dev, banco `ktask_dev` separado, .env.dev, GitHub Actions workflow novo (deploy em push pra branch `dev`). Bate em SSH + Caddyfile prod + secrets — exige user acordado pra acompanhar. Estimativa: 2-3h dedicadas.
+- [ ] **Recuperação de senha por e-mail** — precisa SMTP configurado (Mailpit em dev, SES ou SMTP real em prod). Decidir provedor antes.
+- [ ] **Bloqueio após 10 tentativas (IP + conta)** — middleware de rate-limit no AuthController.
+- [ ] **Decisões pendentes do checklist** (2FA OWNER, política de senha, primeiro OWNER, Analytics, AWS region, Vercel plan, Sentry, WhatsApp Cloud API).
+
+---
+
+## Página inicial nova (visão pessoal — estilo Ummense)
+
+Plano completo: [22-pagina-inicial.md](22-pagina-inicial.md). Etapas:
+
+- [ ] **Etapa 1** — mover home atual pra `/empresa` (rota + menus)
+- [ ] **Etapa 2** — migration `ChecklistItem` (dueDate, assigneeId, description) + endpoints `/me/tasks`, `/me/recent-cards`, `/me/calendar`
+- [ ] **Etapa 3** — `HomePage` estática com layout 2 colunas + componentes acoplando nos endpoints
+- [ ] **Etapa 4** — interações (atualizar todas pra hoje, adicionar inline, click → abre card pai)
+- [ ] **Etapa 5** — `MiniCalendar` com pontos por dia
+- [ ] **Etapa 6** — placeholder Eventos (Fase 2)
