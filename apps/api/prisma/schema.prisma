@@ -58,6 +58,7 @@ enum TimeEntrySource {
 }
 
 enum Priority {
+  NONE
   LOW
   MEDIUM
   HIGH
@@ -306,7 +307,7 @@ model Card {
   title           String
   description     Json?     // ProseMirror / Tiptap JSON (MVP usa subset simples)
   position        Float
-  priority        Priority  @default(MEDIUM)
+  priority        Priority  @default(NONE)
   coverAttachmentId String?
   startDate       DateTime?
   dueDate         DateTime?

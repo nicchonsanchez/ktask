@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle,
   Archive,
   ChevronsUp,
   Copy,
@@ -45,13 +44,7 @@ import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
-
-const PRIORITY_OPTIONS = [
-  { value: 'LOW', label: 'Baixa', classes: 'bg-bg-emphasis text-fg-muted' },
-  { value: 'MEDIUM', label: 'Média', classes: 'bg-info/15 text-info' },
-  { value: 'HIGH', label: 'Alta', classes: 'bg-warning-subtle text-warning' },
-  { value: 'URGENT', label: 'Urgente', classes: 'bg-danger-subtle text-danger' },
-] as const;
+import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER } from './priority-config';
 
 export function CardModal({ boardId }: { boardId: string }) {
   const router = useRouter();
@@ -325,26 +318,30 @@ function CardModalContent({
                   <div className="flex flex-col gap-2">
                     <p className="text-fg-muted text-[11px]">Prioridade</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {PRIORITY_OPTIONS.map((opt) => {
-                        const active = card.priority === opt.value;
+                      {PRIORITY_ORDER.map((value) => {
+                        const active = card.priority === value;
+                        const color = PRIORITY_COLOR[value];
+                        const label = PRIORITY_LABEL[value];
                         return (
                           <button
-                            key={opt.value}
+                            key={value}
                             type="button"
-                            onClick={() => priorityMut.mutate(opt.value)}
+                            onClick={() => priorityMut.mutate(value)}
                             disabled={priorityMut.isPending}
-                            className={`focus-visible:ring-primary rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${opt.classes} ${
+                            className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
                               active
-                                ? 'ring-primary ring-offset-bg ring-2 ring-offset-2'
-                                : 'opacity-55 hover:opacity-100'
+                                ? 'border-fg/20 bg-bg text-fg shadow-sm'
+                                : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
                             }`}
                             aria-pressed={active}
-                            title={`Prioridade: ${opt.label}`}
+                            title={label}
                           >
-                            {opt.value === 'URGENT' && (
-                              <AlertTriangle size={10} className="mr-0.5 inline-block" />
-                            )}
-                            {opt.label}
+                            <span
+                              aria-hidden
+                              className={`inline-block size-2.5 rounded-full ${color ? '' : 'border-border-strong border'}`}
+                              style={color ? { backgroundColor: color } : undefined}
+                            />
+                            {label}
                           </button>
                         );
                       })}

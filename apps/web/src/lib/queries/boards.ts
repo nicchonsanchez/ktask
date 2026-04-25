@@ -26,7 +26,7 @@ export interface CardListItem {
   id: string;
   title: string;
   position: number;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate: string | null;
   isArchived: boolean;
   enteredListAt: string;
@@ -72,7 +72,7 @@ export interface BoardDetail {
 export interface CompletedCardItem {
   id: string;
   title: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate: string | null;
   completedAt: string;
   list: { id: string; name: string; isArchived: boolean };

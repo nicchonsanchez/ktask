@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+export const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 
 export const CreateCardSchema = z.object({
   listId: z.string().cuid(),

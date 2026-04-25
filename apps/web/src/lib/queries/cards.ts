@@ -7,7 +7,7 @@ export interface CardDetail {
   listId: string;
   title: string;
   description: unknown | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
@@ -67,7 +67,7 @@ export const cardsQueries = {
 export interface UpdateCardInput {
   title?: string;
   description?: unknown | null;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   startDate?: string | null;
   dueDate?: string | null;
   completedAt?: string | null;
@@ -116,7 +116,7 @@ export interface FamilyCard {
   boardId: string;
   listId: string;
   parentCardId: string | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate: string | null;
   completedAt: string | null;
   updatedAt: string;

@@ -2,26 +2,11 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertTriangle, Calendar, MessageSquare, CheckSquare, Paperclip } from 'lucide-react';
+import { Calendar, MessageSquare, CheckSquare, Paperclip } from 'lucide-react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
-
-// Prioridade segue princípio de **de-emphasis** (§0.1 doc 20):
-// - MEDIUM (default): NÃO renderiza chip — médio = padrão, não merece destaque
-// - LOW: chip discreto neutro
-// - HIGH/URGENT: chip colorido pra chamar atenção
-const PRIORITY_COLOR: Record<Exclude<CardListItem['priority'], 'MEDIUM'>, string> = {
-  LOW: 'bg-bg-emphasis text-fg-muted',
-  HIGH: 'bg-warning-subtle text-warning',
-  URGENT: 'bg-danger-subtle text-danger',
-};
-
-const PRIORITY_LABEL: Record<Exclude<CardListItem['priority'], 'MEDIUM'>, string> = {
-  LOW: 'Baixa',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-};
+import { PRIORITY_LABEL, PRIORITY_COLOR } from './priority-config';
 
 function dueState(iso: string | null): {
   show: boolean;
@@ -98,7 +83,8 @@ export function CardOverlay({ card }: { card: CardListItem }) {
 function CardInner({ card }: { card: CardListItem }) {
   const hasLabels = card.labels.length > 0;
   const due = dueState(card.dueDate);
-  const showPriorityChip = card.priority !== 'MEDIUM';
+  const priorityColor = PRIORITY_COLOR[card.priority];
+  const hasPriorityBar = priorityColor !== null;
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;
   const hasMembers = card.members.length > 0;
@@ -106,28 +92,30 @@ function CardInner({ card }: { card: CardListItem }) {
 
   return (
     <div className="flex flex-col gap-2.5">
-      {hasLabels && (
-        <div className="-mx-3 -mt-3 flex h-1 overflow-hidden rounded-t-lg">
-          {card.labels.map((l) => (
+      {/* Topo do card: barra de prioridade (cor sólida) e/ou stripes das
+          labels. Prioridade sempre acima das labels quando ambas existem. */}
+      {(hasPriorityBar || hasLabels) && (
+        <div className="-mx-3 -mt-3 flex flex-col overflow-hidden rounded-t-lg">
+          {hasPriorityBar && (
             <div
-              key={l.label.id}
-              className="flex-1"
-              style={{ backgroundColor: l.label.color }}
-              title={l.label.name}
+              className="h-1.5"
+              style={{ backgroundColor: priorityColor as string }}
+              title={`Prioridade: ${PRIORITY_LABEL[card.priority]}`}
             />
-          ))}
+          )}
+          {hasLabels && (
+            <div className="flex h-1">
+              {card.labels.map((l) => (
+                <div
+                  key={l.label.id}
+                  className="flex-1"
+                  style={{ backgroundColor: l.label.color }}
+                  title={l.label.name}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Linha 1: chip de prioridade (só HIGH/URGENT/LOW) — fica no topo
-          quando existe pra dar contexto antes do título */}
-      {showPriorityChip && (
-        <span
-          className={`inline-flex w-fit items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${PRIORITY_COLOR[card.priority as Exclude<CardListItem['priority'], 'MEDIUM'>]}`}
-        >
-          {card.priority === 'URGENT' && <AlertTriangle size={9} />}
-          {PRIORITY_LABEL[card.priority as Exclude<CardListItem['priority'], 'MEDIUM'>]}
-        </span>
       )}
 
       {/* Título — destaque máximo */}
