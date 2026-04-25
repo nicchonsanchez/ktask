@@ -64,14 +64,17 @@ export function LeadPicker({ card, boardId }: { card: CardDetail; boardId: strin
 
   return (
     <div className="relative flex items-center gap-1.5" ref={ref}>
-      <span className="text-fg-muted text-[11px] uppercase tracking-wide">Líder</span>
       <button
         type="button"
         onClick={() => {
           setOpen((v) => !v);
           setQuery('');
         }}
-        className="hover:ring-primary/40 flex items-center gap-1 rounded-full transition-all hover:ring-2"
+        className={`flex items-center rounded-full transition-all ${
+          card.lead
+            ? 'ring-primary ring-offset-bg ring-2 ring-offset-2 hover:opacity-80'
+            : 'hover:ring-primary/40 hover:ring-2'
+        }`}
         title={card.lead ? `Líder: ${card.lead.name} (clique para trocar)` : 'Definir líder'}
         aria-label={card.lead ? `Líder: ${card.lead.name}` : 'Definir líder do card'}
       >

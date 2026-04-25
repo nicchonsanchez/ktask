@@ -6,12 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Archive,
-  CheckCircle2,
-  ChevronRight,
   ChevronsUp,
   Copy,
   ExternalLink,
-  Layers,
+  Flag,
+  Hash,
   Link as LinkIcon,
   Lock,
   MoreHorizontal,
@@ -42,7 +41,7 @@ import { AttachmentsBlock } from './attachments-block';
 import { DueDatePicker } from './due-date-picker';
 import { DuplicateCardDialog } from './duplicate-card-dialog';
 import { CreateChildCardDialog } from './create-child-card-dialog';
-import { CardSidebarTabs, type CardTab } from './card-sidebar-tabs';
+import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
 
@@ -168,21 +167,14 @@ function CardModalContent({
     },
   });
 
+  const cardCode = card.id.slice(-8).toUpperCase();
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header — eyebrow (lista/status), título grande, ações compactadas */}
-      <header className="border-border flex flex-wrap items-start justify-between gap-2 border-b px-4 py-4 sm:gap-4 sm:px-7 sm:py-5">
+      {/* Header — inspirado no Ummense mobile: título dominante, código do
+          card como pill abaixo, ícones de ação enxutos à direita. */}
+      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-5 sm:gap-4 sm:px-7 sm:pt-6">
         <div className="min-w-0 flex-1">
-          <div className="text-fg-muted mb-1 flex items-center gap-1 text-[11px] font-medium">
-            <Layers size={11} />
-            <span className="truncate">{card.list.name}</span>
-            {card.completedAt && (
-              <>
-                <ChevronRight size={11} />
-                <span className="text-success font-semibold">Finalizado</span>
-              </>
-            )}
-          </div>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -194,14 +186,27 @@ function CardModalContent({
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
             placeholder="Título do card"
-            className="text-fg w-full bg-transparent text-lg font-semibold tracking-tight focus:outline-none sm:text-xl"
+            className="text-fg w-full bg-transparent text-2xl font-semibold leading-tight tracking-tight focus:outline-none sm:text-[28px]"
           />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span
+              className="bg-bg-muted text-fg-muted inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] tracking-wider"
+              title="Código do card"
+            >
+              <Hash size={10} />
+              {cardCode}
+            </span>
+            <span className="text-fg-subtle text-[11px]">· {card.list.name}</span>
+            {isCompleted && (
+              <span className="text-success inline-flex items-center gap-1 text-[11px] font-medium">
+                <Flag size={10} fill="currentColor" />
+                Finalizado
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <DueDatePicker value={card.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
-          <span className="hidden md:inline-flex">
-            <StatusBadge isCompleted={isCompleted} />
-          </span>
           <CardMenu
             cardId={card.id}
             boardId={boardId}
@@ -218,7 +223,6 @@ function CardModalContent({
               if (confirmation === 'EXCLUIR') deleteMut.mutate();
             }}
           />
-          <div className="bg-border mx-1 h-6 w-px" />
           <button
             type="button"
             onClick={onClose}
@@ -231,10 +235,11 @@ function CardModalContent({
         </div>
       </header>
 
-      {/* Corpo: sidebar de abas (esquerda) + conteúdo da aba */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <CardSidebarTabs tab={tab} onChange={setTab} />
+      {/* Tabs horizontais — substituem a sidebar vertical anterior */}
+      <CardTabsBar tab={tab} onChange={setTab} />
 
+      {/* Corpo: conteúdo da aba ativa */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {tab !== 'home' && (
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {tab === 'flows' && <CardFlowsTab card={card} />}
@@ -245,133 +250,130 @@ function CardModalContent({
         {tab === 'home' && (
           <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_400px]">
             {/* Coluna esquerda — dados. Ordem: pessoas → conteúdo (descrição) →
-                organização (detalhes/tags) → execução (tarefas/anexos). Cada
-                bloco com heading consistente e respiração generosa. */}
-            <div className="flex min-h-0 flex-col gap-7 overflow-y-auto px-5 py-6 sm:px-7">
-              {/* Pessoas: Líder + Equipe + Privacidade */}
-              <div className="flex flex-wrap items-center gap-3 text-xs">
+                organização (detalhes/tags) → execução (tarefas/anexos).
+                Divisores sutis separam blocos; respiração generosa. */}
+            <div className="divide-border/40 flex min-h-0 flex-col divide-y overflow-y-auto">
+              {/* Equipe — linha única estilo Ummense: label + lead + avatares + cadeado */}
+              <div className="px-5 py-4 sm:px-7">
                 <MembersInline card={card} boardId={boardId} />
-                <button
-                  type="button"
-                  title="Privacidade do card (em breve)"
-                  aria-label="Privacidade (em breve)"
-                  className="text-fg-muted disabled:opacity-60"
-                  disabled
-                >
-                  <Lock size={14} />
-                </button>
               </div>
 
-              {/* Descrição */}
-              <Block icon={<DescriptionIcon />} label="Descrição">
-                <RichEditor
-                  value={card.description}
-                  onChange={(doc) => descMut.mutate(doc)}
-                  placeholder="Escreva detalhes, contexto, links… aceita imagens (paste/drop)."
-                  isSaving={descMut.isPending}
-                  onUploadImage={async (file) => {
-                    const att = await uploadAttachment(card.id, file, { embedded: true });
-                    if (!att.publicUrl) {
-                      throw new Error('Imagem enviada, mas a URL pública não está disponível.');
-                    }
-                    return { src: att.publicUrl, alt: att.fileName };
-                  }}
-                />
-              </Block>
-
-              {/* Detalhes (prioridade) */}
-              <Block icon={<ChevronsUp size={14} />} label="Detalhes">
-                <div className="flex flex-col gap-2">
-                  <p className="text-fg-muted text-[11px]">Prioridade</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRIORITY_OPTIONS.map((opt) => {
-                      const active = card.priority === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => priorityMut.mutate(opt.value)}
-                          disabled={priorityMut.isPending}
-                          className={`focus-visible:ring-primary rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${opt.classes} ${
-                            active
-                              ? 'ring-primary ring-offset-bg ring-2 ring-offset-2'
-                              : 'opacity-55 hover:opacity-100'
-                          }`}
-                          aria-pressed={active}
-                          title={`Prioridade: ${opt.label}`}
-                        >
-                          {opt.value === 'URGENT' && (
-                            <AlertTriangle size={10} className="mr-0.5 inline-block" />
-                          )}
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </Block>
-
-              {/* Tags (labels) */}
-              <Block
-                icon={<Tag size={14} />}
-                label="Etiquetas"
-                count={card.labels.length || undefined}
-              >
-                {card.labels.length === 0 ? (
-                  <EmptyHint
-                    text="Adicione etiquetas pra categorizar este card."
-                    actionLabel="Adicionar etiqueta"
-                    actionDisabled
-                    actionTitle="Em breve — gerenciamento completo de etiquetas"
+              <div className="flex flex-col gap-7 px-5 py-6 sm:px-7">
+                {/* Descrição */}
+                <Block icon={<DescriptionIcon />} label="Descrição">
+                  <RichEditor
+                    value={card.description}
+                    onChange={(doc) => descMut.mutate(doc)}
+                    placeholder="Escreva detalhes, contexto, links… aceita imagens (paste/drop)."
+                    isSaving={descMut.isPending}
+                    onUploadImage={async (file) => {
+                      const att = await uploadAttachment(card.id, file, { embedded: true });
+                      if (!att.publicUrl) {
+                        throw new Error('Imagem enviada, mas a URL pública não está disponível.');
+                      }
+                      return { src: att.publicUrl, alt: att.fileName };
+                    }}
                   />
-                ) : (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {card.labels.map((cl) => (
-                      <span
-                        key={cl.labelId}
-                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
-                        style={{ backgroundColor: cl.label.color }}
-                      >
-                        {cl.label.name}
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      disabled
-                      title="Em breve — adicionar etiqueta"
-                      className="border-border text-fg-muted inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11px] disabled:opacity-60"
-                    >
-                      <Plus size={10} />
-                      Etiqueta
-                    </button>
+                </Block>
+
+                {/* Detalhes (prioridade) */}
+                <Block icon={<ChevronsUp size={14} />} label="Detalhes">
+                  <div className="flex flex-col gap-2">
+                    <p className="text-fg-muted text-[11px]">Prioridade</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PRIORITY_OPTIONS.map((opt) => {
+                        const active = card.priority === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => priorityMut.mutate(opt.value)}
+                            disabled={priorityMut.isPending}
+                            className={`focus-visible:ring-primary rounded-full px-2.5 py-1 text-[11px] font-medium transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${opt.classes} ${
+                              active
+                                ? 'ring-primary ring-offset-bg ring-2 ring-offset-2'
+                                : 'opacity-55 hover:opacity-100'
+                            }`}
+                            aria-pressed={active}
+                            title={`Prioridade: ${opt.label}`}
+                          >
+                            {opt.value === 'URGENT' && (
+                              <AlertTriangle size={10} className="mr-0.5 inline-block" />
+                            )}
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-              </Block>
+                </Block>
 
-              {/* Tarefas do card */}
-              <Block icon={<ChecklistIcon />} label="Tarefas do card" count={checklistCounts(card)}>
-                <ChecklistBlock card={card} boardId={boardId} />
-              </Block>
+                {/* Tags (labels) */}
+                <Block
+                  icon={<Tag size={14} />}
+                  label="Etiquetas"
+                  count={card.labels.length || undefined}
+                >
+                  {card.labels.length === 0 ? (
+                    <EmptyHint
+                      text="Adicione etiquetas pra categorizar este card."
+                      actionLabel="Adicionar etiqueta"
+                      actionDisabled
+                      actionTitle="Em breve — gerenciamento completo de etiquetas"
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {card.labels.map((cl) => (
+                        <span
+                          key={cl.labelId}
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
+                          style={{ backgroundColor: cl.label.color }}
+                        >
+                          {cl.label.name}
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        disabled
+                        title="Em breve — adicionar etiqueta"
+                        className="border-border text-fg-muted inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11px] disabled:opacity-60"
+                      >
+                        <Plus size={10} />
+                        Etiqueta
+                      </button>
+                    </div>
+                  )}
+                </Block>
 
-              {/* Anexos */}
-              <Block
-                icon={<Paperclip size={14} />}
-                label="Anexos"
-                count={card.attachments.length || undefined}
-              >
-                <AttachmentsBlock card={card} boardId={boardId} />
-              </Block>
+                {/* Tarefas do card */}
+                <Block
+                  icon={<ChecklistIcon />}
+                  label="Tarefas do card"
+                  count={checklistCounts(card)}
+                >
+                  <ChecklistBlock card={card} boardId={boardId} />
+                </Block>
+
+                {/* Anexos */}
+                <Block
+                  icon={<Paperclip size={14} />}
+                  label="Anexos"
+                  count={card.attachments.length || undefined}
+                >
+                  <AttachmentsBlock card={card} boardId={boardId} />
+                </Block>
+              </div>
             </div>
 
             {/* Coluna direita — Timeline (atividade + comentários) */}
-            <aside className="border-border bg-bg-subtle flex min-h-0 flex-col overflow-hidden border-t md:border-l md:border-t-0">
-              <div className="border-border flex shrink-0 items-center justify-between gap-2 border-b px-5 py-4">
-                <div>
-                  <h3 className="text-fg text-sm font-semibold">Timeline</h3>
-                  <p className="text-fg-muted text-[11px]">Anotações e atividade do card</p>
-                </div>
+            <aside className="border-border/60 bg-bg-subtle flex min-h-0 flex-col overflow-hidden border-t md:border-l md:border-t-0">
+              <div className="flex shrink-0 items-center gap-2 px-5 pb-2 pt-5">
+                <h3 className="text-fg text-[13px] font-medium">Timeline</h3>
+                <span className="text-fg-subtle text-[11px]">
+                  · {card.comments.length + card.activities.length}
+                </span>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+              <div className="flex min-h-0 flex-1 flex-col px-5 pb-4">
                 <TimelineFeed
                   cardId={card.id}
                   boardId={boardId}
@@ -385,7 +387,7 @@ function CardModalContent({
       </div>
 
       {/* Rodapé com dica de atalhos — ajuda descobrir teclado sem ser intrusivo */}
-      <div className="border-border bg-bg-subtle/50 hidden shrink-0 items-center justify-end gap-3 border-t px-7 py-1.5 text-[10px] sm:flex">
+      <div className="border-border/60 bg-bg-subtle/50 hidden shrink-0 items-center justify-end gap-3 border-t px-7 py-1.5 text-[10px] sm:flex">
         <span className="text-fg-subtle">
           <Kbd>Esc</Kbd> fechar
         </span>
@@ -430,14 +432,10 @@ function Block({
 }) {
   return (
     <section>
-      <div className="text-fg-muted mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
-        {icon}
+      <div className="text-fg-muted mb-2.5 flex items-center gap-2 text-[13px] font-medium">
+        <span className="opacity-80">{icon}</span>
         <span>{label}</span>
-        {count !== undefined && (
-          <span className="text-fg-subtle text-[10px] font-normal normal-case tracking-normal">
-            · {count}
-          </span>
-        )}
+        {count !== undefined && <span className="text-fg-subtle text-[11px]">· {count}</span>}
       </div>
       {children}
     </section>
@@ -452,25 +450,33 @@ function CardModalSkeleton() {
   return (
     <div className="flex h-full animate-pulse flex-col">
       {/* Header */}
-      <div className="border-border flex items-start justify-between gap-4 border-b px-7 py-5">
-        <div className="flex-1 space-y-2">
-          <div className="bg-bg-muted h-3 w-32 rounded" />
-          <div className="bg-bg-muted h-6 w-2/3 rounded" />
+      <div className="flex items-start justify-between gap-4 px-7 pb-3 pt-6">
+        <div className="flex-1 space-y-2.5">
+          <div className="bg-bg-muted h-7 w-2/3 rounded" />
+          <div className="bg-bg-muted h-4 w-32 rounded" />
         </div>
         <div className="flex items-center gap-2">
           <div className="bg-bg-muted h-8 w-20 rounded" />
           <div className="bg-bg-muted h-8 w-8 rounded" />
         </div>
       </div>
+      {/* Tabs */}
+      <div className="border-border/60 flex gap-3 border-b px-5 pb-3 pt-1">
+        <div className="bg-bg-muted h-5 w-16 rounded" />
+        <div className="bg-bg-muted h-5 w-16 rounded" />
+        <div className="bg-bg-muted h-5 w-16 rounded" />
+      </div>
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="bg-bg-subtle border-border w-[72px] shrink-0 border-r" />
-        <div className="grid flex-1 grid-cols-1 md:grid-cols-[1fr_400px]">
-          <div className="space-y-7 px-7 py-6">
-            <div className="flex gap-2">
-              <div className="bg-bg-muted h-6 w-6 rounded-full" />
-              <div className="bg-bg-muted h-6 w-24 rounded" />
+      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_400px]">
+        <div className="divide-border/40 divide-y">
+          <div className="px-7 py-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-bg-muted h-4 w-14 rounded" />
+              <div className="bg-bg-muted h-7 w-7 rounded-full" />
+              <div className="bg-bg-muted h-7 w-7 rounded-full" />
             </div>
+          </div>
+          <div className="space-y-7 px-7 py-6">
             <div className="space-y-2">
               <div className="bg-bg-muted h-3 w-20 rounded" />
               <div className="bg-bg-muted h-24 w-full rounded" />
@@ -483,17 +489,13 @@ function CardModalSkeleton() {
                 <div className="bg-bg-muted h-6 w-14 rounded-full" />
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="bg-bg-muted h-3 w-20 rounded" />
-              <div className="bg-bg-muted h-12 w-full rounded" />
-            </div>
           </div>
-          <div className="bg-bg-subtle border-border space-y-3 border-l p-5">
-            <div className="bg-bg-muted h-4 w-24 rounded" />
-            <div className="bg-bg-muted h-16 w-full rounded" />
-            <div className="bg-bg-muted h-12 w-full rounded" />
-            <div className="bg-bg-muted h-12 w-full rounded" />
-          </div>
+        </div>
+        <div className="bg-bg-subtle border-border/60 space-y-3 border-l p-5">
+          <div className="bg-bg-muted h-4 w-24 rounded" />
+          <div className="bg-bg-muted h-16 w-full rounded" />
+          <div className="bg-bg-muted h-12 w-full rounded" />
+          <div className="bg-bg-muted h-12 w-full rounded" />
         </div>
       </div>
     </div>
@@ -574,19 +576,6 @@ function ChecklistIcon() {
       <polyline points="9 11 12 14 22 4" />
       <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
-  );
-}
-
-function StatusBadge({ isCompleted }: { isCompleted: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
-        isCompleted ? 'bg-accent/15 text-accent' : 'bg-primary-subtle text-primary'
-      }`}
-    >
-      {isCompleted ? <CheckCircle2 size={12} /> : null}
-      {isCompleted ? 'Finalizado' : 'Ativo'}
-    </span>
   );
 }
 
@@ -743,10 +732,9 @@ function MembersInline({ card, boardId }: { card: CardDetail; boardId: string })
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <LeadPicker card={card} boardId={boardId} />
+      <span className="text-fg-muted text-sm">Equipe</span>
       <div className="flex items-center gap-2">
-        <span className="text-fg-muted text-[11px] uppercase tracking-wide">Equipe</span>
-        <TeamPicker card={card} boardId={boardId} />
+        <LeadPicker card={card} boardId={boardId} />
         {team.length > 0 && (
           <div className="flex items-center -space-x-1.5">
             {team.slice(0, 4).map((m) => (
@@ -764,7 +752,17 @@ function MembersInline({ card, boardId }: { card: CardDetail; boardId: string })
             )}
           </div>
         )}
+        <TeamPicker card={card} boardId={boardId} />
       </div>
+      <button
+        type="button"
+        title="Privacidade do card (em breve)"
+        aria-label="Privacidade (em breve)"
+        className="text-fg-muted ml-auto disabled:opacity-60"
+        disabled
+      >
+        <Lock size={15} />
+      </button>
     </div>
   );
 }
