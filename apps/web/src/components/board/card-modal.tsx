@@ -44,6 +44,7 @@ import { CreateChildCardDialog } from './create-child-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
+import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 
 const PRIORITY_OPTIONS = [
   { value: 'LOW', label: 'Baixa', classes: 'bg-bg-emphasis text-fg-muted' },
@@ -99,6 +100,8 @@ function CardModalContent({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
+  const promptDialog = usePrompt();
   const isCompleted = Boolean(card.completedAt);
 
   function invalidate() {
@@ -224,15 +227,27 @@ function CardModalContent({
             cardId={card.id}
             boardId={boardId}
             busy={deleteMut.isPending}
-            onArchive={() => {
-              if (confirm('Arquivar este card?')) archiveMut.mutate();
+            onArchive={async () => {
+              const ok = await confirmDialog({
+                title: 'Arquivar card?',
+                description:
+                  'O card sai do fluxo mas pode ser restaurado depois pela área de arquivados.',
+                confirmLabel: 'Arquivar',
+              });
+              if (ok) archiveMut.mutate();
             }}
             onDuplicate={() => setDuplicateOpen(true)}
             onCreateChild={() => setCreateChildOpen(true)}
-            onDelete={() => {
-              const confirmation = prompt(
-                `Excluir "${card.title}" permanentemente?\n\nEsta ação é IRREVERSÍVEL — o card, comentários, checklists e anexos serão apagados.\n\nDigite "EXCLUIR" para confirmar:`,
-              );
+            onDelete={async () => {
+              const confirmation = await promptDialog({
+                title: `Excluir "${card.title}" permanentemente?`,
+                description:
+                  'Esta ação é IRREVERSÍVEL — o card, comentários, checklists e anexos serão apagados.',
+                requiredText: 'EXCLUIR',
+                placeholder: 'Digite EXCLUIR',
+                confirmLabel: 'Excluir definitivamente',
+                danger: true,
+              });
               if (confirmation === 'EXCLUIR') deleteMut.mutate();
             }}
           />

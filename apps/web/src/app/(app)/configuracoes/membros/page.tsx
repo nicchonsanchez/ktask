@@ -20,6 +20,7 @@ import {
 } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/lib/api-client';
+import { useConfirm } from '@/components/ui/dialogs';
 
 const InviteSchema = z.object({
   email: z.string().email('E-mail inválido.').toLowerCase().trim(),
@@ -209,6 +210,7 @@ function PendingInviteRow({
   invitation: InvitationRow;
   onChange: () => void;
 }) {
+  const confirm = useConfirm();
   const revoke = useMutation({
     mutationFn: () => revokeInvitation(invitation.id),
     onSuccess: onChange,
@@ -226,8 +228,16 @@ function PendingInviteRow({
       </div>
       <button
         type="button"
-        onClick={() => {
-          if (confirm('Revogar este convite?')) revoke.mutate();
+        onClick={async () => {
+          if (
+            await confirm({
+              title: 'Revogar convite?',
+              description: `O convite para ${invitation.email} deixará de ser válido.`,
+              confirmLabel: 'Revogar',
+              danger: true,
+            })
+          )
+            revoke.mutate();
         }}
         disabled={revoke.isPending}
         className="text-fg-muted hover:text-danger inline-flex items-center gap-1 text-xs"
@@ -247,6 +257,7 @@ function MemberRowItem({
   isSelf: boolean;
   onChange: () => void;
 }) {
+  const confirm = useConfirm();
   const roleMut = useMutation({
     mutationFn: (role: OrgRole) => updateMemberRole(member.userId, role),
     onSuccess: onChange,
@@ -294,8 +305,17 @@ function MemberRowItem({
       {!isSelf && member.role !== 'OWNER' && (
         <button
           type="button"
-          onClick={() => {
-            if (confirm(`Remover ${member.user.name} da organização?`)) removeMut.mutate();
+          onClick={async () => {
+            if (
+              await confirm({
+                title: `Remover ${member.user.name}?`,
+                description:
+                  'O membro perderá acesso à organização e não conseguirá mais entrar. Quem comentou ou trabalhou em cards continua visível no histórico.',
+                confirmLabel: 'Remover',
+                danger: true,
+              })
+            )
+              removeMut.mutate();
           }}
           disabled={removeMut.isPending}
           className="text-fg-muted hover:text-danger inline-flex size-8 items-center justify-center rounded-md"

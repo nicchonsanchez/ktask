@@ -30,6 +30,7 @@ import { ApiError } from '@/lib/api-client';
 import { formatRelativeTime, proseToPlainText } from '@/lib/prose';
 import { activityParts } from '@/lib/activity-format';
 import { UserAvatar } from '@/components/user-avatar';
+import { useConfirm } from '@/components/ui/dialogs';
 import { useAuthStore } from '@/stores/auth-store';
 import { MentionTextarea } from './mention-textarea';
 
@@ -338,6 +339,7 @@ function CommentItem({
   boardId: string;
 }) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -440,9 +442,15 @@ function CommentItem({
                     {isAuthor && (
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.preventDefault();
-                          if (confirm('Remover esta imagem?')) removeAttMut.mutate(a.id);
+                          const ok = await confirm({
+                            title: 'Remover imagem?',
+                            description: `"${a.fileName}" será removida desta anotação.`,
+                            confirmLabel: 'Remover',
+                            danger: true,
+                          });
+                          if (ok) removeAttMut.mutate(a.id);
                         }}
                         disabled={removeAttMut.isPending}
                         className="bg-bg/90 text-fg-muted hover:text-danger absolute right-1 top-1 hidden size-6 items-center justify-center rounded-full group-hover/img:flex"
@@ -464,8 +472,14 @@ function CommentItem({
                     key={a.id}
                     attachment={a}
                     canRemove={isAuthor}
-                    onRemove={() => {
-                      if (confirm(`Remover "${a.fileName}"?`)) removeAttMut.mutate(a.id);
+                    onRemove={async () => {
+                      const ok = await confirm({
+                        title: 'Remover anexo?',
+                        description: `"${a.fileName}" será removido desta anotação.`,
+                        confirmLabel: 'Remover',
+                        danger: true,
+                      });
+                      if (ok) removeAttMut.mutate(a.id);
                     }}
                     removing={removeAttMut.isPending}
                   />
@@ -487,8 +501,14 @@ function CommentItem({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (confirm('Excluir anotação?')) deleteMut.mutate();
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Excluir anotação?',
+                      description: 'A anotação e seus anexos serão removidos.',
+                      confirmLabel: 'Excluir',
+                      danger: true,
+                    });
+                    if (ok) deleteMut.mutate();
                   }}
                   disabled={deleteMut.isPending}
                   className="text-fg-muted hover:text-danger inline-flex items-center gap-1"

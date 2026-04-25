@@ -13,6 +13,7 @@ import {
   type ActiveTimer,
 } from '@/lib/queries/time-tracking';
 import { ApiError } from '@/lib/api-client';
+import { useNotify } from '@/components/ui/dialogs';
 import { useTimerStore } from '@/stores/timer-store';
 import { TimerPopover } from './timer-popover';
 
@@ -28,6 +29,7 @@ export function TimerWidget() {
   const params = useSearchParams();
   const cardInContext = params.get('card');
   const openConflict = useTimerStore((s) => s.openConflict);
+  const notify = useNotify();
 
   const activeQuery = useQuery({ ...timeTrackingQueries.active() });
   const active = activeQuery.data;
@@ -41,7 +43,7 @@ export function TimerWidget() {
     },
     onError: (err) => {
       console.error('[timer] start failed:', err);
-      if (err instanceof ApiError) alert(err.message);
+      if (err instanceof ApiError) notify.error(err.message);
     },
   });
 
@@ -52,15 +54,13 @@ export function TimerWidget() {
     },
     onError: (err) => {
       console.error('[timer] stop failed:', err);
-      if (err instanceof ApiError) alert(err.message);
+      if (err instanceof ApiError) notify.error(err.message);
     },
   });
 
   function handlePlayClick() {
     if (!cardInContext) {
-      alert(
-        'Abra um card primeiro. Você pode iniciar o cronômetro pelo botão "Iniciar cronômetro" dentro do modal do card, ou pelo card aberto no URL.',
-      );
+      notify.info('Abra um card primeiro. Você pode iniciar o cronômetro dentro do modal do card.');
       return;
     }
     if (active && active.cardId !== cardInContext) {

@@ -10,6 +10,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePrompt } from '@/components/ui/dialogs';
 import {
   Bold,
   Italic,
@@ -290,6 +291,7 @@ function Toolbar({
   uploadingImage: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const promptDialog = usePrompt();
   const isBold = editor.isActive('bold');
   const isItalic = editor.isActive('italic');
   const isUnderline = editor.isActive('underline');
@@ -302,9 +304,19 @@ function Toolbar({
   const isH3 = editor.isActive('heading', { level: 3 });
   const isLink = editor.isActive('link');
 
-  function setLink() {
+  async function setLink() {
     const previous = editor.getAttributes('link').href as string | undefined;
-    const input = window.prompt('URL do link', previous ?? 'https://');
+    const input = await promptDialog({
+      title: previous ? 'Editar link' : 'Inserir link',
+      description: previous
+        ? 'Edite a URL ou apague pra remover o link.'
+        : 'Cole a URL completa. Adicionamos `https://` automaticamente se não tiver protocolo.',
+      defaultValue: previous ?? 'https://',
+      placeholder: 'https://...',
+      inputType: 'url',
+      confirmLabel: 'Aplicar link',
+      allowEmpty: Boolean(previous),
+    });
     if (input === null) return; // cancelar
     if (input === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();

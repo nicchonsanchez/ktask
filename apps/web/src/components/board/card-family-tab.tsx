@@ -26,6 +26,7 @@ import {
 import { boardsQueries } from '@/lib/queries/boards';
 import { formatRelativeTime } from '@/lib/prose';
 import { UserAvatar } from '@/components/user-avatar';
+import { useConfirm } from '@/components/ui/dialogs';
 import { CreateChildCardDialog } from './create-child-card-dialog';
 
 /**
@@ -311,6 +312,7 @@ function FamilyRow({
   const params = useSearchParams();
   const routeParams = useParams<{ boardId: string }>();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [menuOpen, setMenuOpen] = useState(false);
   const [createChildOpen, setCreateChildOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -484,19 +486,23 @@ function FamilyRow({
                     }
                     danger
                     disabled={unlinkMut.isPending}
-                    onClick={() => {
+                    onClick={async () => {
                       setMenuOpen(false);
-                      if (
-                        confirm(
+                      const ok = await confirm({
+                        title:
                           role === 'parent'
                             ? 'Desvincular este card do pai?'
                             : role === 'sibling'
-                              ? 'Desvincular este irmão do pai? Vira card independente.'
-                              : 'Desvincular este descendente? Vira card independente.',
-                        )
-                      ) {
-                        unlinkMut.mutate();
-                      }
+                              ? 'Desvincular do pai comum?'
+                              : 'Desvincular este descendente?',
+                        description:
+                          role === 'parent'
+                            ? 'O card atual deixa de ter pai e vira card raiz.'
+                            : 'O card vira independente — perde o vínculo da família.',
+                        confirmLabel: 'Desvincular',
+                        danger: true,
+                      });
+                      if (ok) unlinkMut.mutate();
                     }}
                   />
                 </div>

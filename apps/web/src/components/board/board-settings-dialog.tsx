@@ -14,6 +14,7 @@ import {
 } from '@/lib/queries/boards';
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
+import { useConfirm } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
 
 type Visibility = 'PRIVATE' | 'ORGANIZATION';
@@ -37,6 +38,7 @@ export function BoardSettingsDialog({
   onOpenChange: (next: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [description, setDescription] = useState(board.description ?? '');
   const [visibility, setVisibility] = useState<Visibility>(board.visibility);
   const [cardOrdering, setCardOrdering] = useState<CardOrdering>(board.cardOrdering);
@@ -96,14 +98,15 @@ export function BoardSettingsDialog({
     });
   }
 
-  function handleArchive() {
-    if (
-      confirm(
-        `Inativar o fluxo "${board.name}"? Ele sai da listagem de quadros mas pode ser restaurado depois.`,
-      )
-    ) {
-      archiveMut.mutate();
-    }
+  async function handleArchive() {
+    const ok = await confirm({
+      title: `Inativar "${board.name}"?`,
+      description:
+        'O fluxo sai da listagem de quadros mas pode ser restaurado depois. Cards e dados continuam preservados.',
+      confirmLabel: 'Inativar',
+      danger: true,
+    });
+    if (ok) archiveMut.mutate();
   }
 
   return (

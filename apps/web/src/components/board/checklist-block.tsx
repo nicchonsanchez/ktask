@@ -17,6 +17,7 @@ import {
 import { Loader2, Plus, Trash2, X } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
+import { useConfirm } from '@/components/ui/dialogs';
 
 export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
   const queryClient = useQueryClient();
@@ -100,6 +101,7 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
 }
 
 function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onChange: () => void }) {
+  const confirm = useConfirm();
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(checklist.title);
   useEffect(() => setTitle(checklist.title), [checklist.title]);
@@ -175,9 +177,14 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
         </span>
         <button
           type="button"
-          onClick={() => {
-            if (confirm(`Remover a lista "${checklist.title}" e todos os itens?`))
-              removeListMut.mutate();
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Remover lista "${checklist.title}"?`,
+              description: `Todos os ${total} ${total === 1 ? 'item' : 'itens'} serão apagados.`,
+              confirmLabel: 'Remover lista',
+              danger: true,
+            });
+            if (ok) removeListMut.mutate();
           }}
           disabled={removeListMut.isPending}
           className="text-fg-muted hover:text-danger rounded p-1"

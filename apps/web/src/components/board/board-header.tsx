@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@ktask/ui';
 import { archiveBoard, boardsQueries, updateBoard, type BoardDetail } from '@/lib/queries/boards';
 import { UserAvatar } from '@/components/user-avatar';
 import { ApiError } from '@/lib/api-client';
+import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
 import { BoardSettingsDialog } from './board-settings-dialog';
 
@@ -28,6 +29,8 @@ export function BoardHeader({ board }: { board: BoardDetail }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const notify = useNotify();
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: boardsQueries.detail(board.id).queryKey });
@@ -41,7 +44,7 @@ export function BoardHeader({ board }: { board: BoardDetail }) {
       window.location.href = '/quadros';
     },
     onError: (err) => {
-      alert(err instanceof ApiError ? err.message : 'Erro ao inativar fluxo.');
+      notify.error(err instanceof ApiError ? err.message : 'Erro ao inativar fluxo.');
     },
   });
 
@@ -56,15 +59,16 @@ export function BoardHeader({ board }: { board: BoardDetail }) {
       .catch(() => {});
   }
 
-  function handleArchive() {
+  async function handleArchive() {
     setMenuOpen(false);
-    if (
-      confirm(
-        `Inativar o fluxo "${board.name}"? Ele sai da listagem de quadros mas pode ser restaurado depois.`,
-      )
-    ) {
-      archiveMut.mutate();
-    }
+    const ok = await confirm({
+      title: `Inativar "${board.name}"?`,
+      description:
+        'O fluxo sai da listagem de quadros mas pode ser restaurado depois. Cards e dados continuam preservados.',
+      confirmLabel: 'Inativar',
+      danger: true,
+    });
+    if (ok) archiveMut.mutate();
   }
 
   const visibleMembers = board.members.slice(0, STACK_LIMIT);

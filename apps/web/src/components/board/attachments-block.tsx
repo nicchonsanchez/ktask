@@ -22,6 +22,7 @@ import {
 } from '@/lib/queries/cards';
 import { formatRelativeTime } from '@/lib/prose';
 import { ApiError } from '@/lib/api-client';
+import { useConfirm } from '@/components/ui/dialogs';
 
 export function AttachmentsBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
   const queryClient = useQueryClient();
@@ -149,6 +150,7 @@ function AttachmentRow({
   attachment: Attachment;
   onRemoved: () => void;
 }) {
+  const confirm = useConfirm();
   const removeMut = useMutation({
     mutationFn: () => removeAttachment(attachment.id),
     onSuccess: onRemoved,
@@ -209,8 +211,16 @@ function AttachmentRow({
         )}
         <button
           type="button"
-          onClick={() => {
-            if (confirm(`Remover "${attachment.fileName}"?`)) removeMut.mutate();
+          onClick={async () => {
+            if (
+              await confirm({
+                title: 'Remover anexo?',
+                description: `"${attachment.fileName}" será removido do card.`,
+                confirmLabel: 'Remover',
+                danger: true,
+              })
+            )
+              removeMut.mutate();
           }}
           disabled={removeMut.isPending}
           className="text-fg-muted hover:text-danger rounded p-1 opacity-0 transition-opacity group-hover/att:opacity-100"

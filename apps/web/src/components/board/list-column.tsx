@@ -16,6 +16,7 @@ import {
   updateList,
   type ListWithCards,
 } from '@/lib/queries/boards';
+import { useConfirm } from '@/components/ui/dialogs';
 
 /** Prefixo usado nos IDs de colunas no DndContext pra não colidir com cardIds. */
 export const LIST_SORT_PREFIX = 'col:';
@@ -28,6 +29,7 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: list.id });
   const params = useParams<{ boardId: string }>();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [draft, setDraft] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(list.name);
@@ -135,9 +137,14 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
         </div>
         <ListMenu
           onRename={() => setEditingName(true)}
-          onArchive={() => {
-            if (confirm(`Arquivar a coluna "${list.name}"? Os cards também ficarão arquivados.`))
-              archiveMut.mutate();
+          onArchive={async () => {
+            const ok = await confirm({
+              title: `Arquivar coluna "${list.name}"?`,
+              description: `Os ${list.cards.length} ${list.cards.length === 1 ? 'card' : 'cards'} desta coluna também ficarão arquivados.`,
+              confirmLabel: 'Arquivar',
+              danger: true,
+            });
+            if (ok) archiveMut.mutate();
           }}
         />
       </div>
