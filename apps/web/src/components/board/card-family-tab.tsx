@@ -157,10 +157,15 @@ const ROW_GRID =
 
 function dueDateColor(iso: string | null): string {
   if (!iso) return 'text-fg-muted';
-  const days = (new Date(iso).getTime() - Date.now()) / 86_400_000;
+  // Compara em dias-de-calendário no fuso local (não em ms).
+  const due = new Date(iso);
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const days = Math.round((dueDay - today) / 86_400_000);
   if (days < 0) return 'text-danger font-semibold';
-  if (days < 1) return 'text-danger';
-  if (days < 3) return 'text-warning';
+  if (days === 0) return 'text-warning font-semibold';
+  if (days <= 3) return 'text-warning';
   return 'text-fg-muted';
 }
 
