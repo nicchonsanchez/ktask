@@ -161,7 +161,7 @@ export function RichEditor({
     editorProps: {
       attributes: {
         class:
-          'prose-sm max-w-none focus:outline-none px-3 py-2 text-sm leading-relaxed [&_p]:my-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted [&_code]:rounded [&_code]:bg-bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] [&_img]:max-w-full',
+          'prose-sm max-w-none focus:outline-none px-3 py-2 text-sm leading-relaxed [&_p]:my-1 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:mt-4 [&_h1]:mb-1.5 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-snug [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-snug [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted [&_code]:rounded [&_code]:bg-bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] [&_img]:max-w-full',
         style: `min-height: ${minHeight};`,
       },
       handleDrop: (view, event, _slice, moved) => {
@@ -210,9 +210,13 @@ export function RichEditor({
   }, [editor]);
 
   // Sincroniza valor externo (ex: reload via TanStack Query) quando muda
-  // de fonte real e não é eco da própria emissão.
+  // de fonte real e não é eco da própria emissão. Enquanto o editor tem
+  // foco, o estado local é fonte da verdade — ignora updates externos
+  // (incluindo o refetch que acontece após salvar). Sem isso, o cursor
+  // pula pro final cada vez que o salvamento volta do servidor.
   useEffect(() => {
     if (!editor) return;
+    if (editor.isFocused) return;
     const incoming = normalizeIncoming(value);
     const serialized = JSON.stringify(incoming);
     if (serialized === lastEmittedRef.current) return;
