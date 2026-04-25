@@ -6,6 +6,9 @@ import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import { Highlight } from '@tiptap/extension-highlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bold,
@@ -20,6 +23,8 @@ import {
   Heading3,
   Link as LinkIcon,
   Image as ImageIcon,
+  Highlighter,
+  Palette,
   Undo2,
   Redo2,
 } from 'lucide-react';
@@ -149,6 +154,9 @@ export function RichEditor({
           class: 'max-w-full rounded-md border border-border my-2',
         },
       }),
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
     ],
     [placeholder],
   );
@@ -161,7 +169,7 @@ export function RichEditor({
     editorProps: {
       attributes: {
         class:
-          'prose-sm max-w-none focus:outline-none px-3 py-2 text-sm leading-relaxed [&_p]:my-1 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:mt-4 [&_h1]:mb-1.5 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-snug [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-snug [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted [&_code]:rounded [&_code]:bg-bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] [&_img]:max-w-full',
+          'prose-sm max-w-none focus:outline-none px-3 py-2 text-sm leading-relaxed [&_p]:my-1 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-snug [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:leading-snug [&_h3]:mt-2.5 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted [&_code]:rounded [&_code]:bg-bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] [&_img]:max-w-full [&_mark]:rounded-sm [&_mark]:px-0.5',
         style: `min-height: ${minHeight};`,
       },
       handleDrop: (view, event, _slice, moved) => {
@@ -382,6 +390,9 @@ function Toolbar({
         <Quote size={14} />
       </ToolbarBtn>
       <Separator />
+      <ColorPicker editor={editor} kind="text" />
+      <ColorPicker editor={editor} kind="highlight" />
+      <Separator />
       <ToolbarBtn label="Link" active={isLink} onClick={setLink}>
         <LinkIcon size={14} />
       </ToolbarBtn>
@@ -508,6 +519,142 @@ function FooterStatus({
       <span className="text-fg-muted" aria-live="polite">
         {isSaving ? 'Salvando…' : savedRecently ? 'Salvo' : ''}
       </span>
+    </div>
+  );
+}
+
+// Paleta para cor de texto e marca-texto. Tons sólidos pra texto, mais
+// claros pra highlight (legibilidade sobre fundo claro).
+const TEXT_COLORS: Array<{ name: string; value: string }> = [
+  { name: 'Padrão', value: '' },
+  { name: 'Cinza', value: '#6B7280' },
+  { name: 'Vermelho', value: '#DC2626' },
+  { name: 'Laranja', value: '#EA580C' },
+  { name: 'Amarelo', value: '#CA8A04' },
+  { name: 'Verde', value: '#16A34A' },
+  { name: 'Azul', value: '#2563EB' },
+  { name: 'Roxo', value: '#9333EA' },
+  { name: 'Rosa', value: '#DB2777' },
+];
+
+const HIGHLIGHT_COLORS: Array<{ name: string; value: string }> = [
+  { name: 'Sem marca', value: '' },
+  { name: 'Amarelo', value: '#FEF08A' },
+  { name: 'Verde', value: '#BBF7D0' },
+  { name: 'Azul', value: '#BFDBFE' },
+  { name: 'Roxo', value: '#E9D5FF' },
+  { name: 'Rosa', value: '#FBCFE8' },
+  { name: 'Laranja', value: '#FED7AA' },
+  { name: 'Cinza', value: '#E5E7EB' },
+];
+
+/**
+ * Popover de cor (texto ou marca-texto). Abre uma grade de swatches; o
+ * primeiro item ("Padrão" / "Sem marca") remove o estilo. Click fora ou
+ * Esc fecha. O `onMouseDown preventDefault` no botão evita que o editor
+ * perca foco ao clicar.
+ */
+function ColorPicker({ editor, kind }: { editor: Editor; kind: 'text' | 'highlight' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const palette = kind === 'text' ? TEXT_COLORS : HIGHLIGHT_COLORS;
+  const Icon = kind === 'text' ? Palette : Highlighter;
+  const label = kind === 'text' ? 'Cor do texto' : 'Marca-texto';
+  const activeColor =
+    kind === 'text'
+      ? ((editor.getAttributes('textStyle').color as string | undefined) ?? null)
+      : ((editor.getAttributes('highlight').color as string | undefined) ?? null);
+  const isActive = Boolean(activeColor);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  function apply(value: string) {
+    if (kind === 'text') {
+      if (value === '') editor.chain().focus().unsetColor().run();
+      else editor.chain().focus().setColor(value).run();
+    } else {
+      if (value === '') editor.chain().focus().unsetHighlight().run();
+      else editor.chain().focus().setHighlight({ color: value }).run();
+    }
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-pressed={isActive}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+        className={`hover:bg-bg-muted text-fg-muted hover:text-fg relative inline-flex size-7 items-center justify-center rounded transition-colors ${
+          isActive ? 'bg-primary-subtle text-primary' : ''
+        }`}
+      >
+        <Icon size={14} />
+        {activeColor && (
+          <span
+            aria-hidden
+            className="absolute bottom-0.5 left-1 right-1 h-[3px] rounded-full"
+            style={{ backgroundColor: activeColor }}
+          />
+        )}
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute left-0 top-full z-30 mt-1 w-44 rounded-md border p-2 shadow-lg">
+          <p className="text-fg-muted mb-1.5 text-[10px] font-medium uppercase tracking-wide">
+            {label}
+          </p>
+          <div className="grid grid-cols-3 gap-1">
+            {palette.map((c) => {
+              const isCurrent = (activeColor ?? '') === c.value;
+              return (
+                <button
+                  key={c.name}
+                  type="button"
+                  title={c.name}
+                  aria-label={c.name}
+                  aria-pressed={isCurrent}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => apply(c.value)}
+                  className={`focus-visible:ring-primary group/sw relative flex h-7 items-center justify-center rounded border transition-all focus-visible:outline-none focus-visible:ring-2 ${
+                    isCurrent ? 'border-primary ring-primary/30 ring-2' : 'border-border'
+                  }`}
+                  style={
+                    c.value
+                      ? kind === 'text'
+                        ? { color: c.value }
+                        : { backgroundColor: c.value }
+                      : undefined
+                  }
+                >
+                  {c.value === '' ? (
+                    <span className="text-fg-muted text-[10px]">Limpar</span>
+                  ) : (
+                    <span className="text-[12px] font-bold">A</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
