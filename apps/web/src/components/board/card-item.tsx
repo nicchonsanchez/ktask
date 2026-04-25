@@ -31,8 +31,11 @@ function dueState(iso: string | null): {
   if (!iso) return { show: false, classes: '' };
   const ms = new Date(iso).getTime() - Date.now();
   const days = ms / 86_400_000;
-  if (days < 0) return { show: true, classes: 'text-danger font-semibold', label: 'Vencido' };
-  if (days < 1) return { show: true, classes: 'text-danger', label: 'Hoje' };
+  // Vencido: mostra a DATA em vermelho semibold (não label "Vencido"),
+  // assim o usuário enxerga há quanto tempo passou.
+  if (days < 0) return { show: true, classes: 'text-danger font-semibold', label: undefined };
+  // Hoje: amarelo com label explícita — urgência sem ser pânico vermelho.
+  if (days < 1) return { show: true, classes: 'text-warning font-semibold', label: 'Hoje' };
   if (days < 3) return { show: true, classes: 'text-warning', label: undefined };
   return { show: true, classes: 'text-fg-muted', label: undefined };
 }
