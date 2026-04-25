@@ -43,4 +43,10 @@ Resposta às 6 perguntas-âncora:
 
 ## Log
 
-2026-04-25T20:41 — Ativação. Foco: nova página inicial (etapas 1-6 da [22-pagina-inicial.md](22-pagina-inicial.md)). Modelo de retomada: cron LOCAL (Windows Task Scheduler).
+2026-04-25T20:41 — Ativação. Foco: nova página inicial (etapas 1-6 da [22-pagina-inicial.md](22-pagina-inicial.md)). Modelo de retomada: cron LOCAL (Windows Task Scheduler) — porém o registry script foi bloqueado por política, sigo SEM auto-retomada.
+
+2026-04-25T20:50 — Auditoria do checklist concluída e lembretes adicionados (commit `abd2f60`). 11 itens marcados [x] (modal, kanban, anexos, family, time tracking, real-time gateway, etc.).
+
+2026-04-25T20:55 — Etapa 1 da home concluída (commit `8eb4c1a`): /empresa criada com view atual; nav atualizada. /page.tsx continua igual até etapa 3 substituir.
+
+2026-04-25T20:55 — Próximo: Etapa 2 — schema (ChecklistItem + dueDate + assigneeId + description) e endpoints /me/tasks /me/recent-cards /me/calendar.

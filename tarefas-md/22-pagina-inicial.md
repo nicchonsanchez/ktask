@@ -51,14 +51,14 @@ Mobile (< lg): tudo numa coluna, calendário compacto colapsado por padrão.
 
 ## Componentes
 
-| Componente              | Responsabilidade                                    |
-| ----------------------- | --------------------------------------------------- |
-| `HomePage`              | Layout 2 colunas + composição                       |
-| `TarefasPanel`          | Card colapsável "Tarefas" com seções Atrasadas+Hoje |
-| `TarefaRow`             | Linha de tarefa (drag, check, nome, card, prazo)    |
-| `CardsRecentesCarousel` | Carrossel horizontal de cards visitados             |
-| `MiniCalendar`          | Calendário compacto com pontos por dia              |
-| `EventosPanel`          | Placeholder (PRO/Fase 2)                            |
+| Componente              | Responsabilidade                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `HomePage`              | Layout 2 colunas + composição                                                                                            |
+| `TarefasPanel`          | Card colapsável "Tarefas" com seções Atrasadas+Hoje                                                                      |
+| `TarefaRow`             | Linha de tarefa (drag, check, nome, card, prazo)                                                                         |
+| `CardsRecentesCarousel` | Carrossel horizontal com setas (← / →) — só mostra ← quando há cards anteriores; mantém → enquanto houver cards à frente |
+| `MiniCalendar`          | Calendário compacto com pontos por dia                                                                                   |
+| `EventosPanel`          | Placeholder (PRO/Fase 2)                                                                                                 |
 
 ## Entidade "Tarefa" — gap no nosso schema
 

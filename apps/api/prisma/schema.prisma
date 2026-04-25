@@ -142,20 +142,23 @@ model User {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
 
-  memberships     Membership[]
-  sessions        Session[]
-  invitationsSent Invitation[]    @relation("InvitationCreator")
-  boardMemberships BoardMember[]
-  boardsCreated   Board[]         @relation("BoardCreator")
-  cardsCreated    Card[]          @relation("CardCreator")
-  cardsCompleted  Card[]          @relation("CardCompletedBy")
-  cardsLeading    Card[]          @relation("CardLead")
-  cardAssignments CardMember[]
-  commentsAuthored Comment[]
-  attachmentsUploaded Attachment[]
-  activities      Activity[]      @relation("ActivityActor")
-  notifications   Notification[]
-  timeEntries     TimeEntry[]
+  memberships            Membership[]
+  sessions               Session[]
+  invitationsSent        Invitation[]    @relation("InvitationCreator")
+  boardMemberships       BoardMember[]
+  boardsCreated          Board[]         @relation("BoardCreator")
+  cardsCreated           Card[]          @relation("CardCreator")
+  cardsCompleted         Card[]          @relation("CardCompletedBy")
+  cardsLeading           Card[]          @relation("CardLead")
+  cardAssignments        CardMember[]
+  commentsAuthored       Comment[]
+  attachmentsUploaded    Attachment[]
+  activities             Activity[]      @relation("ActivityActor")
+  notifications          Notification[]
+  timeEntries            TimeEntry[]
+  checklistItemsAssigned ChecklistItem[] @relation("ChecklistItemAssignee")
+  checklistItemsDone     ChecklistItem[] @relation("ChecklistItemDoneBy")
+  cardVisits             CardVisit[]
 
   @@index([email])
 }
@@ -237,19 +240,19 @@ model Session {
 // ==================== Boards ====================
 
 model Board {
-  id             String          @id @default(cuid())
-  organizationId String
-  name           String
-  description    String?
-  color          String?
-  icon           String?
-  visibility     BoardVisibility @default(PRIVATE)
-  isArchived     Boolean         @default(false)
-  cardOrdering   CardOrdering    @default(MANUAL)
-  inheritTeamOnNewCards Boolean  @default(false)
-  createdById    String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                    String          @id @default(cuid())
+  organizationId        String
+  name                  String
+  description           String?
+  color                 String?
+  icon                  String?
+  visibility            BoardVisibility @default(PRIVATE)
+  isArchived            Boolean         @default(false)
+  cardOrdering          CardOrdering    @default(MANUAL)
+  inheritTeamOnNewCards Boolean         @default(false)
+  createdById           String
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy    User          @relation("BoardCreator", fields: [createdById], references: [id])
@@ -276,8 +279,8 @@ model BoardMember {
 }
 
 model List {
-  id             String    @id @default(cuid())
-  organizationId String    // denormalizado: acelera filtros e futura RLS
+  id             String   @id @default(cuid())
+  organizationId String // denormalizado: acelera filtros e futura RLS
   boardId        String
   name           String
   position       Float
@@ -285,9 +288,9 @@ model List {
   icon           String?
   wipLimit       Int?
   slaMinutes     Int?
-  isArchived     Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isArchived     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   board        Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
@@ -300,42 +303,43 @@ model List {
 // ==================== Cards ====================
 
 model Card {
-  id              String    @id @default(cuid())
-  organizationId  String    // denormalizado: acelera filtros e futura RLS
-  boardId         String
-  listId          String
-  title           String
-  description     Json?     // ProseMirror / Tiptap JSON (MVP usa subset simples)
-  position        Float
-  priority        Priority  @default(NONE)
+  id                String    @id @default(cuid())
+  organizationId    String // denormalizado: acelera filtros e futura RLS
+  boardId           String
+  listId            String
+  title             String
+  description       Json? // ProseMirror / Tiptap JSON (MVP usa subset simples)
+  position          Float
+  priority          Priority  @default(NONE)
   coverAttachmentId String?
-  startDate       DateTime?
-  dueDate         DateTime?
-  completedAt     DateTime?
-  completedById   String?
-  estimateMinutes Int?
-  isArchived      Boolean   @default(false)
-  parentCardId    String?
-  createdById     String
-  leadId          String?   // Líder do card: default = createdBy, pode trocar manualmente ou via automação
-  enteredListAt   DateTime  @default(now())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  startDate         DateTime?
+  dueDate           DateTime?
+  completedAt       DateTime?
+  completedById     String?
+  estimateMinutes   Int?
+  isArchived        Boolean   @default(false)
+  parentCardId      String?
+  createdById       String
+  leadId            String? // Líder do card: default = createdBy, pode trocar manualmente ou via automação
+  enteredListAt     DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  board     Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  list      List         @relation(fields: [listId], references: [id], onDelete: Cascade)
-  createdBy User         @relation("CardCreator", fields: [createdById], references: [id])
-  completedBy User?      @relation("CardCompletedBy", fields: [completedById], references: [id])
-  lead      User?        @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
-  parent    Card?        @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
-  children  Card[]       @relation("Subtasks")
-  members   CardMember[]
-  labels    CardLabel[]
-  checklists Checklist[]
+  board       Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  list        List         @relation(fields: [listId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation("CardCreator", fields: [createdById], references: [id])
+  completedBy User?        @relation("CardCompletedBy", fields: [completedById], references: [id])
+  lead        User?        @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
+  parent      Card?        @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
+  children    Card[]       @relation("Subtasks")
+  members     CardMember[]
+  labels      CardLabel[]
+  checklists  Checklist[]
   attachments Attachment[]
-  comments  Comment[]
-  activities Activity[]
+  comments    Comment[]
+  activities  Activity[]
   timeEntries TimeEntry[]
+  visits      CardVisit[]
 
   @@index([organizationId])
   @@index([boardId, isArchived])
@@ -347,8 +351,8 @@ model Card {
 model CardMember {
   cardId String
   userId String
-  card   Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([cardId, userId])
 }
@@ -359,11 +363,11 @@ model CardMember {
 // Na UI do MVP usamos labels por quadro; a coluna organizationId fica pra
 // futuro "labels globais".
 model Label {
-  id             String  @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
   boardId        String?
   name           String
-  color          String  // hex, ex: "#EF4444"
+  color          String // hex, ex: "#EF4444"
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -377,8 +381,8 @@ model Label {
 model CardLabel {
   cardId  String
   labelId String
-  card  Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  card    Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([cardId, labelId])
 }
@@ -410,8 +414,11 @@ model ChecklistItem {
   doneById    String?
 
   checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  assignee  User?     @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  doneBy    User?     @relation("ChecklistItemDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
 
   @@index([checklistId, position])
+  @@index([assigneeId, dueDate, isDone]) // suporta query da home: tarefas do user X agrupadas por prazo
 }
 
 // ==================== Attachments ====================
@@ -419,7 +426,7 @@ model ChecklistItem {
 model Attachment {
   id          String         @id @default(cuid())
   cardId      String
-  commentId   String?        // se setado, o anexo pertence a um comment (timeline). Null = anexo direto do card.
+  commentId   String? // se setado, o anexo pertence a um comment (timeline). Null = anexo direto do card.
   uploaderId  String
   fileName    String
   mimeType    String
@@ -444,8 +451,8 @@ model Comment {
   id        String    @id @default(cuid())
   cardId    String
   authorId  String
-  body      Json      // Tiptap JSON (ou texto simples no MVP)
-  mentions  String[]  // userIds mencionados (denormalizado pra notificação)
+  body      Json // Tiptap JSON (ou texto simples no MVP)
+  mentions  String[] // userIds mencionados (denormalizado pra notificação)
   editedAt  DateTime?
   createdAt DateTime  @default(now())
   deletedAt DateTime?
@@ -506,8 +513,8 @@ model TimeEntry {
   userId         String
   organizationId String
   startedAt      DateTime
-  endedAt        DateTime?       // null = sessão ativa
-  durationSec    Int?            // gravado no stop, fonte da verdade pra agregações
+  endedAt        DateTime? // null = sessão ativa
+  durationSec    Int? // gravado no stop, fonte da verdade pra agregações
   source         TimeEntrySource @default(TIMER)
   note           String?
   createdAt      DateTime        @default(now())
@@ -521,4 +528,20 @@ model TimeEntry {
   @@index([userId, startedAt])
   @@index([organizationId, startedAt])
   @@index([userId, endedAt]) // achar entry ativa do user em O(1)
+}
+
+// ==================== Card visits ====================
+
+// Track de cards abertos pelo user. Alimenta a "Cards recentes" da home.
+// 1 row por (user, card) — atualizado em vez de inserido pra evitar bloat.
+model CardVisit {
+  userId    String
+  cardId    String
+  visitedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cardId])
+  @@index([userId, visitedAt(sort: Desc)])
 }

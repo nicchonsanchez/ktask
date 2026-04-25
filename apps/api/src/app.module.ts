@@ -22,6 +22,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SearchModule } from './modules/search/search.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
+import { MeModule } from './modules/me/me.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module
     SearchModule,
     StorageModule,
     TimeTrackingModule,
+    MeModule,
     HealthModule,
   ],
 })

@@ -9,6 +9,7 @@ import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator';
 import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 
 import { CardsService } from './cards.service';
+import { MeService } from '@/modules/me/me.service';
 import {
   CreateCardSchema,
   UpdateCardSchema,
@@ -31,7 +32,10 @@ import {
 @UseGuards(TenantGuard)
 @Controller({ path: 'cards', version: '1' })
 export class CardsController {
-  constructor(private readonly cards: CardsService) {}
+  constructor(
+    private readonly cards: CardsService,
+    private readonly me: MeService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Criar card numa lista' })
@@ -45,12 +49,16 @@ export class CardsController {
 
   @Get(':cardId')
   @ApiOperation({ summary: 'Detalhe do card (com comentários, labels, etc)' })
-  getOne(
+  async getOne(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,
     @Param('cardId') cardId: string,
   ) {
-    return this.cards.getOne(user.userId, org, cardId);
+    const card = await this.cards.getOne(user.userId, org, cardId);
+    // Registra a visita pra alimentar a "Cards recentes" da home pessoal.
+    // Fire-and-forget: erro aqui não pode quebrar o GET do card.
+    void this.me.recordVisit(user.userId, cardId).catch(() => undefined);
+    return card;
   }
 
   @Patch(':cardId')
