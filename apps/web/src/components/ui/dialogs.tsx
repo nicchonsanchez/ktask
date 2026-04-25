@@ -55,6 +55,14 @@ export interface PromptOptions {
   inputType?: 'text' | 'url';
   /** Permite submeter string vazia (uso: edição de link onde vazio = remover). Default: false. */
   allowEmpty?: boolean;
+  /** Ação terciária à esquerda do rodapé (ex: "Remover link"). Resolve com o `value` quando clicada. */
+  tertiaryAction?: {
+    label: string;
+    /** Valor que será retornado pela promise quando esse botão for clicado. */
+    value: string;
+    /** Botão vermelho. Default: false. */
+    danger?: boolean;
+  };
 }
 
 export type NotifyKind = 'error' | 'success' | 'info';
@@ -255,6 +263,7 @@ function PromptDialog({
     danger = false,
     inputType = 'text',
     allowEmpty = false,
+    tertiaryAction,
   } = opts;
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -304,26 +313,41 @@ function PromptDialog({
             </p>
           )}
         </div>
-        <div className="border-border/60 bg-bg-subtle/50 flex justify-end gap-2 border-t px-5 py-3">
-          <button
-            type="button"
-            onClick={() => onResolve(null)}
-            className="border-border text-fg hover:bg-bg-muted focus-visible:ring-primary inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSubmit}
-            className={`focus-visible:ring-primary inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-              danger
-                ? 'bg-danger hover:bg-danger/90 text-white'
-                : 'bg-primary hover:bg-primary-hover text-primary-fg'
-            }`}
-          >
-            {confirmLabel}
-          </button>
+        <div className="border-border/60 bg-bg-subtle/50 flex items-center gap-2 border-t px-5 py-3">
+          {tertiaryAction && (
+            <button
+              type="button"
+              onClick={() => onResolve(tertiaryAction.value)}
+              className={`focus-visible:ring-primary inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+                tertiaryAction.danger
+                  ? 'text-danger hover:bg-danger-subtle'
+                  : 'text-fg-muted hover:bg-bg-muted hover:text-fg'
+              }`}
+            >
+              {tertiaryAction.label}
+            </button>
+          )}
+          <div className="flex flex-1 justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => onResolve(null)}
+              className="border-border text-fg hover:bg-bg-muted focus-visible:ring-primary inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2"
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!canSubmit}
+              className={`focus-visible:ring-primary inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                danger
+                  ? 'bg-danger hover:bg-danger/90 text-white'
+                  : 'bg-primary hover:bg-primary-hover text-primary-fg'
+              }`}
+            >
+              {confirmLabel}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

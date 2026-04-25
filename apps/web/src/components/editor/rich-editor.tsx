@@ -309,13 +309,13 @@ function Toolbar({
     const input = await promptDialog({
       title: previous ? 'Editar link' : 'Inserir link',
       description: previous
-        ? 'Edite a URL ou apague pra remover o link.'
+        ? 'Edite a URL ou clique em "Remover link" pra desfazer.'
         : 'Cole a URL completa. Adicionamos `https://` automaticamente se não tiver protocolo.',
       defaultValue: previous ?? 'https://',
       placeholder: 'https://...',
       inputType: 'url',
       confirmLabel: 'Aplicar link',
-      allowEmpty: Boolean(previous),
+      tertiaryAction: previous ? { label: 'Remover link', value: '', danger: true } : undefined,
     });
     if (input === null) return; // cancelar
     if (input === '') {
