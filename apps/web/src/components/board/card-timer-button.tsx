@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pause, Play } from 'lucide-react';
+import { Loader2, Maximize2, Pause, Play } from 'lucide-react';
 
 import { ApiError } from '@/lib/api-client';
 import {
@@ -10,9 +10,11 @@ import {
   startTimer,
   stopTimer,
   timeTrackingQueries,
+  type ActiveTimer,
 } from '@/lib/queries/time-tracking';
 import { useNotify } from '@/components/ui/dialogs';
 import { useTimerStore } from '@/stores/timer-store';
+import { TimerPopover } from '@/components/time-tracking/timer-popover';
 
 /**
  * Botão Play/Pause de cronômetro DENTRO do popup do card.
@@ -80,14 +82,7 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
   }
 
   if (isThisCard && active) {
-    return (
-      <RunningButton
-        entryId={active.id}
-        startedAt={active.startedAt}
-        onStop={handleClick}
-        stopping={stopMut.isPending}
-      />
-    );
+    return <RunningButton active={active} onStop={handleClick} stopping={stopMut.isPending} />;
   }
 
   return (
@@ -120,43 +115,72 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
 }
 
 function RunningButton({
-  entryId,
-  startedAt,
+  active,
   onStop,
   stopping,
 }: {
-  entryId: string;
-  startedAt: string;
+  active: ActiveTimer;
   onStop: () => void;
   stopping: boolean;
 }) {
   const [tick, setTick] = useState(0);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   useEffect(() => {
     const id = setInterval(() => setTick((v) => v + 1), 1000);
     return () => clearInterval(id);
   }, []);
   void tick;
 
-  const elapsedSec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+  const elapsedSec = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(active.startedAt).getTime()) / 1000),
+  );
 
   return (
-    <button
-      type="button"
-      onClick={onStop}
-      disabled={stopping}
-      className="group/pause inline-flex h-8 items-center gap-1.5 rounded-full bg-fuchsia-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-fuchsia-700 hover:shadow disabled:opacity-60"
-      title="Parar cronômetro"
-      aria-label="Parar cronômetro"
-      data-entry-id={entryId}
-    >
-      <span className="inline-flex size-6 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/pause:bg-white/30">
-        {stopping ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : (
-          <Pause size={11} fill="currentColor" />
-        )}
-      </span>
-      <span className="font-mono tabular-nums">{formatDuration(elapsedSec)}</span>
-    </button>
+    <div className="relative inline-flex">
+      <div
+        className="group/running inline-flex h-8 items-center rounded-full bg-fuchsia-600 pr-1 text-white shadow-sm transition-shadow hover:shadow"
+        title={`Cronometrando: ${active.card.title}`}
+        data-entry-id={active.id}
+      >
+        <button
+          type="button"
+          onClick={onStop}
+          disabled={stopping}
+          className="ml-1 mr-1.5 inline-flex size-6 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
+          aria-label="Parar cronômetro"
+          title="Parar cronômetro"
+        >
+          {stopping ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <Pause size={10} fill="currentColor" />
+          )}
+        </button>
+        <span className="select-none font-mono text-[12px] font-semibold tabular-nums">
+          {formatDuration(elapsedSec)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setPopoverOpen((v) => !v)}
+          className="ml-1.5 inline-flex size-6 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+          aria-label="Detalhes do cronômetro"
+          title="Detalhes do cronômetro"
+        >
+          <Maximize2 size={10} />
+        </button>
+      </div>
+      {popoverOpen && (
+        <TimerPopover
+          active={active}
+          onClose={() => setPopoverOpen(false)}
+          onStop={() => {
+            onStop();
+            setPopoverOpen(false);
+          }}
+          stopping={stopping}
+        />
+      )}
+    </div>
   );
 }
