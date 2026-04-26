@@ -38,6 +38,8 @@ export class MembershipsService {
             email: true,
             name: true,
             avatarUrl: true,
+            phone: true,
+            notifyApprovalsOnWhatsApp: true,
           },
         },
       },

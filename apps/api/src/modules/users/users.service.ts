@@ -4,7 +4,16 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 
 export type PublicUser = Pick<
   User,
-  'id' | 'email' | 'name' | 'avatarUrl' | 'locale' | 'timezone' | 'twoFactorEnabled' | 'createdAt'
+  | 'id'
+  | 'email'
+  | 'name'
+  | 'avatarUrl'
+  | 'phone'
+  | 'notifyApprovalsOnWhatsApp'
+  | 'locale'
+  | 'timezone'
+  | 'twoFactorEnabled'
+  | 'createdAt'
 >;
 
 const PUBLIC_SELECT = {
@@ -12,6 +21,8 @@ const PUBLIC_SELECT = {
   email: true,
   name: true,
   avatarUrl: true,
+  phone: true,
+  notifyApprovalsOnWhatsApp: true,
   locale: true,
   timezone: true,
   twoFactorEnabled: true,
@@ -53,6 +64,8 @@ export class UsersService {
     input: {
       name?: string;
       avatarUrl?: string | null;
+      phone?: string | null;
+      notifyApprovalsOnWhatsApp?: boolean;
       locale?: string;
       timezone?: string;
     },
@@ -62,6 +75,10 @@ export class UsersService {
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.notifyApprovalsOnWhatsApp !== undefined
+          ? { notifyApprovalsOnWhatsApp: input.notifyApprovalsOnWhatsApp }
+          : {}),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
       },

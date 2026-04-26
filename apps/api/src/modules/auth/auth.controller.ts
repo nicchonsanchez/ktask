@@ -120,6 +120,8 @@ export class AuthController {
       email: me.email,
       name: me.name,
       avatarUrl: me.avatarUrl,
+      phone: me.phone,
+      notifyApprovalsOnWhatsApp: me.notifyApprovalsOnWhatsApp,
       locale: me.locale,
       timezone: me.timezone,
       twoFactorEnabled: me.twoFactorEnabled,

@@ -132,6 +132,8 @@ enum AutomationTrigger {
   TIME_NO_INTERACTION
   DUE_DATE_TODAY
   DUE_DATE_OVERDUE
+  CARD_APPROVED // disparado quando uma CardApproval termina como APPROVED
+  CARD_REJECTED // disparado quando uma CardApproval termina como REJECTED
 }
 
 enum AutomationActionType {
@@ -172,6 +174,12 @@ model User {
   passwordHash     String
   name             String
   avatarUrl        String?
+  /// E.164 sem o '+', ex: 5521988887777. Usado pra notificar aprovações
+  /// via WhatsApp quando o user é escolhido como reviewer.
+  phone            String?
+  /// Quando true, usa Evolution API pra mandar notificação de aprovação
+  /// pendente pro `phone` do user (além das notificações in-app/push).
+  notifyApprovalsOnWhatsApp Boolean @default(false)
   locale           String    @default("pt-BR")
   timezone         String    @default("America/Sao_Paulo")
   twoFactorSecret  String?
@@ -207,6 +215,10 @@ model User {
   cardPresencesCompleted CardPresence[]  @relation("CardPresenceCompletedBy")
   pushSubscriptions      PushSubscription[]
   checklistTemplatesCreated ChecklistTemplate[] @relation("ChecklistTemplateCreator")
+  approvalsRequested     CardApproval[]         @relation("ApprovalRequester")
+  approvalsDecided       CardApproval[]         @relation("ApprovalDecider")
+  approvalsReverted      CardApproval[]         @relation("ApprovalReverter")
+  approvalReviews        CardApprovalReviewer[] @relation("CardApprovalReviewer")
 
   @@index([email])
 }
@@ -233,6 +245,7 @@ model Organization {
   tasks              Task[]
   automations        Automation[]
   checklistTemplates ChecklistTemplate[]
+  cardApprovals      CardApproval[]
 
   @@index([slug])
 }
@@ -354,6 +367,8 @@ model List {
   cards         Card[]
   automations   Automation[]
   cardPresences CardPresence[]
+  defaultApproveForApprovals CardApproval[] @relation("ApprovalDefaultApproveList")
+  defaultRejectForApprovals  CardApproval[] @relation("ApprovalDefaultRejectList")
 
   @@index([organizationId])
   @@index([boardId, position])
@@ -402,6 +417,7 @@ model Card {
   visits         CardVisit[]
   automationRuns AutomationRun[]
   presences      CardPresence[]
+  approvals      CardApproval[]
 
   @@index([organizationId])
   @@index([boardId, isArchived])
@@ -439,13 +455,107 @@ model CardPresence {
   @@index([boardId, removedAt])
 }
 
+/// Papel do usuário em relação ao card.
+/// MEMBER (default): executor — quem trabalha no card.
+/// REVIEWER: revisor/cliente — não executa, apenas aprova/reprova etapas
+///   via CardApproval. Pode ser GUEST na Org (acesso só pra aprovações).
+enum CardMemberRole {
+  MEMBER
+  REVIEWER
+}
+
 model CardMember {
   cardId String
   userId String
-  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   CardMemberRole @default(MEMBER)
+  card   Card           @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([cardId, userId])
+}
+
+// ==================== Card Approvals ====================
+
+enum ApprovalStatus {
+  PENDING // aguardando decisão de algum reviewer
+  APPROVED // decidida como aprovada
+  REJECTED // decidida como reprovada (com nota obrigatória)
+  REVERTED // foi decidida e depois desfeita pelo próprio reviewer (janela 5min)
+}
+
+/// Pedido de aprovação de um card por 1+ revisores.
+///
+/// Fluxo:
+///   1. Membro do card pede aprovação (POST /cards/:id/approvals) escolhendo
+///      reviewers (users internos ou phones externos com link tokenizado).
+///   2. PENDING até alguém decidir (modelo "primeiro a votar ganha").
+///   3. Decisão: APPROVED ou REJECTED. Reprovação obriga `note`.
+///   4. Engine de automações recebe trigger CARD_APPROVED ou CARD_REJECTED.
+///      Default fallback `defaultOnApproveListId`/`defaultOnRejectListId`
+///      move o card mesmo sem automação configurada.
+///   5. Sujeito a undo dentro de 5min pelo próprio decisor (ou
+///      OWNER/ADMIN/GESTOR), desde que nenhuma ação humana tenha tocado
+///      nos side-effects (ações de automação não bloqueiam).
+model CardApproval {
+  id                     String         @id @default(cuid())
+  cardId                 String
+  organizationId         String // denormalizado pra acelerar queries multi-tenant
+  requestedById          String
+  status                 ApprovalStatus @default(PENDING)
+  requestedAt            DateTime       @default(now())
+  decidedAt              DateTime?
+  decidedById            String? // qual user decidiu (um dos reviewers internos OU null se decidido por token externo)
+  decidedByExternalName  String? // nome do reviewer externo que decidiu (quando phone-only)
+  note                   String? // nota da decisão; obrigatória pra REJECTED
+  defaultOnApproveListId String? // fallback: move card pra esta lista ao APROVAR
+  defaultOnRejectListId  String? // fallback: move card pra esta lista ao REPROVAR
+  /// JSON com side-effects executados pela decisão. Usado pra rollback no undo.
+  /// Shape: { automationRunIds: string[], movedFromListId?: string,
+  ///          createdChecklistItemIds?: string[], createdCommentIds?: string[],
+  ///          addedLabelIds?: string[] }
+  sideEffects            Json?
+  revertedAt             DateTime?
+  revertedById           String? // user que desfez (decidedById ou ADMIN+)
+  revertReason           String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  card             Card                   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedBy      User                   @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  decidedBy        User?                  @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  revertedBy       User?                  @relation("ApprovalReverter", fields: [revertedById], references: [id], onDelete: SetNull)
+  defaultApproveList List?                @relation("ApprovalDefaultApproveList", fields: [defaultOnApproveListId], references: [id], onDelete: SetNull)
+  defaultRejectList  List?                @relation("ApprovalDefaultRejectList", fields: [defaultOnRejectListId], references: [id], onDelete: SetNull)
+  reviewers        CardApprovalReviewer[]
+
+  @@index([cardId])
+  @@index([organizationId, status, requestedAt])
+  @@index([status])
+}
+
+/// Cada reviewer atribuído a uma CardApproval (modelo "primeiro a votar ganha").
+/// XOR: ou `userId` (reviewer interno autenticado), ou `phone`+`externalName`
+/// (reviewer externo que recebe link tokenizado via WhatsApp).
+model CardApprovalReviewer {
+  id           String    @id @default(cuid())
+  approvalId   String
+  userId       String? // interno (preenchido se foi escolhido um membro da Org)
+  phone        String? // E.164 sem '+' (preenchido se foi número avulso)
+  externalName String? // nome de exibição quando phone-only
+  /// Token random pra acesso à página pública /aprovar/:token. Sempre presente.
+  /// Mesmo reviewers internos podem usar (link no WhatsApp/email funciona sem login).
+  accessToken  String    @unique
+  expiresAt    DateTime // requestedAt + 7d default
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  approval CardApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  user     User?        @relation("CardApprovalReviewer", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([approvalId])
+  @@index([userId])
+  @@index([accessToken])
 }
 
 // ==================== Labels ====================
@@ -588,15 +698,22 @@ model Activity {
   actorId        String?
   type           ActivityType
   payload        Json
+  /// Quando a Activity foi criada por uma execução de automação, traz o
+  /// AutomationRun correspondente. Null = ação manual de usuário.
+  /// Crítico pra o fluxo de undo de aprovação: sabemos diferenciar
+  /// "humano interveio" de "automação encadeada disparou".
+  automationRunId String?
   createdAt      DateTime     @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  card         Card?        @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  actor        User?        @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  card          Card?          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  actor         User?          @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  automationRun AutomationRun? @relation(fields: [automationRunId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([cardId, createdAt])
   @@index([boardId, createdAt])
+  @@index([automationRunId])
 }
 
 // ==================== Notifications ====================
@@ -765,6 +882,7 @@ model AutomationRun {
 
   automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
   card       Card?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  activities Activity[]
 
   @@index([automationId, createdAt])
   @@index([cardId])

@@ -54,6 +54,8 @@ export class UsersController {
       email: me.email,
       name: me.name,
       avatarUrl: me.avatarUrl,
+      phone: me.phone,
+      notifyApprovalsOnWhatsApp: me.notifyApprovalsOnWhatsApp,
       locale: me.locale,
       timezone: me.timezone,
       twoFactorEnabled: me.twoFactorEnabled,
@@ -62,7 +64,7 @@ export class UsersController {
   }
 
   @Patch('me')
-  @ApiOperation({ summary: 'Atualiza o próprio perfil (nome, avatar, locale, timezone)' })
+  @ApiOperation({ summary: 'Atualiza o próprio perfil' })
   async updateMe(
     @CurrentUser() user: AuthenticatedRequestContext,
     @Body(new ZodValidationPipe(UpdateProfileRequestSchema)) body: UpdateProfileRequest,
@@ -73,6 +75,8 @@ export class UsersController {
       email: updated.email,
       name: updated.name,
       avatarUrl: updated.avatarUrl,
+      phone: updated.phone,
+      notifyApprovalsOnWhatsApp: updated.notifyApprovalsOnWhatsApp,
       locale: updated.locale,
       timezone: updated.timezone,
       twoFactorEnabled: updated.twoFactorEnabled,

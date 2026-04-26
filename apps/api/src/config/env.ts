@@ -61,6 +61,13 @@ const envSchema = z.object({
   EVOLUTION_DEFAULT_API_KEY: optionalString(),
   EVOLUTION_DEFAULT_INSTANCE: optionalString(),
 
+  /**
+   * URL pública do frontend (sem trailing slash). Usada pra construir
+   * links em mensagens externas (ex: link de aprovação tokenizado enviado
+   * por WhatsApp). Em prod aponta pro domínio público da app.
+   */
+  APP_URL: z.string().url().default('http://localhost:3000'),
+
   INTEGRATION_ENCRYPTION_KEY: optionalHexKey(64),
 
   // Web Push (PWA notifications). Sem essas creds o módulo de push fica

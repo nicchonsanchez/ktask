@@ -31,6 +31,7 @@ import { AutomationsModule } from './modules/automations/automations.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PushModule } from './modules/push/push.module';
 import { ChecklistTemplatesModule } from './modules/checklist-templates/checklist-templates.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { ChecklistTemplatesModule } from './modules/checklist-templates/checklis
     AdminModule,
     PushModule,
     ChecklistTemplatesModule,
+    ApprovalsModule,
     HealthModule,
   ],
   providers: [

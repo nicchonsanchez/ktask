@@ -1,10 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import type { Automation, AutomationRun, Prisma } from '@prisma/client';
+import type { Automation, AutomationRun, AutomationTrigger, Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
 import { EVENT_NAMES, type CardMovedPayload } from '@/modules/realtime/events.types';
+
+/**
+ * Event emitido por ApprovalsService quando uma aprovação é decidida.
+ * Constante duplicada (em vez de import) pra evitar acoplamento circular
+ * entre AutomationsModule e ApprovalsModule.
+ */
+const APPROVAL_DECIDED_EVENT = 'approval.decided';
+
+interface ApprovalDecidedPayload {
+  approvalId: string;
+  cardId: string;
+  organizationId: string;
+  boardId: string;
+  listId: string;
+  decidedById: string | null;
+  status: 'APPROVED' | 'REJECTED';
+}
 
 /**
  * Engine de automações — Fase B (síncrona, em-process).
@@ -55,22 +72,66 @@ export class AutomationsEngine {
   }
 
   /**
+   * Listener pra aprovações decididas. Dispara CARD_APPROVED ou
+   * CARD_REJECTED conforme o status. Usa a `listId` atual do card no
+   * momento da decisão (que pode ter sido ajustada pelo move automático
+   * do default). Os AutomationRun.id resultantes são gravados em
+   * CardApproval.sideEffects pra que o undo possa reverter ações
+   * automáticas que rodaram em cadeia.
+   */
+  @OnEvent(APPROVAL_DECIDED_EVENT, { async: true })
+  async onApprovalDecided(payload: ApprovalDecidedPayload) {
+    const trigger: AutomationTrigger =
+      payload.status === 'APPROVED' ? 'CARD_APPROVED' : 'CARD_REJECTED';
+
+    const runIds = await this.dispatchTrigger({
+      listId: payload.listId,
+      trigger,
+      cardId: payload.cardId,
+      organizationId: payload.organizationId,
+      chainDepth: 0,
+    });
+
+    if (runIds && runIds.length > 0) {
+      // Anexa os run IDs ao sideEffects da aprovação (preservando o resto).
+      await this.appendAutomationRunsToApproval(payload.approvalId, runIds);
+    }
+  }
+
+  private async appendAutomationRunsToApproval(approvalId: string, runIds: string[]) {
+    const approval = await this.prisma.cardApproval.findUnique({
+      where: { id: approvalId },
+      select: { sideEffects: true },
+    });
+    if (!approval) return;
+    const current = ((approval.sideEffects ?? {}) as { automationRunIds?: string[] }) || {};
+    const merged = {
+      ...current,
+      automationRunIds: [...(current.automationRunIds ?? []), ...runIds],
+    };
+    await this.prisma.cardApproval.update({
+      where: { id: approvalId },
+      data: { sideEffects: merged as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  /**
    * Busca automações ativas pra (listId, trigger) e dispara cada uma.
    * Usado tanto pelo listener acima quanto recursivamente pelas actions
-   * que disparam novos eventos.
+   * que disparam novos eventos. Retorna os IDs dos AutomationRun criados.
    */
   async dispatchTrigger(params: {
     listId: string;
-    trigger: 'CARD_ENTERED' | 'CARD_LEFT';
+    trigger: AutomationTrigger;
     cardId: string;
     organizationId: string;
     chainDepth: number;
-  }) {
+  }): Promise<string[]> {
     if (params.chainDepth > this.MAX_CHAIN_DEPTH) {
       this.logger.warn(
         `chainDepth ${params.chainDepth} excedido — abortando dispatch (cardId=${params.cardId})`,
       );
-      return;
+      return [];
     }
 
     const automations = await this.prisma.automation.findMany({
@@ -82,9 +143,12 @@ export class AutomationsEngine {
       },
     });
 
+    const runIds: string[] = [];
     for (const automation of automations) {
-      await this.executeAutomation(automation, params.cardId, params.chainDepth);
+      const run = await this.executeAutomation(automation, params.cardId, params.chainDepth);
+      runIds.push(run.id);
     }
+    return runIds;
   }
 
   /**
