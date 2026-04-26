@@ -273,6 +273,7 @@ export function ListColumn({
       />
       <ColumnAutomationsDialog
         list={list}
+        boardId={params.boardId}
         open={automationsOpen}
         onOpenChange={setAutomationsOpen}
       />

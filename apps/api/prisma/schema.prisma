@@ -125,6 +125,44 @@ enum ActivityType {
   BOARD_VIEWED_IMPLICIT
 }
 
+enum AutomationTrigger {
+  CARD_ENTERED
+  CARD_LEFT
+  TIME_IN_LIST
+  TIME_NO_INTERACTION
+  DUE_DATE_TODAY
+  DUE_DATE_OVERDUE
+}
+
+enum AutomationActionType {
+  INSERT_TAGS
+  REMOVE_TAGS
+  INSERT_CHECKLIST_ITEMS
+  INSERT_CHECKLIST_GROUP
+  SET_CARD_STATUS
+  FILL_FIELDS
+  SAVE_DESCRIPTION_VERSION
+  SET_LEAD
+  ADD_TEAM
+  POST_COMMENT
+  CREATE_CHILD_CARD
+  SEND_EMAIL
+  SEND_WHATSAPP
+  LINK_FLOW
+  UNLINK_FLOW
+  UPDATE_FLOW_POSITION
+  FLAG_DUE_TODAY
+  FLAG_OVERDUE
+}
+
+enum AutomationRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
 // ==================== Tenant / Auth ====================
 
 model User {
@@ -162,6 +200,7 @@ model User {
   tasksAssigned          Task[]          @relation("TaskAssignee")
   tasksCreated           Task[]          @relation("TaskCreator")
   tasksDone              Task[]          @relation("TaskDoneBy")
+  automationsCreated     Automation[]    @relation("AutomationCreator")
 
   @@index([email])
 }
@@ -186,6 +225,7 @@ model Organization {
   activities  Activity[]
   timeEntries TimeEntry[]
   tasks       Task[]
+  automations Automation[]
 
   @@index([slug])
 }
@@ -264,6 +304,7 @@ model Board {
   labels       Label[]
   members      BoardMember[]
   cards        Card[]
+  automations  Automation[]
 
   @@index([organizationId, isArchived])
 }
@@ -299,6 +340,7 @@ model List {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   board        Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards        Card[]
+  automations  Automation[]
 
   @@index([organizationId])
   @@index([boardId, position])
@@ -329,22 +371,23 @@ model Card {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  board       Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  list        List         @relation(fields: [listId], references: [id], onDelete: Cascade)
-  createdBy   User         @relation("CardCreator", fields: [createdById], references: [id])
-  completedBy User?        @relation("CardCompletedBy", fields: [completedById], references: [id])
-  lead        User?        @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
-  parent      Card?        @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
-  children    Card[]       @relation("Subtasks")
-  cover       Attachment?  @relation("CardCover", fields: [coverAttachmentId], references: [id], onDelete: SetNull)
-  members     CardMember[]
-  labels      CardLabel[]
-  checklists  Checklist[]
-  attachments Attachment[] @relation("CardAttachments")
-  comments    Comment[]
-  activities  Activity[]
-  timeEntries TimeEntry[]
-  visits      CardVisit[]
+  board          Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  list           List            @relation(fields: [listId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation("CardCreator", fields: [createdById], references: [id])
+  completedBy    User?           @relation("CardCompletedBy", fields: [completedById], references: [id])
+  lead           User?           @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
+  parent         Card?           @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
+  children       Card[]          @relation("Subtasks")
+  cover          Attachment?     @relation("CardCover", fields: [coverAttachmentId], references: [id], onDelete: SetNull)
+  members        CardMember[]
+  labels         CardLabel[]
+  checklists     Checklist[]
+  attachments    Attachment[]    @relation("CardAttachments")
+  comments       Comment[]
+  activities     Activity[]
+  timeEntries    TimeEntry[]
+  visits         CardVisit[]
+  automationRuns AutomationRun[]
 
   @@index([organizationId])
   @@index([boardId, isArchived])
@@ -442,10 +485,10 @@ model Attachment {
   externalUrl String?
   createdAt   DateTime       @default(now())
 
-  card        Card     @relation("CardAttachments", fields: [cardId], references: [id], onDelete: Cascade)
-  comment     Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  uploader    User     @relation(fields: [uploaderId], references: [id])
-  coverOfCards Card[]  @relation("CardCover")
+  card         Card     @relation("CardAttachments", fields: [cardId], references: [id], onDelete: Cascade)
+  comment      Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  uploader     User     @relation(fields: [uploaderId], references: [id])
+  coverOfCards Card[]   @relation("CardCover")
 
   @@index([cardId])
   @@index([commentId])
@@ -578,4 +621,63 @@ model Task {
 
   @@index([organizationId, assigneeId, isDone])
   @@index([organizationId, dueDate])
+}
+
+// ==================== Automations ====================
+
+/// Regra automatizada vinculada a uma list/board/org. Quando o trigger
+/// dispara, a engine cria um AutomationRun e processa a action.
+/// MVP: escopo principal é por LIST. Board/Org são preparação pra Fase 2+.
+model Automation {
+  id             String               @id @default(cuid())
+  organizationId String
+  listId         String?
+  boardId        String?
+  trigger        AutomationTrigger
+  /// Configuração do gatilho. Ex: { minutes: 60 } pra TIME_IN_LIST.
+  triggerConfig  Json                 @default("{}")
+  actionType     AutomationActionType
+  /// Payload específico da action. Ex: { tagIds: ["..."] } pra INSERT_TAGS.
+  actionConfig   Json                 @default("{}")
+  isActive       Boolean              @default(true)
+  /// Label opcional pra o usuário identificar a automação na lista
+  /// (ex: "Marcar como urgente quando entrar em A fazer").
+  label          String?
+  createdById    String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  list         List?           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  board        Board?          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy    User            @relation("AutomationCreator", fields: [createdById], references: [id])
+  runs         AutomationRun[]
+
+  @@index([organizationId])
+  @@index([listId, isActive])
+  @@index([boardId, isActive])
+}
+
+/// Histórico de execução de uma automação. Cada run referencia (quando
+/// aplicável) o card que disparou. `chainDepth` ajuda no anti-loop.
+model AutomationRun {
+  id           String              @id @default(cuid())
+  automationId String
+  cardId       String?
+  status       AutomationRunStatus @default(PENDING)
+  /// Quantos saltos esta run está dentro de uma cadeia de automações
+  /// disparadas em sequência. Engine aborta acima de 5 (anti-loop).
+  chainDepth   Int                 @default(0)
+  error        String?
+  /// Resultado/payload do que foi feito (pra debug e auditoria).
+  result       Json?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime            @default(now())
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  card       Card?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@index([automationId, createdAt])
+  @@index([cardId])
 }

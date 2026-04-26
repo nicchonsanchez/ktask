@@ -1,22 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Bot,
-  Check,
   ChevronLeft,
   Eye,
   Flag,
   GitBranch,
   Layers,
   ListChecks,
+  Loader2,
   Mail,
   MessageSquare,
   Plus,
   Send,
   Tag,
-  Timer,
-  TimerOff,
   Trash2,
   UserCog,
   Users,
@@ -26,35 +26,53 @@ import {
 
 import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import type { ListWithCards } from '@/lib/queries/boards';
+import {
+  automationsQueries,
+  deleteAutomation,
+  updateAutomation,
+  type Automation,
+  type AutomationActionType,
+} from '@/lib/queries/automations';
+import { useConfirm, useNotify } from '@/components/ui/dialogs';
+import { CreateAutomationForm } from './create-automation-form';
 
 /**
- * Modal de automações de uma coluna (Etapa 1 — placeholder visual).
+ * Modal de automações da coluna — Fase A.
  *
- * Layout inspirado no Ummense:
- *   - Header com ícone do gatilho + nome da coluna
- *   - 3 tabs: Detalhes · Automações (N) · Avançado
- *   - Aba Automações: lista vazia + botão "+" pra abrir catálogo
- *   - Catálogo: 18 automações em 6 categorias, todas disabled "em breve"
+ * UI conectada ao backend:
+ *   - Lista as automações reais via GET /lists/:listId/automations
+ *   - Toggle isActive via PATCH
+ *   - Excluir via DELETE
+ *   - Criar via formulário simples (apenas INSERT_TAGS funcional na Fase A;
+ *     outras actions ficam disabled "em breve")
  *
- * Implementação real (schema, engine, handlers) entra na Etapa 2 — ver
- * `tarefas-md/23-automacoes-coluna.md`.
+ * Engine de execução ainda não está rodando — quando uma automação
+ * dispara, nada acontece. A UI mostra aviso "Engine em desenvolvimento"
+ * pra deixar isso claro.
  */
 
 type Tab = 'details' | 'automations' | 'advanced';
 
 export function ColumnAutomationsDialog({
   list,
+  boardId,
   open,
   onOpenChange,
 }: {
   list: ListWithCards;
+  boardId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState<Tab>('automations');
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  // Por enquanto sempre 0 — engine não existe ainda
-  const automationsCount = 0;
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const automationsQuery = useQuery({
+    ...automationsQueries.byList(list.id),
+    enabled: open,
+  });
+
+  const automations = automationsQuery.data ?? [];
 
   return (
     <>
@@ -81,7 +99,7 @@ export function ColumnAutomationsDialog({
             <TabBtn label="Detalhes" active={tab === 'details'} onClick={() => setTab('details')} />
             <TabBtn
               label="Automações"
-              count={automationsCount}
+              count={automations.length}
               active={tab === 'automations'}
               onClick={() => setTab('automations')}
             />
@@ -106,15 +124,19 @@ export function ColumnAutomationsDialog({
 
             {tab === 'automations' && (
               <div className="flex flex-1 flex-col">
+                <EngineWarningBanner />
+
                 <div className="flex items-center justify-between gap-2 px-5 py-3">
                   <p className="text-fg-muted text-[12px]">
-                    {automationsCount === 0
-                      ? 'Nenhuma automação configurada nesta coluna.'
-                      : `${automationsCount} automação${automationsCount === 1 ? '' : 's'} ativa${automationsCount === 1 ? '' : 's'}.`}
+                    {automationsQuery.isLoading
+                      ? 'Carregando…'
+                      : automations.length === 0
+                        ? 'Nenhuma automação configurada nesta coluna.'
+                        : `${automations.length} automação${automations.length === 1 ? '' : 's'} configurada${automations.length === 1 ? '' : 's'}.`}
                   </p>
                   <button
                     type="button"
-                    onClick={() => setCatalogOpen(true)}
+                    onClick={() => setCreateOpen(true)}
                     className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium"
                   >
                     <Plus size={12} />
@@ -122,29 +144,24 @@ export function ColumnAutomationsDialog({
                   </button>
                 </div>
 
-                {automationsCount === 0 && (
-                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center">
-                    <span className="bg-primary-subtle text-primary inline-flex size-12 items-center justify-center rounded-full">
-                      <Bot size={22} />
-                    </span>
-                    <p className="text-fg text-sm font-medium">
-                      Automatize o fluxo da coluna &quot;{list.name}&quot;
-                    </p>
-                    <p className="text-fg-muted max-w-sm text-[12px] leading-relaxed">
-                      Crie regras pra disparar ações quando cards entram, saem, ficam parados ou
-                      vencem o prazo. Catálogo de 18 automações disponíveis.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setCatalogOpen(true)}
-                      className="text-primary hover:text-primary-hover mt-1 text-[12px] font-medium"
-                    >
-                      Ver catálogo
-                    </button>
+                {automationsQuery.isLoading && (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 size={16} className="text-fg-muted animate-spin" />
                   </div>
                 )}
 
-                {/* Rodapé "Cards vinculados na coluna" — só placeholder visual */}
+                {!automationsQuery.isLoading && automations.length === 0 && (
+                  <EmptyState onCreate={() => setCreateOpen(true)} listName={list.name} />
+                )}
+
+                {!automationsQuery.isLoading && automations.length > 0 && (
+                  <ul className="divide-border/40 flex flex-col divide-y px-2">
+                    {automations.map((auto) => (
+                      <AutomationRow key={auto.id} automation={auto} listId={list.id} />
+                    ))}
+                  </ul>
+                )}
+
                 <div className="border-border/60 bg-bg-subtle/40 mt-auto flex shrink-0 items-center justify-between gap-2 border-t px-5 py-2.5 text-[11px]">
                   <p className="text-fg-muted">Cards vinculados na coluna</p>
                   <div className="flex items-center gap-3">
@@ -154,18 +171,6 @@ export function ColumnAutomationsDialog({
                       </span>
                       entradas
                     </span>
-                    <span className="text-fg-muted inline-flex items-center gap-1">
-                      <span className="text-fg-subtle font-semibold tabular-nums">0</span>
-                      concluídos
-                    </span>
-                    <button
-                      type="button"
-                      disabled
-                      className="text-fg-subtle hover:text-fg-muted rounded p-0.5 disabled:cursor-not-allowed"
-                      aria-label="Limpar histórico (em breve)"
-                    >
-                      <Trash2 size={11} />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -175,7 +180,11 @@ export function ColumnAutomationsDialog({
               <div className="px-5 py-6">
                 <p className="text-fg-muted text-sm">
                   Configurações avançadas (logs de execução, retentativas, escopo de permissão)
-                  chegam quando a engine de automações estiver pronta.
+                  chegam quando a engine de automações estiver rodando.
+                </p>
+                <p className="text-fg-subtle mt-3 text-[11px]">
+                  Stub do schema já está commitado: <code>Automation</code> +{' '}
+                  <code>AutomationRun</code> com <code>chainDepth</code> pra anti-loop.
                 </p>
               </div>
             )}
@@ -183,12 +192,49 @@ export function ColumnAutomationsDialog({
         </DialogContent>
       </Dialog>
 
-      <AutomationCatalogDialog
-        open={catalogOpen}
-        onOpenChange={setCatalogOpen}
-        listName={list.name}
+      <CreateAutomationDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        list={list}
+        boardId={boardId}
       />
     </>
+  );
+}
+
+function EngineWarningBanner() {
+  return (
+    <div className="border-warning/40 bg-warning-subtle/40 mx-3 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[11px]">
+      <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
+      <p className="text-fg-muted leading-snug">
+        <strong className="text-warning">Engine em desenvolvimento.</strong> Você pode criar e
+        salvar automações, mas as ações ainda não disparam quando o gatilho acontece. A engine vai
+        entrar numa próxima sprint (ver <code>tarefas-md/23-automacoes-coluna.md</code>).
+      </p>
+    </div>
+  );
+}
+
+function EmptyState({ onCreate, listName }: { onCreate: () => void; listName: string }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+      <span className="bg-primary-subtle text-primary inline-flex size-12 items-center justify-center rounded-full">
+        <Bot size={22} />
+      </span>
+      <p className="text-fg text-sm font-medium">
+        Automatize o fluxo da coluna &quot;{listName}&quot;
+      </p>
+      <p className="text-fg-muted max-w-sm text-[12px] leading-relaxed">
+        Crie regras pra disparar ações quando cards entram, saem, ficam parados ou vencem o prazo.
+      </p>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="text-primary hover:text-primary-hover mt-1 text-[12px] font-medium"
+      >
+        Criar primeira automação
+      </button>
+    </div>
   );
 }
 
@@ -226,14 +272,167 @@ function TabBtn({
   );
 }
 
-// ---------------- Catálogo ----------------
+// ---------------- AutomationRow ----------------
+
+function AutomationRow({ automation, listId }: { automation: Automation; listId: string }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const confirm = useConfirm();
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: automationsQueries.byList(listId).queryKey });
+  }
+
+  const toggleMut = useMutation({
+    mutationFn: () => updateAutomation(automation.id, { isActive: !automation.isActive }),
+    onSuccess: invalidate,
+    onError: () => notify.error('Falha ao alterar automação.'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteAutomation(automation.id),
+    onSuccess: () => {
+      invalidate();
+      notify.success('Automação excluída.');
+    },
+    onError: () => notify.error('Falha ao excluir automação.'),
+  });
+
+  async function handleDelete() {
+    const ok = await confirm({
+      title: 'Excluir esta automação?',
+      description: `${describeTrigger(automation.trigger)} → ${describeAction(automation.actionType)}`,
+      confirmLabel: 'Excluir',
+      danger: true,
+    });
+    if (ok) deleteMut.mutate();
+  }
+
+  return (
+    <li className="hover:bg-bg-subtle/50 flex items-start gap-3 px-3 py-2.5">
+      <span className="bg-primary-subtle text-primary mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded">
+        {iconFor(automation.actionType)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-fg text-[13px] font-medium leading-snug">
+          {automation.label || describeAction(automation.actionType)}
+        </p>
+        <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
+          Quando: <strong>{describeTrigger(automation.trigger)}</strong>
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => toggleMut.mutate()}
+        disabled={toggleMut.isPending}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+          automation.isActive ? 'bg-primary' : 'bg-bg-emphasis'
+        }`}
+        aria-label={automation.isActive ? 'Desativar' : 'Ativar'}
+        title={
+          automation.isActive ? 'Ativa — clique para desativar' : 'Desativada — clique para ativar'
+        }
+      >
+        <span
+          className={`bg-bg inline-block size-4 transform rounded-full shadow-sm transition-transform ${
+            automation.isActive ? 'translate-x-4' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={deleteMut.isPending}
+        className="text-fg-muted hover:text-danger shrink-0 rounded p-1"
+        aria-label="Excluir automação"
+        title="Excluir"
+      >
+        {deleteMut.isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Trash2 size={12} />
+        )}
+      </button>
+    </li>
+  );
+}
+
+// ---------------- Helpers de display ----------------
+
+const TRIGGER_LABEL: Record<Automation['trigger'], string> = {
+  CARD_ENTERED: 'card entrar nesta coluna',
+  CARD_LEFT: 'card sair desta coluna',
+  TIME_IN_LIST: 'card ficar tempo demais na coluna',
+  TIME_NO_INTERACTION: 'card ficar parado sem interação',
+  DUE_DATE_TODAY: 'prazo do card cair pra hoje',
+  DUE_DATE_OVERDUE: 'prazo do card vencer',
+};
+
+function describeTrigger(trigger: Automation['trigger']): string {
+  return TRIGGER_LABEL[trigger];
+}
+
+const ACTION_LABEL: Partial<Record<AutomationActionType, string>> = {
+  INSERT_TAGS: 'Adicionar etiquetas',
+  REMOVE_TAGS: 'Remover etiquetas',
+  INSERT_CHECKLIST_ITEMS: 'Inserir tarefas',
+  INSERT_CHECKLIST_GROUP: 'Inserir grupo de tarefas',
+  SET_CARD_STATUS: 'Alterar status do card',
+  FILL_FIELDS: 'Preencher campos',
+  SAVE_DESCRIPTION_VERSION: 'Salvar versão da descrição',
+  SET_LEAD: 'Definir líder',
+  ADD_TEAM: 'Adicionar equipe',
+  POST_COMMENT: 'Postar comentário automático',
+  CREATE_CHILD_CARD: 'Criar card filho',
+  SEND_EMAIL: 'Enviar e-mail',
+  SEND_WHATSAPP: 'Enviar WhatsApp',
+  LINK_FLOW: 'Vincular a outro fluxo',
+  UNLINK_FLOW: 'Desvincular do fluxo',
+  UPDATE_FLOW_POSITION: 'Atualizar posição em outro fluxo',
+  FLAG_DUE_TODAY: 'Sinalizar marcos para hoje',
+  FLAG_OVERDUE: 'Sinalizar marcos atrasados',
+};
+
+function describeAction(action: AutomationActionType): string {
+  return ACTION_LABEL[action] ?? action;
+}
+
+const ACTION_ICON: Partial<Record<AutomationActionType, LucideIcon>> = {
+  INSERT_TAGS: Tag,
+  REMOVE_TAGS: Tag,
+  INSERT_CHECKLIST_ITEMS: ListChecks,
+  INSERT_CHECKLIST_GROUP: ListChecks,
+  SET_CARD_STATUS: Flag,
+  FILL_FIELDS: ListChecks,
+  SAVE_DESCRIPTION_VERSION: Layers,
+  SET_LEAD: UserCog,
+  ADD_TEAM: Users,
+  POST_COMMENT: MessageSquare,
+  CREATE_CHILD_CARD: Plus,
+  SEND_EMAIL: Mail,
+  SEND_WHATSAPP: Send,
+  LINK_FLOW: GitBranch,
+  UNLINK_FLOW: GitBranch,
+  UPDATE_FLOW_POSITION: GitBranch,
+  FLAG_DUE_TODAY: Flag,
+  FLAG_OVERDUE: Flag,
+};
+
+function iconFor(action: AutomationActionType) {
+  const Icon = ACTION_ICON[action] ?? Bot;
+  return <Icon size={13} />;
+}
+
+// ---------------- Catálogo (criação) ----------------
 
 interface CatalogItem {
-  key: string;
+  key: AutomationActionType;
   label: string;
   icon: LucideIcon;
   plan: 'PRO' | 'ENTERPRISE';
   description: string;
+  /** Implementado na Fase A da engine? Se não, fica disabled. */
+  ready: boolean;
 }
 interface CatalogCategory {
   name: string;
@@ -242,79 +441,22 @@ interface CatalogCategory {
 
 const CATALOG: CatalogCategory[] = [
   {
-    name: 'Fluxo',
-    items: [
-      {
-        key: 'link-flow',
-        label: 'Vincular a um novo fluxo',
-        icon: GitBranch,
-        plan: 'PRO',
-        description: 'Quando o card entrar nesta coluna, replicar em outro fluxo escolhido.',
-      },
-      {
-        key: 'unlink-flow',
-        label: 'Desvincular do fluxo atual',
-        icon: GitBranch,
-        plan: 'PRO',
-        description: 'Remove este card deste fluxo (continua em outros, se vinculado).',
-      },
-      {
-        key: 'update-flow-position',
-        label: 'Atualizar posição no fluxo',
-        icon: GitBranch,
-        plan: 'PRO',
-        description: 'Move o card vinculado em outro fluxo pra uma coluna específica.',
-      },
-    ],
-  },
-  {
-    name: 'Card',
-    items: [
-      {
-        key: 'create-child',
-        label: 'Criar card filho',
-        icon: Plus,
-        plan: 'PRO',
-        description: 'Cria automaticamente um sub-card da família, com template configurável.',
-      },
-      {
-        key: 'set-status',
-        label: 'Alterar status do card',
-        icon: Flag,
-        plan: 'PRO',
-        description: 'Marca como Finalizado, Reativado, Arquivado ou Privado.',
-      },
-      {
-        key: 'fill-fields',
-        label: 'Inserir ou preencher campos',
-        icon: ListChecks,
-        plan: 'PRO',
-        description: 'Define valor de um campo personalizado (ex: data de entrega = hoje + 5).',
-      },
-      {
-        key: 'save-description-version',
-        label: 'Salvar versão da descrição',
-        icon: Layers,
-        plan: 'PRO',
-        description: 'Snapshot da descrição atual num histórico pra auditoria.',
-      },
-    ],
-  },
-  {
     name: 'Tags',
     items: [
       {
-        key: 'add-tags',
+        key: 'INSERT_TAGS',
         label: 'Inserir tags',
         icon: Tag,
         plan: 'PRO',
-        description: 'Adiciona uma ou mais etiquetas ao card.',
+        ready: true,
+        description: 'Adiciona uma ou mais etiquetas ao card automaticamente.',
       },
       {
-        key: 'remove-tags',
+        key: 'REMOVE_TAGS',
         label: 'Remover tags',
         icon: Tag,
         plan: 'PRO',
+        ready: false,
         description: 'Remove etiquetas do card.',
       },
     ],
@@ -323,18 +465,57 @@ const CATALOG: CatalogCategory[] = [
     name: 'Tarefas',
     items: [
       {
-        key: 'add-checklist-items',
+        key: 'INSERT_CHECKLIST_ITEMS',
         label: 'Inserir tarefas',
         icon: ListChecks,
         plan: 'PRO',
+        ready: false,
         description: 'Cria itens de checklist a partir de uma lista de templates.',
       },
       {
-        key: 'add-checklist-group',
+        key: 'INSERT_CHECKLIST_GROUP',
         label: 'Inserir grupo de tarefas',
         icon: ListChecks,
         plan: 'PRO',
+        ready: false,
         description: 'Cria um checklist inteiro a partir de um template salvo.',
+      },
+    ],
+  },
+  {
+    name: 'Card',
+    items: [
+      {
+        key: 'SET_CARD_STATUS',
+        label: 'Alterar status do card',
+        icon: Flag,
+        plan: 'PRO',
+        ready: false,
+        description: 'Marca como Finalizado, Reativado, Arquivado ou Privado.',
+      },
+      {
+        key: 'CREATE_CHILD_CARD',
+        label: 'Criar card filho',
+        icon: Plus,
+        plan: 'PRO',
+        ready: false,
+        description: 'Cria automaticamente um sub-card da família.',
+      },
+      {
+        key: 'FILL_FIELDS',
+        label: 'Preencher campos',
+        icon: ListChecks,
+        plan: 'PRO',
+        ready: false,
+        description: 'Define valor de um campo personalizado.',
+      },
+      {
+        key: 'SAVE_DESCRIPTION_VERSION',
+        label: 'Salvar versão da descrição',
+        icon: Layers,
+        plan: 'PRO',
+        ready: false,
+        description: 'Snapshot da descrição atual.',
       },
     ],
   },
@@ -342,38 +523,43 @@ const CATALOG: CatalogCategory[] = [
     name: 'Equipe',
     items: [
       {
-        key: 'set-lead',
+        key: 'SET_LEAD',
         label: 'Definir líder do card',
         icon: UserCog,
         plan: 'PRO',
-        description: 'Atribui um usuário como líder. Suporta round-robin entre membros.',
+        ready: false,
+        description: 'Atribui um usuário como líder.',
       },
       {
-        key: 'add-team',
+        key: 'ADD_TEAM',
         label: 'Adicionar equipe no card',
         icon: Users,
         plan: 'PRO',
+        ready: false,
         description: 'Adiciona N usuários como membros do card.',
       },
       {
-        key: 'post-comment',
+        key: 'POST_COMMENT',
         label: 'Postar comentário automático',
         icon: MessageSquare,
         plan: 'PRO',
-        description: 'Cria comentário no card a partir de um template (Mustache).',
+        ready: false,
+        description: 'Cria comentário no card a partir de template.',
       },
       {
-        key: 'send-whatsapp',
+        key: 'SEND_WHATSAPP',
         label: 'Enviar WhatsApp',
         icon: Send,
         plan: 'ENTERPRISE',
-        description: 'Dispara mensagem WhatsApp via Evolution API pra membro, líder ou contato.',
+        ready: false,
+        description: 'Dispara mensagem WhatsApp via Evolution API.',
       },
       {
-        key: 'send-email',
+        key: 'SEND_EMAIL',
         label: 'Configurar disparo de e-mail',
         icon: Mail,
         plan: 'PRO',
+        ready: false,
         description: 'Envia e-mail com template pra destinatários do card.',
       },
     ],
@@ -382,121 +568,197 @@ const CATALOG: CatalogCategory[] = [
     name: 'Sinalizar',
     items: [
       {
-        key: 'flag-due-today',
+        key: 'FLAG_DUE_TODAY',
         label: 'Cards com marcos para hoje',
         icon: Flag,
         plan: 'PRO',
-        description: 'Sinaliza visualmente cards cujo dueDate é hoje enquanto nesta coluna.',
+        ready: false,
+        description: 'Sinaliza visualmente cards cujo dueDate é hoje.',
       },
       {
-        key: 'flag-overdue',
+        key: 'FLAG_OVERDUE',
         label: 'Cards com marcos atrasados',
         icon: Flag,
         plan: 'PRO',
-        description: 'Idem, mas pra cards com dueDate < hoje.',
+        ready: false,
+        description: 'Idem, pra cards com dueDate < hoje.',
+      },
+    ],
+  },
+  {
+    name: 'Fluxo',
+    items: [
+      {
+        key: 'LINK_FLOW',
+        label: 'Vincular a um novo fluxo',
+        icon: GitBranch,
+        plan: 'PRO',
+        ready: false,
+        description: 'Replica o card em outro fluxo escolhido.',
       },
       {
-        key: 'time-in-list',
-        label: 'Tempo excedido na coluna',
-        icon: Timer,
+        key: 'UNLINK_FLOW',
+        label: 'Desvincular do fluxo atual',
+        icon: GitBranch,
         plan: 'PRO',
-        description: 'Dispara aviso quando card está mais de X horas/dias na coluna.',
+        ready: false,
+        description: 'Remove este card deste fluxo.',
       },
       {
-        key: 'time-no-interaction',
-        label: 'Tempo sem interação',
-        icon: TimerOff,
+        key: 'UPDATE_FLOW_POSITION',
+        label: 'Atualizar posição no fluxo',
+        icon: GitBranch,
         plan: 'PRO',
-        description: 'Detecta cards parados (sem comentário, edição, mudança) há X tempo.',
+        ready: false,
+        description: 'Move o card vinculado em outro fluxo pra uma coluna específica.',
       },
     ],
   },
 ];
 
-function AutomationCatalogDialog({
+// ---------------- CreateAutomationDialog ----------------
+
+function CreateAutomationDialog({
   open,
   onOpenChange,
-  listName,
+  list,
+  boardId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  listName: string;
+  list: ListWithCards;
+  boardId: string;
 }) {
+  const [step, setStep] = useState<'catalog' | 'form'>('catalog');
+  const [selected, setSelected] = useState<AutomationActionType | null>(null);
+
+  function reset() {
+    setStep('catalog');
+    setSelected(null);
+  }
+
+  function handleClose() {
+    onOpenChange(false);
+    setTimeout(reset, 200);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : handleClose())}>
       <DialogContent className="flex h-[85vh] w-[calc(100vw-2rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-md p-0">
         <header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-5 py-3">
+          {step === 'form' ? (
+            <button
+              type="button"
+              onClick={reset}
+              className="text-fg-muted hover:bg-bg-muted hover:text-fg rounded p-1"
+              aria-label="Voltar ao catálogo"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          ) : (
+            <Bot size={16} className="text-fg-muted" />
+          )}
+          <DialogTitle className="text-fg flex-1 text-sm font-semibold">
+            {step === 'catalog' ? 'Selecione uma automação' : 'Configurar automação'}
+          </DialogTitle>
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={handleClose}
             className="text-fg-muted hover:bg-bg-muted hover:text-fg rounded p-1"
-            aria-label="Voltar"
+            aria-label="Fechar"
           >
-            <ChevronLeft size={16} />
+            <X size={14} />
           </button>
-          <DialogTitle className="text-fg flex-1 text-sm font-semibold">
-            Selecione uma automação
-          </DialogTitle>
         </header>
 
-        <p className="text-fg-muted border-border/60 bg-bg-subtle/30 shrink-0 border-b px-5 py-2 text-[11px]">
-          Pra coluna <strong className="text-fg">{listName}</strong> — todas as automações ficam{' '}
-          <strong>em breve</strong> nesta versão. Engine entra na próxima sprint (ver{' '}
-          <code>tarefas-md/23-automacoes-coluna.md</code>).
-        </p>
+        {step === 'catalog' && (
+          <Catalog
+            onPick={(action) => {
+              setSelected(action);
+              setStep('form');
+            }}
+          />
+        )}
 
-        <div className="flex-1 overflow-y-auto px-3 py-2">
-          {CATALOG.map((cat) => (
-            <section key={cat.name} className="py-2">
-              <h3 className="text-primary px-2 pb-1 pt-1 text-[12px] font-semibold uppercase tracking-wide">
-                {cat.name}
-              </h3>
-              <ul className="flex flex-col">
-                {cat.items.map((item) => (
-                  <li key={item.key}>
-                    <button
-                      type="button"
-                      disabled
-                      title="Em breve — engine de automações ainda não está pronta"
-                      className="text-fg hover:bg-bg-muted/40 group/item flex w-full cursor-not-allowed items-center gap-3 rounded-md px-2 py-1.5 text-left disabled:opacity-70"
-                    >
-                      <span className="text-fg-muted shrink-0">
-                        <item.icon size={15} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-fg text-[13px] font-medium">{item.label}</p>
-                      </div>
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${
-                          item.plan === 'ENTERPRISE'
-                            ? 'bg-warning-subtle text-warning'
-                            : 'bg-success-subtle text-success'
-                        }`}
-                      >
-                        {item.plan}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-
-          <div className="text-fg-subtle flex items-center justify-center gap-2 px-2 py-4 text-[11px]">
-            <Eye size={12} />
-            18 automações no total · Implementação parcial conforme roadmap Fase 2
-          </div>
-        </div>
+        {step === 'form' && selected && (
+          <CreateAutomationForm
+            actionType={selected}
+            list={list}
+            boardId={boardId}
+            onCreated={handleClose}
+            onCancel={reset}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-// Re-export pra evitar tree-shake quebrar tipos
-export type { Tab as AutomationsTab };
-// Marker pra tag dos itens (caso futuramente importemos)
-export const _CATALOG_LENGTH = CATALOG.reduce((acc, c) => acc + c.items.length, 0);
-// Sinaliza pro typescript que `Check` está sendo importado mas usado como
-// re-export simbólico (lint não-utilizada): mantém pra futuro indicador de
-// "automação ativa". Pode remover quando engine estiver pronta.
-export const _RESERVED_ICONS = { Check };
+function Catalog({ onPick }: { onPick: (action: AutomationActionType) => void }) {
+  return (
+    <>
+      <p className="text-fg-muted border-border/60 bg-bg-subtle/30 shrink-0 border-b px-5 py-2 text-[11px]">
+        Apenas <strong className="text-success">Inserir tags</strong> está implementada na engine
+        nesta versão. As outras automações ficam disabled até o handler delas chegar (ver{' '}
+        <code>tarefas-md/23-automacoes-coluna.md</code>).
+      </p>
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {CATALOG.map((cat) => (
+          <section key={cat.name} className="py-2">
+            <h3 className="text-primary px-2 pb-1 pt-1 text-[12px] font-semibold uppercase tracking-wide">
+              {cat.name}
+            </h3>
+            <ul className="flex flex-col">
+              {cat.items.map((item) => (
+                <li key={item.key}>
+                  <button
+                    type="button"
+                    disabled={!item.ready}
+                    onClick={() => item.ready && onPick(item.key)}
+                    title={
+                      item.ready ? item.description : 'Em breve — handler ainda não implementado'
+                    }
+                    className={`group/item flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left ${
+                      item.ready
+                        ? 'text-fg hover:bg-bg-muted/40 cursor-pointer'
+                        : 'text-fg-subtle cursor-not-allowed opacity-70'
+                    }`}
+                  >
+                    <span
+                      className={item.ready ? 'text-primary shrink-0' : 'text-fg-muted shrink-0'}
+                    >
+                      <item.icon size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-[13px] font-medium ${item.ready ? 'text-fg' : 'text-fg-subtle'}`}
+                      >
+                        {item.label}
+                      </p>
+                    </div>
+                    {!item.ready && (
+                      <span className="text-fg-subtle shrink-0 text-[10px]">em breve</span>
+                    )}
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${
+                        item.plan === 'ENTERPRISE'
+                          ? 'bg-warning-subtle text-warning'
+                          : 'bg-success-subtle text-success'
+                      }`}
+                    >
+                      {item.plan}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+        <div className="text-fg-subtle flex items-center justify-center gap-2 px-2 py-4 text-[11px]">
+          <Eye size={12} />
+          18 automações no catálogo · 1 implementada nesta versão
+        </div>
+      </div>
+    </>
+  );
+}

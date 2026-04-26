@@ -26,6 +26,7 @@ import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module
 import { MeModule } from './modules/me/me.module';
 import { LabelsModule } from './modules/labels/labels.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { AutomationsModule } from './modules/automations/automations.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
     MeModule,
     LabelsModule,
     TasksModule,
+    AutomationsModule,
     HealthModule,
   ],
   providers: [
