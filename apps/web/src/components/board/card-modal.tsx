@@ -30,6 +30,7 @@ import {
   uploadAttachment,
   type CardDetail,
 } from '@/lib/queries/cards';
+import { ApiError } from '@/lib/api-client';
 import { RichEditor } from '@/components/editor';
 import { UserAvatar } from '@/components/user-avatar';
 import { TimelineFeed } from './timeline-feed';
@@ -177,9 +178,18 @@ function CardModalContent({
   });
 
   const cardCode = card.id.slice(-8).toUpperCase();
+  const cover = card.coverAttachmentId
+    ? card.attachments.find((a) => a.id === card.coverAttachmentId && a.publicUrl)
+    : undefined;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {/* Capa do card (cover) — só renderiza quando há um attachment marcado */}
+      {cover?.publicUrl && (
+        <div className="bg-bg-muted relative h-32 w-full shrink-0 overflow-hidden sm:h-40">
+          <img src={cover.publicUrl} alt="" className="size-full object-cover" loading="lazy" />
+        </div>
+      )}
       {/* Header — inspirado no Ummense mobile: título dominante, código do
           card como pill abaixo, ícones de ação enxutos à direita. */}
       <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-5 sm:gap-4 sm:px-7 sm:pt-6">

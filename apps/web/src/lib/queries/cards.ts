@@ -13,6 +13,7 @@ export interface CardDetail {
   completedAt: string | null;
   estimateMinutes: number | null;
   isArchived: boolean;
+  coverAttachmentId: string | null;
   createdAt: string;
   updatedAt: string;
   leadId: string | null;
@@ -73,6 +74,7 @@ export interface UpdateCardInput {
   completedAt?: string | null;
   estimateMinutes?: number | null;
   leadId?: string | null;
+  coverAttachmentId?: string | null;
 }
 
 export function updateCard(cardId: string, input: UpdateCardInput) {

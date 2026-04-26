@@ -27,6 +27,7 @@ interface UpdateCardInput {
   completedAt?: string | null;
   estimateMinutes?: number | null;
   leadId?: string | null;
+  coverAttachmentId?: string | null;
 }
 
 interface MoveCardInput {
@@ -222,6 +223,8 @@ export class CardsService {
             : undefined,
         estimateMinutes: input.estimateMinutes ?? undefined,
         leadId: input.leadId !== undefined ? input.leadId : undefined,
+        coverAttachmentId:
+          input.coverAttachmentId !== undefined ? input.coverAttachmentId : undefined,
       },
     });
 

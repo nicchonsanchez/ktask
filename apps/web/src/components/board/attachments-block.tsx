@@ -9,6 +9,8 @@ import {
   ImageIcon,
   Loader2,
   Paperclip,
+  Star,
+  StarOff,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -16,6 +18,7 @@ import {
 import {
   cardsQueries,
   removeAttachment,
+  updateCard,
   uploadAttachment,
   type Attachment,
   type CardDetail,
@@ -89,7 +92,14 @@ export function AttachmentsBlock({ card, boardId }: { card: CardDetail; boardId:
       {hasAttachments && (
         <ul className="flex flex-col gap-2">
           {card.attachments.map((a) => (
-            <AttachmentRow key={a.id} attachment={a} onRemoved={invalidate} />
+            <AttachmentRow
+              key={a.id}
+              attachment={a}
+              cardId={card.id}
+              isCover={card.coverAttachmentId === a.id}
+              onRemoved={invalidate}
+              onCoverChange={invalidate}
+            />
           ))}
         </ul>
       )}
@@ -145,15 +155,26 @@ export function AttachmentsBlock({ card, boardId }: { card: CardDetail; boardId:
 
 function AttachmentRow({
   attachment,
+  cardId,
+  isCover,
   onRemoved,
+  onCoverChange,
 }: {
   attachment: Attachment;
+  cardId: string;
+  isCover: boolean;
   onRemoved: () => void;
+  onCoverChange: () => void;
 }) {
   const confirm = useConfirm();
   const removeMut = useMutation({
     mutationFn: () => removeAttachment(attachment.id),
     onSuccess: onRemoved,
+  });
+
+  const setCoverMut = useMutation({
+    mutationFn: () => updateCard(cardId, { coverAttachmentId: isCover ? null : attachment.id }),
+    onSuccess: onCoverChange,
   });
 
   const isImage = attachment.kind === 'IMAGE' && attachment.publicUrl;
@@ -199,6 +220,28 @@ function AttachmentRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
+        {isImage && (
+          <button
+            type="button"
+            onClick={() => setCoverMut.mutate()}
+            disabled={setCoverMut.isPending}
+            className={`rounded p-1 transition-colors ${
+              isCover
+                ? 'text-warning'
+                : 'text-fg-muted hover:text-warning opacity-0 group-hover/att:opacity-100'
+            }`}
+            title={isCover ? 'Remover como capa' : 'Definir como capa'}
+            aria-label={isCover ? 'Remover como capa' : 'Definir como capa'}
+          >
+            {setCoverMut.isPending ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : isCover ? (
+              <Star size={13} fill="currentColor" />
+            ) : (
+              <StarOff size={13} />
+            )}
+          </button>
+        )}
         {attachment.publicUrl && (
           <a
             href={attachment.publicUrl}

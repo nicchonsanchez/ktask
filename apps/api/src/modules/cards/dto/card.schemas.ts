@@ -21,6 +21,8 @@ export const UpdateCardSchema = z.object({
   completedAt: z.string().datetime().nullable().optional(),
   estimateMinutes: z.number().int().nonnegative().nullable().optional(),
   leadId: z.string().cuid().nullable().optional(),
+  /** Capa do card: ID de um Attachment do próprio card. Null remove. */
+  coverAttachmentId: z.string().cuid().nullable().optional(),
 });
 export type UpdateCardRequest = z.infer<typeof UpdateCardSchema>;
 
