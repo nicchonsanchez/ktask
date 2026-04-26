@@ -20,13 +20,23 @@ import { CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'luc
 
 import { Button } from '@ktask/ui';
 import { UserAvatar } from '@/components/user-avatar';
-import { useConfirm } from '@/components/ui/dialogs';
+import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { DatePickerPopover } from './due-date-picker';
+import {
+  applyChecklistTemplate,
+  checklistTemplatesQueries,
+  saveChecklistAsTemplate,
+  type ChecklistTemplate,
+} from '@/lib/queries/checklist-templates';
+import { ApiError } from '@/lib/api-client';
+import { BookmarkPlus, FileText } from 'lucide-react';
 
 export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const notify = useNotify();
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
@@ -43,6 +53,18 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
       setAdding(false);
       setNewTitle('');
       invalidate();
+    },
+  });
+
+  const applyTemplateMut = useMutation({
+    mutationFn: (templateId: string) => applyChecklistTemplate({ templateId, cardId: card.id }),
+    onSuccess: () => {
+      setTemplatePickerOpen(false);
+      invalidate();
+      notify.success('Template aplicado.');
+    },
+    onError: (err) => {
+      notify.error(err instanceof ApiError ? err.message : 'Erro ao aplicar template.');
     },
   });
 
@@ -93,21 +115,109 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
           </Button>
         </form>
       ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
-        >
-          <Plus size={12} />
-          Adicionar lista
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
+          >
+            <Plus size={12} />
+            Adicionar lista
+          </button>
+          <button
+            type="button"
+            onClick={() => setTemplatePickerOpen(true)}
+            className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
+            title="Aplicar checklist a partir de um template salvo"
+          >
+            <FileText size={12} />
+            Usar template
+          </button>
+        </div>
       )}
+
+      {templatePickerOpen && (
+        <TemplatePickerDialog
+          onClose={() => setTemplatePickerOpen(false)}
+          onPick={(id) => applyTemplateMut.mutate(id)}
+          loading={applyTemplateMut.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+function TemplatePickerDialog({
+  onClose,
+  onPick,
+  loading,
+}: {
+  onClose: () => void;
+  onPick: (templateId: string) => void;
+  loading: boolean;
+}) {
+  const { data, isLoading } = useQuery(checklistTemplatesQueries.list());
+  const templates = data ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="border-border bg-bg flex w-full max-w-md flex-col rounded-md border shadow-2xl">
+        <div className="border-border/60 flex items-center justify-between border-b px-4 py-3">
+          <h3 className="text-fg flex items-center gap-2 text-sm font-semibold">
+            <FileText size={14} />
+            Aplicar template
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-fg-muted hover:text-fg rounded p-0.5"
+            aria-label="Fechar"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto p-3">
+          {isLoading && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 size={14} className="text-fg-muted animate-spin" />
+            </div>
+          )}
+          {!isLoading && templates.length === 0 && (
+            <p className="text-fg-muted py-4 text-center text-xs">
+              Nenhum template salvo ainda. Salve uma checklist como template no botão de marcador.
+            </p>
+          )}
+          {templates.map((t: ChecklistTemplate) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onPick(t.id)}
+              disabled={loading}
+              className="border-border/60 hover:border-border-strong hover:bg-bg-muted flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-60"
+            >
+              <span className="text-fg flex w-full items-center justify-between gap-2 font-medium">
+                <span className="truncate">{t.title}</span>
+                <span className="text-fg-muted shrink-0 text-[10px]">
+                  {t.items.length} {t.items.length === 1 ? 'item' : 'itens'}
+                </span>
+              </span>
+              <span className="text-fg-muted line-clamp-2 text-[11px]">
+                {t.items.slice(0, 3).join(' · ')}
+                {t.items.length > 3 ? '…' : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onChange: () => void }) {
   const confirm = useConfirm();
+  const prompt = usePrompt();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(checklist.title);
   useEffect(() => setTitle(checklist.title), [checklist.title]);
@@ -123,6 +233,21 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
   const removeListMut = useMutation({
     mutationFn: () => removeChecklist(checklist.id),
     onSuccess: onChange,
+  });
+
+  const saveTemplateMut = useMutation({
+    mutationFn: (templateTitle: string) =>
+      saveChecklistAsTemplate({
+        checklistId: checklist.id,
+        title: templateTitle.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checklist-templates'] });
+      notify.success('Checklist salva como template.');
+    },
+    onError: (err) => {
+      notify.error(err instanceof ApiError ? err.message : 'Erro ao salvar template.');
+    },
   });
 
   const addMut = useMutation({
@@ -181,6 +306,28 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
         <span className="text-fg-muted text-[11px] tabular-nums">
           {done}/{total}
         </span>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={async () => {
+              const tplTitle = await prompt({
+                title: 'Salvar como template',
+                description:
+                  'O template fica disponível pra toda a Org e pode ser aplicado em qualquer card.',
+                placeholder: checklist.title,
+                confirmLabel: 'Salvar template',
+                defaultValue: checklist.title,
+              });
+              if (tplTitle !== null) saveTemplateMut.mutate(tplTitle);
+            }}
+            disabled={saveTemplateMut.isPending}
+            className="text-fg-muted hover:text-primary rounded p-1"
+            aria-label="Salvar como template"
+            title="Salvar como template"
+          >
+            <BookmarkPlus size={12} />
+          </button>
+        )}
         <button
           type="button"
           onClick={async () => {

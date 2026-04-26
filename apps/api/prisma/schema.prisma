@@ -206,6 +206,7 @@ model User {
   automationsCreated     Automation[]    @relation("AutomationCreator")
   cardPresencesCompleted CardPresence[]  @relation("CardPresenceCompletedBy")
   pushSubscriptions      PushSubscription[]
+  checklistTemplatesCreated ChecklistTemplate[] @relation("ChecklistTemplateCreator")
 
   @@index([email])
 }
@@ -222,15 +223,16 @@ model Organization {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  memberships Membership[]
-  invitations Invitation[]
-  boards      Board[]
-  lists       List[]
-  labels      Label[]
-  activities  Activity[]
-  timeEntries TimeEntry[]
-  tasks       Task[]
-  automations Automation[]
+  memberships        Membership[]
+  invitations        Invitation[]
+  boards             Board[]
+  lists              List[]
+  labels             Label[]
+  activities         Activity[]
+  timeEntries        TimeEntry[]
+  tasks              Task[]
+  automations        Automation[]
+  checklistTemplates ChecklistTemplate[]
 
   @@index([slug])
 }
@@ -489,6 +491,27 @@ model Checklist {
   items ChecklistItem[]
 
   @@index([cardId])
+}
+
+/// Template de checklist reutilizável da Org. Permite salvar uma estrutura
+/// (título + N items) e aplicar em qualquer card com 1 click. Usos comuns:
+/// onboarding de cliente, checklist de revisão, etapas de produção.
+///
+/// `items` é um JSON array de strings (textos das tarefas). Não armazenamos
+/// dueDate/assignee/priority — esses são contextuais e ficam pra ajuste pós-aplicar.
+model ChecklistTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  items          Json // Array<string> — textos das tarefas em ordem
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("ChecklistTemplateCreator", fields: [createdById], references: [id])
+
+  @@index([organizationId])
 }
 
 model ChecklistItem {
