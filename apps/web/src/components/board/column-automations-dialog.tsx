@@ -208,9 +208,9 @@ function EngineWarningBanner() {
       <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
       <p className="text-fg-muted leading-snug">
         <strong className="text-warning">Engine parcial.</strong> Triggers{' '}
-        <strong>CARD_ENTERED</strong> e <strong>CARD_LEFT</strong> rodam ao vivo, e a action{' '}
-        <strong>INSERT_TAGS</strong> está implementada. As outras 17 actions ficam SKIPPED (criadas
-        mas não executadas) até os handlers virem prontos — ver{' '}
+        <strong>CARD_ENTERED</strong> e <strong>CARD_LEFT</strong> rodam ao vivo. 8 actions
+        implementadas (Tags add/remove, Inserir tarefas, Líder, Equipe, Comentário, Status, Card
+        filho). As demais 10 ficam SKIPPED até virem prontas — ver{' '}
         <code>tarefas-md/23-automacoes-coluna.md</code>.
       </p>
     </div>
@@ -458,7 +458,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Remover tags',
         icon: Tag,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Remove etiquetas do card.',
       },
     ],
@@ -471,7 +471,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Inserir tarefas',
         icon: ListChecks,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Cria itens de checklist a partir de uma lista de templates.',
       },
       {
@@ -492,7 +492,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Alterar status do card',
         icon: Flag,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Marca como Finalizado, Reativado, Arquivado ou Privado.',
       },
       {
@@ -500,7 +500,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Criar card filho',
         icon: Plus,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Cria automaticamente um sub-card da família.',
       },
       {
@@ -529,7 +529,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Definir líder do card',
         icon: UserCog,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Atribui um usuário como líder.',
       },
       {
@@ -537,7 +537,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Adicionar equipe no card',
         icon: Users,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Adiciona N usuários como membros do card.',
       },
       {
@@ -545,7 +545,7 @@ const CATALOG: CatalogCategory[] = [
         label: 'Postar comentário automático',
         icon: MessageSquare,
         plan: 'PRO',
-        ready: false,
+        ready: true,
         description: 'Cria comentário no card a partir de template.',
       },
       {
@@ -700,8 +700,9 @@ function Catalog({ onPick }: { onPick: (action: AutomationActionType) => void })
   return (
     <>
       <p className="text-fg-muted border-border/60 bg-bg-subtle/30 shrink-0 border-b px-5 py-2 text-[11px]">
-        Apenas <strong className="text-success">Inserir tags</strong> está implementada na engine
-        nesta versão. As outras automações ficam disabled até o handler delas chegar (ver{' '}
+        <strong className="text-success">8 automações</strong> implementadas e rodando: Tags
+        (add/remove), Inserir tarefas, Líder, Equipe, Comentário, Status, Card filho. As outras 10
+        ficam disabled até os handlers virem prontos (ver{' '}
         <code>tarefas-md/23-automacoes-coluna.md</code>).
       </p>
       <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -758,7 +759,7 @@ function Catalog({ onPick }: { onPick: (action: AutomationActionType) => void })
         ))}
         <div className="text-fg-subtle flex items-center justify-center gap-2 px-2 py-4 text-[11px]">
           <Eye size={12} />
-          18 automações no catálogo · 1 implementada nesta versão
+          18 automações no catálogo · 8 implementadas nesta versão
         </div>
       </div>
     </>

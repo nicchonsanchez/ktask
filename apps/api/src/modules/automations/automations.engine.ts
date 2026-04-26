@@ -133,18 +133,25 @@ export class AutomationsEngine {
     switch (automation.actionType) {
       case 'INSERT_TAGS':
         return this.handleInsertTags(automation, cardId);
-
-      // Handlers ainda não implementados — Fase C
       case 'REMOVE_TAGS':
+        return this.handleRemoveTags(automation, cardId);
       case 'INSERT_CHECKLIST_ITEMS':
-      case 'INSERT_CHECKLIST_GROUP':
+        return this.handleInsertChecklistItems(automation, cardId);
+      case 'SET_LEAD':
+        return this.handleSetLead(automation, cardId);
+      case 'ADD_TEAM':
+        return this.handleAddTeam(automation, cardId);
+      case 'POST_COMMENT':
+        return this.handlePostComment(automation, cardId);
       case 'SET_CARD_STATUS':
+        return this.handleSetCardStatus(automation, cardId);
+      case 'CREATE_CHILD_CARD':
+        return this.handleCreateChildCard(automation, cardId);
+
+      // Handlers ainda não implementados — Fase D
+      case 'INSERT_CHECKLIST_GROUP':
       case 'FILL_FIELDS':
       case 'SAVE_DESCRIPTION_VERSION':
-      case 'SET_LEAD':
-      case 'ADD_TEAM':
-      case 'POST_COMMENT':
-      case 'CREATE_CHILD_CARD':
       case 'SEND_EMAIL':
       case 'SEND_WHATSAPP':
       case 'LINK_FLOW':
@@ -152,7 +159,6 @@ export class AutomationsEngine {
       case 'UPDATE_FLOW_POSITION':
       case 'FLAG_DUE_TODAY':
       case 'FLAG_OVERDUE':
-        // Marca como SKIPPED — automação foi configurada mas handler não existe
         await this.prisma.automationRun.updateMany({
           where: { automationId: automation.id, status: 'RUNNING' },
           data: { status: 'SKIPPED' },
@@ -199,4 +205,347 @@ export class AutomationsEngine {
 
     return { tagsAdded: validIds };
   }
+
+  /**
+   * REMOVE_TAGS — remove etiquetas do card. Idempotente: deleteMany sem
+   * erro se a label nem estiver no card.
+   */
+  private async handleRemoveTags(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ tagsRemoved: string[] }> {
+    const config = automation.actionConfig as { tagIds?: string[] };
+    const tagIds = Array.isArray(config.tagIds) ? config.tagIds : [];
+    if (tagIds.length === 0) return { tagsRemoved: [] };
+
+    const result = await this.prisma.cardLabel.deleteMany({
+      where: { cardId, labelId: { in: tagIds } },
+    });
+    return { tagsRemoved: tagIds, deletedCount: result.count } as never;
+  }
+
+  /**
+   * INSERT_CHECKLIST_ITEMS — cria itens em um checklist do card. Se o
+   * card não tiver checklist com o título passado, cria. Senão, anexa
+   * os items no fim do checklist existente. Items vazios são ignorados.
+   */
+  private async handleInsertChecklistItems(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ checklistId: string; itemsAdded: number }> {
+    const config = automation.actionConfig as {
+      items?: string[];
+      checklistTitle?: string;
+    };
+    const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
+
+    const title = config.checklistTitle?.trim() || 'Tarefas';
+
+    // Procura checklist com mesmo título no card. Se não existir, cria.
+    let checklist = await this.prisma.checklist.findFirst({
+      where: { cardId, title },
+    });
+    if (!checklist) {
+      const last = await this.prisma.checklist.findFirst({
+        where: { cardId },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      checklist = await this.prisma.checklist.create({
+        data: {
+          cardId,
+          title,
+          position: (last?.position ?? 0) + 1,
+        },
+      });
+    }
+
+    // Última posição dos items existentes
+    const lastItem = await this.prisma.checklistItem.findFirst({
+      where: { checklistId: checklist.id },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    let basePos = (lastItem?.position ?? 0) + 1;
+
+    await this.prisma.checklistItem.createMany({
+      data: items.map((text) => ({
+        checklistId: checklist!.id,
+        text,
+        position: basePos++,
+      })),
+    });
+
+    return { checklistId: checklist.id, itemsAdded: items.length };
+  }
+
+  /**
+   * SET_LEAD — define o líder do card. Valida que o user é membro da
+   * Org. Faz upsert em CardMember (lead também é membro implicitamente).
+   */
+  private async handleSetLead(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ leadId: string | null }> {
+    const config = automation.actionConfig as { userId?: string };
+    if (!config.userId) return { leadId: null };
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { organizationId: true },
+    });
+    if (!card) return { leadId: null };
+
+    const membership = await this.prisma.membership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId: config.userId,
+          organizationId: card.organizationId,
+        },
+      },
+    });
+    if (!membership) {
+      throw new Error('Usuário alvo não é membro da organização.');
+    }
+
+    await this.prisma.card.update({
+      where: { id: cardId },
+      data: { leadId: config.userId },
+    });
+    await this.prisma.cardMember.upsert({
+      where: { cardId_userId: { cardId, userId: config.userId } },
+      update: {},
+      create: { cardId, userId: config.userId },
+    });
+
+    return { leadId: config.userId };
+  }
+
+  /**
+   * ADD_TEAM — adiciona N usuários como membros do card. Filtra pra
+   * apenas membros válidos da Org. Idempotente.
+   */
+  private async handleAddTeam(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ membersAdded: string[] }> {
+    const config = automation.actionConfig as { userIds?: string[] };
+    const userIds = Array.isArray(config.userIds) ? config.userIds : [];
+    if (userIds.length === 0) return { membersAdded: [] };
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { organizationId: true },
+    });
+    if (!card) return { membersAdded: [] };
+
+    const memberships = await this.prisma.membership.findMany({
+      where: {
+        userId: { in: userIds },
+        organizationId: card.organizationId,
+      },
+      select: { userId: true },
+    });
+    const validIds = memberships.map((m) => m.userId);
+    if (validIds.length === 0) return { membersAdded: [] };
+
+    await this.prisma.cardMember.createMany({
+      data: validIds.map((userId) => ({ cardId, userId })),
+      skipDuplicates: true,
+    });
+
+    return { membersAdded: validIds };
+  }
+
+  /**
+   * POST_COMMENT — cria um Comment automático no card a partir de
+   * template Mustache simples. Variáveis suportadas:
+   *   {{card.title}} {{card.list.name}} {{card.board.name}}
+   *   {{actor.name}}  (= criador da automação)
+   *
+   * O autor do comment é o `createdBy` da automação. Body é plainText
+   * (sem rich text por enquanto — simplifica e bate com MentionTextarea
+   * que continua sendo a UI de comments).
+   */
+  private async handlePostComment(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ commentId: string }> {
+    const config = automation.actionConfig as { template?: string };
+    const template = config.template?.trim();
+    if (!template) throw new Error('Template do comentário vazio.');
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        list: { select: { name: true } },
+        board: { select: { name: true } },
+      },
+    });
+    if (!card) throw new Error('Card não encontrado.');
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: automation.createdById },
+      select: { name: true },
+    });
+
+    const text = renderTemplate(template, {
+      'card.title': card.title,
+      'card.list.name': card.list.name,
+      'card.board.name': card.board.name,
+      'actor.name': actor?.name ?? 'Automação',
+    });
+
+    // Guarda como ProseMirror doc simples (1 paragraph com o texto)
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    };
+
+    const comment = await this.prisma.comment.create({
+      data: {
+        cardId,
+        authorId: automation.createdById,
+        body: doc as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return { commentId: comment.id };
+  }
+
+  /**
+   * SET_CARD_STATUS — altera completedAt / isArchived. Suporta:
+   *   - 'COMPLETED': marca como finalizado (completedAt = now)
+   *   - 'REOPENED':  desmarca (completedAt = null)
+   *   - 'ARCHIVED':  arquiva
+   */
+  private async handleSetCardStatus(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ status: string }> {
+    const config = automation.actionConfig as {
+      status?: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+    };
+    if (!config.status) throw new Error('Status alvo não informado.');
+
+    switch (config.status) {
+      case 'COMPLETED':
+        await this.prisma.card.update({
+          where: { id: cardId },
+          data: {
+            completedAt: new Date(),
+            completedById: automation.createdById,
+          },
+        });
+        break;
+      case 'REOPENED':
+        await this.prisma.card.update({
+          where: { id: cardId },
+          data: { completedAt: null, completedById: null },
+        });
+        break;
+      case 'ARCHIVED':
+        await this.prisma.card.update({
+          where: { id: cardId },
+          data: { isArchived: true },
+        });
+        break;
+    }
+    return { status: config.status };
+  }
+
+  /**
+   * CREATE_CHILD_CARD — cria sub-card vinculado ao card de origem
+   * (parentCardId). Suporta template Mustache no título e flags pra
+   * copiar membros/lead/tags/dueDate. Board/list de destino: se não
+   * informado, usa o mesmo do card de origem.
+   */
+  private async handleCreateChildCard(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ childId: string }> {
+    const config = automation.actionConfig as {
+      titleTemplate?: string;
+      copyLead?: boolean;
+      copyTeam?: boolean;
+      copyTags?: boolean;
+      copyDueDate?: boolean;
+      targetListId?: string;
+    };
+    const titleTemplate = config.titleTemplate?.trim() || 'Sub-tarefa de {{card.title}}';
+
+    const parent = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        members: { select: { userId: true } },
+        labels: { select: { labelId: true } },
+        list: { select: { name: true } },
+        board: { select: { name: true } },
+      },
+    });
+    if (!parent) throw new Error('Card pai não encontrado.');
+
+    const title = renderTemplate(titleTemplate, {
+      'card.title': parent.title,
+      'card.list.name': parent.list.name,
+      'card.board.name': parent.board.name,
+    });
+
+    const targetListId = config.targetListId ?? parent.listId;
+    const targetList = await this.prisma.list.findUnique({
+      where: { id: targetListId },
+      select: { id: true, boardId: true, organizationId: true, isArchived: true },
+    });
+    if (!targetList || targetList.isArchived) {
+      throw new Error('Lista de destino inválida ou arquivada.');
+    }
+
+    const last = await this.prisma.card.findFirst({
+      where: { listId: targetListId },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+
+    const child = await this.prisma.card.create({
+      data: {
+        organizationId: targetList.organizationId,
+        boardId: targetList.boardId,
+        listId: targetListId,
+        title,
+        position: (last?.position ?? 0) + 1,
+        parentCardId: parent.id,
+        createdById: automation.createdById,
+        leadId: config.copyLead ? parent.leadId : automation.createdById,
+        dueDate: config.copyDueDate ? parent.dueDate : null,
+      },
+    });
+
+    if (config.copyTeam && parent.members.length > 0) {
+      await this.prisma.cardMember.createMany({
+        data: parent.members.map((m) => ({ cardId: child.id, userId: m.userId })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (config.copyTags && parent.labels.length > 0) {
+      await this.prisma.cardLabel.createMany({
+        data: parent.labels.map((l) => ({ cardId: child.id, labelId: l.labelId })),
+        skipDuplicates: true,
+      });
+    }
+
+    return { childId: child.id };
+  }
+}
+
+/**
+ * Mustache simples (sem dependência externa). Suporta apenas
+ * `{{key.path}}` literal — sem helpers, condicionais ou loops.
+ * Usar regex pra substituir cada ocorrência por valor do mapa.
+ * Variável não encontrada vira string vazia (não quebra render).
+ */
+function renderTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    return vars[key] ?? '';
+  });
 }
