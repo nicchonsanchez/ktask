@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { ZodValidationPipe } from '@/common/validation/zod-validation.pipe';
@@ -10,9 +10,11 @@ import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 
 import { ListsService } from './lists.service';
 import {
+  ArchiveListSchema,
   CreateListSchema,
   UpdateListSchema,
   MoveListSchema,
+  type ArchiveListRequest,
   type CreateListRequest,
   type UpdateListRequest,
   type MoveListRequest,
@@ -58,12 +60,35 @@ export class ListsController {
   }
 
   @Delete(':listId')
-  @ApiOperation({ summary: 'Arquivar lista' })
+  @ApiOperation({
+    summary: 'Arquivar lista (com escolha do que fazer com cards: archive | move)',
+  })
   archive(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,
     @Param('listId') listId: string,
+    @Body(new ZodValidationPipe(ArchiveListSchema)) body: ArchiveListRequest,
   ) {
-    return this.lists.archive(user.userId, org, listId);
+    return this.lists.archive(user.userId, org, listId, body);
+  }
+
+  @Post(':listId/restore')
+  @ApiOperation({ summary: 'Restaurar lista arquivada (reposiciona ao final do quadro)' })
+  restore(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('listId') listId: string,
+  ) {
+    return this.lists.restore(user.userId, org, listId);
+  }
+
+  @Get('archived/:boardId')
+  @ApiOperation({ summary: 'Lista cards e colunas arquivados de um quadro' })
+  listArchived(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.lists.listArchived(user.userId, org, boardId);
   }
 }

@@ -120,9 +120,70 @@ export class ListsService {
     });
   }
 
-  async archive(userId: string, tenant: TenantContext, listId: string) {
+  /**
+   * Arquiva uma coluna. Pra colunas com cards, requer escolha explícita
+   * do que fazer com eles via `cardsAction`:
+   *   - 'archive': arquiva todos os cards junto com a coluna
+   *   - 'move':    move todos pra outra coluna (`targetListId`) antes
+   *
+   * Coluna sem cards não exige cardsAction. Garante que cards nunca
+   * fiquem órfãos sem ação consciente do usuário.
+   */
+  async archive(
+    userId: string,
+    tenant: TenantContext,
+    listId: string,
+    opts: { cardsAction?: 'archive' | 'move'; targetListId?: string } = {},
+  ) {
     const list = await this.getOneOrThrow(listId);
     await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+
+    const cards = await this.prisma.card.findMany({
+      where: { listId, isArchived: false },
+      select: { id: true, position: true },
+    });
+
+    if (cards.length > 0) {
+      if (opts.cardsAction === 'move') {
+        if (!opts.targetListId) {
+          throw new NotFoundException('Coluna de destino é obrigatória pra mover os cards.');
+        }
+        if (opts.targetListId === listId) {
+          throw new NotFoundException('Coluna de destino não pode ser a própria coluna.');
+        }
+        const target = await this.prisma.list.findUnique({
+          where: { id: opts.targetListId },
+        });
+        if (!target || target.boardId !== list.boardId || target.isArchived) {
+          throw new NotFoundException('Coluna de destino inválida.');
+        }
+        // Empilha os cards no final da coluna destino, mantendo ordem original
+        const lastCard = await this.prisma.card.findFirst({
+          where: { listId: opts.targetListId },
+          orderBy: { position: 'desc' },
+          select: { position: true },
+        });
+        let basePos = (lastCard?.position ?? 0) + 1;
+        const sorted = cards.sort((a, b) => a.position - b.position);
+        await this.prisma.$transaction(
+          sorted.map((c) =>
+            this.prisma.card.update({
+              where: { id: c.id },
+              data: { listId: opts.targetListId, position: basePos++ },
+            }),
+          ),
+        );
+      } else if (opts.cardsAction === 'archive') {
+        await this.prisma.card.updateMany({
+          where: { listId, isArchived: false },
+          data: { isArchived: true },
+        });
+      } else {
+        throw new NotFoundException(
+          'Coluna tem cards. Defina cardsAction: "archive" ou "move" + targetListId.',
+        );
+      }
+    }
 
     const updated = await this.prisma.list.update({
       where: { id: listId },
@@ -135,11 +196,98 @@ export class ListsService {
         boardId: list.boardId,
         actorId: userId,
         type: 'LIST_ARCHIVED',
-        payload: { listId },
+        payload: {
+          listId,
+          cardsAction: opts.cardsAction ?? 'empty',
+          cardsCount: cards.length,
+          targetListId: opts.targetListId ?? null,
+        },
       },
     });
 
+    this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+      boardId: list.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      listId,
+    });
+
     return updated;
+  }
+
+  /**
+   * Restaura uma coluna previamente arquivada. Cards que foram arquivados
+   * junto NÃO são restaurados automaticamente (precisam restore individual
+   * pela tela de Arquivados). Cards que foram movidos pra outra coluna
+   * continuam onde estão.
+   */
+  async restore(userId: string, tenant: TenantContext, listId: string) {
+    const list = await this.getOneOrThrow(listId);
+    await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+
+    if (!list.isArchived) {
+      return list; // idempotente
+    }
+
+    // Posiciona ao final do quadro pra não conflitar com a ordem atual
+    const last = await this.prisma.list.findFirst({
+      where: { boardId: list.boardId, isArchived: false },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const newPosition = (last?.position ?? 0) + 1;
+
+    const updated = await this.prisma.list.update({
+      where: { id: listId },
+      data: { isArchived: false, position: newPosition },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: list.boardId,
+        actorId: userId,
+        type: 'LIST_UPDATED',
+        payload: { listId, restored: true } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+      boardId: list.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      listId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Lista cards e listas arquivados de um board pra tela "Arquivados".
+   */
+  async listArchived(userId: string, tenant: TenantContext, boardId: string) {
+    await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
+
+    const [lists, cards] = await Promise.all([
+      this.prisma.list.findMany({
+        where: { boardId, organizationId: tenant.organizationId, isArchived: true },
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          _count: { select: { cards: true } },
+        },
+      }),
+      this.prisma.card.findMany({
+        where: { boardId, organizationId: tenant.organizationId, isArchived: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+        include: {
+          list: { select: { id: true, name: true, isArchived: true } },
+          labels: { include: { label: true } },
+        },
+      }),
+    ]);
+
+    return { lists, cards };
   }
 
   private async getOneOrThrow(listId: string) {

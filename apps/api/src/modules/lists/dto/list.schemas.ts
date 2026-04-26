@@ -24,3 +24,15 @@ export const MoveListSchema = z.object({
   afterListId: z.string().cuid().nullable(),
 });
 export type MoveListRequest = z.infer<typeof MoveListSchema>;
+
+export const ArchiveListSchema = z.object({
+  /**
+   * O que fazer com os cards da coluna ao arquivar:
+   *   - 'archive': arquiva todos junto (some da listagem do board)
+   *   - 'move': move pra outra coluna (`targetListId` obrigatório)
+   * Coluna sem cards pode mandar omitido.
+   */
+  cardsAction: z.enum(['archive', 'move']).optional(),
+  targetListId: z.string().cuid().optional(),
+});
+export type ArchiveListRequest = z.infer<typeof ArchiveListSchema>;

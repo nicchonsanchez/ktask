@@ -161,6 +161,6 @@ export const api = {
     apiFetch<T>(path, { ...opts, method: 'POST', body }),
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     apiFetch<T>(path, { ...opts, method: 'PATCH', body }),
-  delete: <T>(path: string, opts?: RequestOptions) =>
-    apiFetch<T>(path, { ...opts, method: 'DELETE' }),
+  delete: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    apiFetch<T>(path, { ...opts, method: 'DELETE', body }),
 };

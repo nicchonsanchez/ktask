@@ -323,8 +323,9 @@ export default function BoardPage() {
                 const visibleCards = searchNorm
                   ? sortedCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
                   : sortedCards;
+                const otherLists = board.lists.filter((l) => l.id !== list.id);
                 return (
-                  <ListColumn key={list.id} list={list}>
+                  <ListColumn key={list.id} list={list} otherLists={otherLists}>
                     <SortableContext
                       items={visibleCards.map((c) => c.id)}
                       strategy={verticalListSortingStrategy}

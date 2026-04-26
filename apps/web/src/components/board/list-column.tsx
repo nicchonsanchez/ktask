@@ -17,11 +17,21 @@ import {
   type ListWithCards,
 } from '@/lib/queries/boards';
 import { useConfirm } from '@/components/ui/dialogs';
+import { ArchiveListDialog } from './archive-list-dialog';
 
 /** Prefixo usado nos IDs de colunas no DndContext pra não colidir com cardIds. */
 export const LIST_SORT_PREFIX = 'col:';
 
-export function ListColumn({ list, children }: { list: ListWithCards; children: React.ReactNode }) {
+export function ListColumn({
+  list,
+  otherLists,
+  children,
+}: {
+  list: ListWithCards;
+  /** Outras colunas não-arquivadas do mesmo board, pra alimentar o seletor de destino do modal de arquivar. */
+  otherLists: ListWithCards[];
+  children: React.ReactNode;
+}) {
   const sortable = useSortable({
     id: `${LIST_SORT_PREFIX}${list.id}`,
     data: { type: 'list', listId: list.id },
@@ -53,9 +63,15 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
   });
 
   const archiveMut = useMutation({
-    mutationFn: () => archiveList(list.id),
-    onSuccess: invalidate,
+    mutationFn: (opts: { cardsAction?: 'archive' | 'move'; targetListId?: string } = {}) =>
+      archiveList(list.id, opts),
+    onSuccess: () => {
+      invalidate();
+      setArchiveDialogOpen(false);
+    },
   });
+
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   function saveName() {
     const trimmed = name.trim();
@@ -160,13 +176,19 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
         <ListMenu
           onRename={() => setEditingName(true)}
           onArchive={async () => {
-            const ok = await confirm({
-              title: `Arquivar coluna "${list.name}"?`,
-              description: `Os ${list.cards.length} ${list.cards.length === 1 ? 'card' : 'cards'} desta coluna também ficarão arquivados.`,
-              confirmLabel: 'Arquivar',
-              danger: true,
-            });
-            if (ok) archiveMut.mutate();
+            // Coluna vazia: confirmação simples. Coluna com cards: dialog
+            // dedicado pra escolher mover ou arquivar junto.
+            if (list.cards.length === 0) {
+              const ok = await confirm({
+                title: `Arquivar coluna "${list.name}"?`,
+                description: 'A coluna está vazia e pode ser restaurada depois.',
+                confirmLabel: 'Arquivar',
+                danger: true,
+              });
+              if (ok) archiveMut.mutate({});
+            } else {
+              setArchiveDialogOpen(true);
+            }
           }}
         />
       </div>
@@ -235,6 +257,17 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
         )}
         {children}
       </div>
+
+      <ArchiveListDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        list={list}
+        otherLists={otherLists}
+        pending={archiveMut.isPending}
+        onConfirm={(action, targetListId) =>
+          archiveMut.mutate({ cardsAction: action, targetListId })
+        }
+      />
     </div>
   );
 }

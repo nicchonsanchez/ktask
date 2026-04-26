@@ -21,6 +21,7 @@ import { ApiError } from '@/lib/api-client';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
 import { BoardSettingsDialog } from './board-settings-dialog';
+import { ArchivedDrawer } from './archived-drawer';
 
 const STACK_LIMIT = 4;
 
@@ -34,6 +35,7 @@ export function BoardHeader({
   onSearchChange: (value: string) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
@@ -207,6 +209,14 @@ export function BoardHeader({
                     icon={<LinkIcon size={14} />}
                     onClick={copyUrl}
                   />
+                  <MenuItem
+                    label="Arquivados"
+                    icon={<Archive size={14} />}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setArchivedOpen(true);
+                    }}
+                  />
                   <div className="border-border my-1 border-t" />
                   <MenuItem
                     label="Inativar fluxo"
@@ -222,6 +232,7 @@ export function BoardHeader({
       </div>
 
       <BoardSettingsDialog board={board} open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ArchivedDrawer boardId={board.id} open={archivedOpen} onOpenChange={setArchivedOpen} />
     </>
   );
 }
