@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Maximize2, Pause, Play } from 'lucide-react';
 
 import {
+  startFreeTimer,
   startTimer,
   stopTimer,
   timeTrackingQueries,
@@ -19,8 +20,17 @@ import { TimerPopover } from './timer-popover';
 
 /**
  * Cronômetro flutuante no header global.
- * - idle: pílula verde compacta com Play.
- * - running: pílula magenta com Pause + tempo HH:MM:SS + ícone de expandir.
+ *
+ * Comportamento UX (Ummense-inspired):
+ *   - Em mobile (< md): pílula sempre expandida (mostra o tempo).
+ *   - Em desktop (md+): colapsa por padrão pra ícone-only; expande no hover
+ *     (ou enquanto o popover de detalhes estiver aberto). Reduz ruído visual
+ *     no header.
+ *
+ * Estados:
+ *   - idle (sem timer): pílula verde com Play. Click sem card aberto inicia
+ *     um timer "livre" (sem cardId). Click com card aberto inicia nesse card.
+ *   - running: pílula magenta com Pause + tempo HH:MM:SS + ícone de expandir.
  *
  * Tempo é sempre `Date.now() - startedAt` (sobrevive a refresh, sleep, etc).
  */
@@ -47,6 +57,17 @@ export function TimerWidget() {
     },
   });
 
+  const startFreeMut = useMutation({
+    mutationFn: () => startFreeTimer(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['time-tracking'] });
+    },
+    onError: (err) => {
+      console.error('[timer] start free failed:', err);
+      if (err instanceof ApiError) notify.error(err.message);
+    },
+  });
+
   const stopMut = useMutation({
     mutationFn: (entryId: string) => stopTimer(entryId),
     onSuccess: () => {
@@ -59,18 +80,23 @@ export function TimerWidget() {
   });
 
   function handlePlayClick() {
+    // Sem card no contexto: inicia timer livre (sem cardId vinculado).
+    // Aparece na lista pessoal de timers; pode ser editado depois pra atribuir.
     if (!cardInContext) {
-      notify.info('Abra um card primeiro. Você pode iniciar o cronômetro dentro do modal do card.');
+      if (active) {
+        // Se já tem timer ativo (mesmo livre), não faz nada — só mostra detalhes.
+        return;
+      }
+      startFreeMut.mutate();
       return;
     }
     if (active && active.cardId !== cardInContext) {
-      // Conflito — abre diálogo
       openConflict({
         active: {
           id: active.id,
           cardId: active.cardId,
-          cardTitle: active.card.title,
-          boardName: active.card.board.name,
+          cardTitle: active.card?.title ?? null,
+          boardName: active.card?.board.name ?? null,
           startedAt: active.startedAt,
         },
         target: { cardId: cardInContext },
@@ -104,28 +130,31 @@ export function TimerWidget() {
   }
 
   if (!active) {
+    const pending = startMut.isPending || startFreeMut.isPending;
     return (
       <div ref={anchorRef} className="relative">
         <button
           type="button"
           onClick={handlePlayClick}
-          disabled={startMut.isPending}
-          className="group/timer inline-flex h-9 items-center gap-2 rounded-full bg-emerald-600 pl-1 pr-3 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60"
+          disabled={pending}
+          className="group/timer inline-flex h-9 items-center gap-2 rounded-full bg-emerald-600 pl-1 pr-3 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-2 md:hover:pr-3"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
-              : 'Abra um card pra iniciar o cronômetro'
+              : 'Iniciar cronômetro (sem card vinculado)'
           }
           aria-label="Iniciar cronômetro"
         >
           <span className="inline-flex size-7 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/timer:bg-white/30">
-            {startMut.isPending ? (
+            {pending ? (
               <Loader2 size={13} className="animate-spin" />
             ) : (
               <Play size={12} fill="currentColor" />
             )}
           </span>
-          <span className="font-mono tabular-nums">00:00:00</span>
+          <span className="whitespace-nowrap font-mono tabular-nums md:hidden md:group-hover/timer:inline">
+            00:00:00
+          </span>
         </button>
       </div>
     );
@@ -135,6 +164,7 @@ export function TimerWidget() {
     <div ref={anchorRef} className="relative">
       <RunningPill
         active={active}
+        forceExpanded={popoverOpen}
         onPause={handlePauseClick}
         onExpand={() => setPopoverOpen((v) => !v)}
         loadingPause={stopMut.isPending}
@@ -153,11 +183,13 @@ export function TimerWidget() {
 
 function RunningPill({
   active,
+  forceExpanded,
   onPause,
   onExpand,
   loadingPause,
 }: {
   active: ActiveTimer;
+  forceExpanded: boolean;
   onPause: () => void;
   onExpand: () => void;
   loadingPause: boolean;
@@ -172,20 +204,32 @@ function RunningPill({
     0,
     Math.floor((Date.now() - new Date(active.startedAt).getTime()) / 1000),
   );
-  void tick; // só pra forçar re-render
+  void tick;
+
+  const cardTitle = active.card?.title ?? 'Cronômetro sem card';
+
+  // Classes condicionais: quando forceExpanded (popover aberto), parent fica
+  // sempre expandido. Senão, em md+ colapsa e expande no hover.
+  const parentExpand = forceExpanded
+    ? 'gap-2 pr-1'
+    : 'gap-2 pr-1 md:gap-0 md:pr-0 md:hover:gap-2 md:hover:pr-1';
+  const childShow = forceExpanded
+    ? 'inline-flex'
+    : 'inline-flex md:hidden md:group-hover/running:inline-flex';
+  const textShow = forceExpanded ? 'inline' : 'inline md:hidden md:group-hover/running:inline';
 
   return (
     <div
-      className="group/running inline-flex h-9 items-center rounded-full bg-fuchsia-600 pr-1 text-white shadow-sm transition-shadow hover:shadow"
-      title={`Cronometrando: ${active.card.title}`}
+      className={`group/running inline-flex h-9 items-center rounded-full bg-fuchsia-600 pl-1 text-white shadow-sm transition-all hover:shadow ${parentExpand}`}
+      title={`Cronometrando: ${cardTitle}`}
     >
       <button
         type="button"
         onClick={onPause}
         disabled={loadingPause}
-        className="mr-2 inline-flex size-7 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
+        className="inline-flex size-7 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
         aria-label="Parar cronômetro"
-        title={`Parar — ${active.card.title}`}
+        title={`Parar — ${cardTitle}`}
       >
         {loadingPause ? (
           <Loader2 size={12} className="animate-spin" />
@@ -193,13 +237,15 @@ function RunningPill({
           <Pause size={11} fill="currentColor" />
         )}
       </button>
-      <span className="select-none font-mono text-xs font-semibold tabular-nums">
+      <span
+        className={`select-none whitespace-nowrap font-mono text-xs font-semibold tabular-nums ${textShow}`}
+      >
         {formatDuration(elapsedSec)}
       </span>
       <button
         type="button"
         onClick={onExpand}
-        className="ml-2 inline-flex size-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+        className={`size-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white ${childShow}`}
         aria-label="Detalhes do cronômetro"
         title="Detalhes do cronômetro"
       >

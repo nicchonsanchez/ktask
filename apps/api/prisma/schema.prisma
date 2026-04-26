@@ -595,7 +595,7 @@ model Notification {
 
 model TimeEntry {
   id             String          @id @default(cuid())
-  cardId         String
+  cardId         String? // null = timer "livre" (sem card vinculado, criado pelo botao do header sem contexto)
   userId         String
   organizationId String
   startedAt      DateTime
@@ -606,7 +606,7 @@ model TimeEntry {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  card         Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  card         Card?        @relation(fields: [cardId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

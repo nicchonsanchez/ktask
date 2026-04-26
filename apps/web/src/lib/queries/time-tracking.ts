@@ -4,7 +4,7 @@ export type TimeEntrySource = 'TIMER' | 'MANUAL';
 
 export interface TimeEntry {
   id: string;
-  cardId: string;
+  cardId: string | null; // null = timer livre (sem card vinculado)
   userId: string;
   organizationId: string;
   startedAt: string;
@@ -23,7 +23,7 @@ export interface ActiveTimer extends TimeEntry {
     boardId: string;
     board: { id: string; name: string; color: string | null; icon: string | null };
     list: { id: string; name: string };
-  };
+  } | null;
 }
 
 export interface TimeEntryWithUser extends TimeEntry {
@@ -120,6 +120,19 @@ export interface TimesheetFilter {
 export function startTimer(cardId: string, note?: string | null) {
   return api.post<{ entry: ActiveTimer; autoStoppedEntryId: string | null }>(
     `/api/v1/cards/${cardId}/time/start`,
+    { note: note ?? null },
+  );
+}
+
+/**
+ * Inicia um cronômetro "livre" — sem card vinculado. Usado pelo botão Play
+ * do header global quando o usuário não tem nenhum card aberto. O timer
+ * conta normalmente e fica disponível na lista pessoal de timers; pode ser
+ * editado depois pra atribuir um card.
+ */
+export function startFreeTimer(note?: string | null) {
+  return api.post<{ entry: ActiveTimer; autoStoppedEntryId: string | null }>(
+    '/api/v1/time-entries/start',
     { note: note ?? null },
   );
 }

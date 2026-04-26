@@ -67,6 +67,7 @@ export function TimerPopover({
   }
 
   function goToCard() {
+    if (!active.card) return;
     router.push(`/b/${active.card.boardId}?card=${active.cardId}`);
     onClose();
   }
@@ -103,19 +104,30 @@ export function TimerPopover({
           className="border-border bg-bg focus-visible:ring-primary w-full resize-none rounded-md border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2"
         />
 
-        <button
-          type="button"
-          onClick={goToCard}
-          className="border-border hover:bg-bg-muted flex items-start gap-2 rounded-md border px-3 py-2 text-left transition-colors"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="text-fg-muted text-[10px] uppercase tracking-wide">Card vinculado</p>
-            <p className="truncate text-xs font-medium">{active.card.title}</p>
-            <p className="text-fg-muted truncate text-[11px]">
-              {active.card.board.name} · {active.card.list.name}
-            </p>
+        {active.card ? (
+          <button
+            type="button"
+            onClick={goToCard}
+            className="border-border hover:bg-bg-muted flex items-start gap-2 rounded-md border px-3 py-2 text-left transition-colors"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-fg-muted text-[10px] uppercase tracking-wide">Card vinculado</p>
+              <p className="truncate text-xs font-medium">{active.card.title}</p>
+              <p className="text-fg-muted truncate text-[11px]">
+                {active.card.board.name} · {active.card.list.name}
+              </p>
+            </div>
+          </button>
+        ) : (
+          <div className="border-border bg-bg-subtle/50 flex items-start gap-2 rounded-md border border-dashed px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-fg-muted text-[10px] uppercase tracking-wide">Sem card</p>
+              <p className="text-fg-muted text-[11px]">
+                Cronômetro livre. Você pode atribuir um card depois pelo timesheet.
+              </p>
+            </div>
           </div>
-        </button>
+        )}
 
         <div className="flex items-center justify-between gap-3">
           <button

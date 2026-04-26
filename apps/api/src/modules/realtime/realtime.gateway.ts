@@ -270,13 +270,17 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @OnEvent(EVENT_NAMES.TIME_ENTRY_STARTED)
   onTimeEntryStarted(payload: TimeEntryStartedPayload) {
-    this.broadcastBoard(payload, 'time.entry.started', payload);
+    if (payload.boardId) {
+      this.io.to(`board:${payload.boardId}`).emit('time.entry.started', payload);
+    }
     this.io.to(`user:${payload.userId}`).emit('time.entry.started', payload);
   }
 
   @OnEvent(EVENT_NAMES.TIME_ENTRY_STOPPED)
   onTimeEntryStopped(payload: TimeEntryStoppedPayload) {
-    this.broadcastBoard(payload, 'time.entry.stopped', payload);
+    if (payload.boardId) {
+      this.io.to(`board:${payload.boardId}`).emit('time.entry.stopped', payload);
+    }
     this.io.to(`user:${payload.userId}`).emit('time.entry.stopped', payload);
   }
 

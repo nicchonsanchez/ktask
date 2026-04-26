@@ -50,12 +50,19 @@ export class TimeTrackingService {
    * usuário (defesa contra requests concorrentes — o client deve ter pedido
    * confirmação via ActiveTimerConflictDialog).
    */
-  async start(userId: string, tenant: TenantContext, cardId: string, note?: string | null) {
-    const card = await this.prisma.card.findUnique({ where: { id: cardId } });
-    if (!card || card.organizationId !== tenant.organizationId) {
-      throw new NotFoundException('Card não encontrado.');
+  async start(userId: string, tenant: TenantContext, cardId: string | null, note?: string | null) {
+    // cardId null = timer "livre" (sem vinculo). Aceito quando o usuario clica
+    // no play do header sem ter um card aberto. Assim o timer ja comeca a contar
+    // e fica disponivel na lista pessoal de timers; ele pode editar depois.
+    let card: { id: string; boardId: string } | null = null;
+    if (cardId) {
+      const found = await this.prisma.card.findUnique({ where: { id: cardId } });
+      if (!found || found.organizationId !== tenant.organizationId) {
+        throw new NotFoundException('Card não encontrado.');
+      }
+      await this.access.assertAccess(userId, found.boardId, tenant, 'EDITOR');
+      card = { id: found.id, boardId: found.boardId };
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Fecha qualquer entry pendente do user
@@ -72,10 +79,13 @@ export class TimeTrackingService {
           where: { id: pending.id },
           data: { endedAt: now, durationSec },
         });
+        const pendingBoardId = pending.cardId
+          ? ((await tx.card.findUnique({ where: { id: pending.cardId } }))?.boardId ?? null)
+          : null;
         await tx.activity.create({
           data: {
             organizationId: tenant.organizationId,
-            boardId: (await tx.card.findUnique({ where: { id: pending.cardId } }))?.boardId ?? null,
+            boardId: pendingBoardId,
             cardId: pending.cardId,
             actorId: userId,
             type: 'TIME_ENTRY_STOPPED',
@@ -84,10 +94,10 @@ export class TimeTrackingService {
         });
       }
 
-      // Cria nova entry
+      // Cria nova entry (cardId pode ser null = timer livre)
       const created = await tx.timeEntry.create({
         data: {
-          cardId,
+          cardId: card?.id ?? null,
           userId,
           organizationId: tenant.organizationId,
           startedAt: new Date(),
@@ -99,8 +109,8 @@ export class TimeTrackingService {
       await tx.activity.create({
         data: {
           organizationId: tenant.organizationId,
-          boardId: card.boardId,
-          cardId,
+          boardId: card?.boardId ?? null,
+          cardId: card?.id ?? null,
           actorId: userId,
           type: 'TIME_ENTRY_STARTED',
           payload: { entryId: created.id, startedAt: created.startedAt.toISOString() },
@@ -111,11 +121,11 @@ export class TimeTrackingService {
     });
 
     this.events.emit(EVENT_NAMES.TIME_ENTRY_STARTED, {
-      boardId: card.boardId,
+      boardId: card?.boardId ?? null,
       organizationId: tenant.organizationId,
       actorId: userId,
       userId,
-      cardId,
+      cardId: card?.id ?? null,
       entryId: result.created.id,
       startedAt: result.created.startedAt.toISOString(),
     });
@@ -153,7 +163,7 @@ export class TimeTrackingService {
     await this.prisma.activity.create({
       data: {
         organizationId: tenant.organizationId,
-        boardId: entry.card.boardId,
+        boardId: entry.card?.boardId ?? null,
         cardId: entry.cardId,
         actorId: userId,
         type: 'TIME_ENTRY_STOPPED',
@@ -162,7 +172,7 @@ export class TimeTrackingService {
     });
 
     this.events.emit(EVENT_NAMES.TIME_ENTRY_STOPPED, {
-      boardId: entry.card.boardId,
+      boardId: entry.card?.boardId ?? null,
       organizationId: tenant.organizationId,
       actorId: userId,
       userId: entry.userId,
@@ -280,7 +290,7 @@ export class TimeTrackingService {
     await this.prisma.activity.create({
       data: {
         organizationId: tenant.organizationId,
-        boardId: entry.card.boardId,
+        boardId: entry.card?.boardId ?? null,
         cardId: entry.cardId,
         actorId: userId,
         type: 'TIME_ENTRY_UPDATED',
@@ -308,7 +318,7 @@ export class TimeTrackingService {
     await this.prisma.activity.create({
       data: {
         organizationId: tenant.organizationId,
-        boardId: entry.card.boardId,
+        boardId: entry.card?.boardId ?? null,
         cardId: entry.cardId,
         actorId: userId,
         type: 'TIME_ENTRY_DELETED',

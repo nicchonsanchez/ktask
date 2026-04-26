@@ -19,9 +19,15 @@ import { TimerPopover } from '@/components/time-tracking/timer-popover';
 /**
  * Botão Play/Pause de cronômetro DENTRO do popup do card.
  *
- * Comportamento:
+ * UX (Ummense-inspired):
+ *   - Em mobile: pílula sempre expandida.
+ *   - Em desktop: ícone-only por padrão; expande no hover (ou enquanto o
+ *     popover de detalhes estiver aberto).
+ *
+ * Estados:
  *   - sem timer ativo → Play (verde). Click inicia neste card.
- *   - timer ativo NESTE card → Pause (magenta) com HH:MM:SS. Click para.
+ *   - timer ativo NESTE card → Pause (magenta) com HH:MM:SS + Maximize.
+ *     Click no pause → para. Click no maximize → abre popover de detalhes.
  *   - timer ativo em OUTRO card → Play (azul) com tooltip "Em outro card".
  *     Click abre conflict dialog (parar lá pra começar aqui).
  */
@@ -61,8 +67,8 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
         active: {
           id: active.id,
           cardId: active.cardId,
-          cardTitle: active.card.title,
-          boardName: active.card.board.name,
+          cardTitle: active.card?.title ?? null,
+          boardName: active.card?.board.name ?? null,
           startedAt: active.startedAt,
         },
         target: { cardId },
@@ -92,12 +98,12 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       disabled={startMut.isPending}
       className={
         isOtherCard
-          ? 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-sky-700 hover:shadow disabled:opacity-60'
-          : 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60'
+          ? 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-sky-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-1.5 md:hover:pr-3'
+          : 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-1.5 md:hover:pr-3'
       }
       title={
         isOtherCard
-          ? `Cronômetro rodando em outro card (${active.card.title}). Click pra parar lá e começar aqui.`
+          ? `Cronômetro rodando em outro card (${active.card?.title ?? 'sem card'}). Click pra parar lá e começar aqui.`
           : 'Iniciar cronômetro neste card'
       }
       aria-label="Iniciar cronômetro"
@@ -109,7 +115,9 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
           <Play size={11} fill="currentColor" />
         )}
       </span>
-      <span className="font-mono tabular-nums">00:00:00</span>
+      <span className="whitespace-nowrap font-mono tabular-nums md:hidden md:group-hover/play:inline">
+        00:00:00
+      </span>
     </button>
   );
 }
@@ -136,18 +144,29 @@ function RunningButton({
     Math.floor((Date.now() - new Date(active.startedAt).getTime()) / 1000),
   );
 
+  const cardTitle = active.card?.title ?? 'Cronômetro sem card';
+
+  // Quando popoverOpen, força expansão. Senão, em md+ colapsa e expande no hover.
+  const parentExpand = popoverOpen
+    ? 'gap-1.5 pr-1'
+    : 'gap-1.5 pr-1 md:gap-0 md:pr-0 md:hover:gap-1.5 md:hover:pr-1';
+  const childShow = popoverOpen
+    ? 'inline-flex'
+    : 'inline-flex md:hidden md:group-hover/running:inline-flex';
+  const textShow = popoverOpen ? 'inline' : 'inline md:hidden md:group-hover/running:inline';
+
   return (
     <div className="relative inline-flex">
       <div
-        className="group/running inline-flex h-8 items-center rounded-full bg-fuchsia-600 pr-1 text-white shadow-sm transition-shadow hover:shadow"
-        title={`Cronometrando: ${active.card.title}`}
+        className={`group/running inline-flex h-8 items-center rounded-full bg-fuchsia-600 pl-1 text-white shadow-sm transition-all hover:shadow ${parentExpand}`}
+        title={`Cronometrando: ${cardTitle}`}
         data-entry-id={active.id}
       >
         <button
           type="button"
           onClick={onStop}
           disabled={stopping}
-          className="ml-1 mr-1.5 inline-flex size-6 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
+          className="inline-flex size-6 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
           aria-label="Parar cronômetro"
           title="Parar cronômetro"
         >
@@ -157,13 +176,15 @@ function RunningButton({
             <Pause size={10} fill="currentColor" />
           )}
         </button>
-        <span className="select-none font-mono text-[12px] font-semibold tabular-nums">
+        <span
+          className={`select-none whitespace-nowrap font-mono text-[12px] font-semibold tabular-nums ${textShow}`}
+        >
           {formatDuration(elapsedSec)}
         </span>
         <button
           type="button"
           onClick={() => setPopoverOpen((v) => !v)}
-          className="ml-1.5 inline-flex size-6 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+          className={`size-6 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white ${childShow}`}
           aria-label="Detalhes do cronômetro"
           title="Detalhes do cronômetro"
         >

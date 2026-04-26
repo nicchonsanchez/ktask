@@ -5,9 +5,9 @@ import { create } from 'zustand';
 interface ConflictPayload {
   active: {
     id: string;
-    cardId: string;
-    cardTitle: string;
-    boardName: string;
+    cardId: string | null; // null = timer "livre" sem card vinculado
+    cardTitle: string | null;
+    boardName: string | null;
     startedAt: string;
   };
   target: {

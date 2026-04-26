@@ -69,15 +69,24 @@ export interface NotificationCreatedPayload extends UserEventPayload {
   notificationId: string;
 }
 
-export interface TimeEntryStartedPayload extends BoardEventPayload {
-  cardId: string;
+// Timer livre (cardId/boardId null) ainda dispara o evento mas não vai pro
+// room de board nenhum — o gateway broadcasta só pra `user:{userId}`. Por
+// isso esses payloads aceitam null em ambos.
+export interface TimeEntryStartedPayload {
+  boardId: string | null;
+  cardId: string | null;
+  organizationId: string;
+  actorId?: string;
   entryId: string;
   userId: string;
   startedAt: string;
 }
 
-export interface TimeEntryStoppedPayload extends BoardEventPayload {
-  cardId: string;
+export interface TimeEntryStoppedPayload {
+  boardId: string | null;
+  cardId: string | null;
+  organizationId: string;
+  actorId?: string;
   entryId: string;
   userId: string;
   durationSec: number;

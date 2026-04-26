@@ -48,6 +48,18 @@ export class TimeTrackingController {
     return this.service.start(user.userId, org, cardId, body.note);
   }
 
+  @Post('time-entries/start')
+  @ApiOperation({
+    summary: 'Inicia cronômetro livre (sem card vinculado, criado pelo botão do header)',
+  })
+  startFree(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Body(new ZodValidationPipe(StartTimerSchema)) body: StartTimerRequest,
+  ) {
+    return this.service.start(user.userId, org, null, body.note);
+  }
+
   @Post('time-entries/:entryId/stop')
   @ApiOperation({ summary: 'Para uma entry específica' })
   stop(
