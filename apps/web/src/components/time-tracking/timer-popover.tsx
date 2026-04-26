@@ -78,14 +78,10 @@ export function TimerPopover({
       <div
         role="dialog"
         aria-label="Detalhes do cronômetro"
-        className={
-          // Mobile (< sm): posicao fixed no topo da viewport, full-width com
-          // margens — evita overflow quando o trigger esta proximo do meio/direita.
-          // Desktop (sm+): volta ao comportamento ancorado ao trigger.
-          'border-border bg-bg z-40 flex flex-col gap-3 rounded-md border p-4 shadow-lg ' +
-          'fixed inset-x-2 top-[4.5rem]' +
-          'sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[min(360px,calc(100vw-1rem))]'
-        }
+        // Mobile (< sm): posição fixed no topo da viewport, full-width com margens —
+        // evita overflow quando o trigger está próximo do meio/direita.
+        // Desktop (sm+): volta ao comportamento ancorado ao trigger.
+        className="border-border bg-bg fixed inset-x-2 top-[4.5rem] z-40 flex flex-col gap-3 rounded-md border p-4 shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[min(360px,calc(100vw-1rem))]"
       >
         <div className="flex items-start justify-between gap-2">
           <div>
