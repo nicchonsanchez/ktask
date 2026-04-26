@@ -21,4 +21,16 @@ export class AdminController {
   timeTrackingStats(@CurrentOrg() org: TenantContext) {
     return this.service.timeTrackingStats(org);
   }
+
+  @Get('stats/cards')
+  @ApiOperation({ summary: 'Stats agregados de cards da Org (todos exceto GUEST)' })
+  cardsStats(@CurrentOrg() org: TenantContext) {
+    return this.service.cardsStats(org);
+  }
+
+  @Get('stats/tasks')
+  @ApiOperation({ summary: 'Stats agregados de tarefas (ChecklistItem) da Org' })
+  tasksStats(@CurrentOrg() org: TenantContext) {
+    return this.service.tasksStats(org);
+  }
 }
