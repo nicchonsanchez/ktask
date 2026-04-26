@@ -14,10 +14,11 @@ import {
   Unlink,
 } from 'lucide-react';
 
-import { boardsQueries, moveCard } from '@/lib/queries/boards';
+import { boardsQueries } from '@/lib/queries/boards';
 import {
   cardsQueries,
   linkCardToFlow,
+  moveCardInFlow,
   unlinkCardFromFlow,
   type CardDetail,
   type CardFlow,
@@ -74,9 +75,8 @@ export function CardFlowsTab({ card }: { card: CardDetail }) {
         )}
 
         <p className="text-fg-subtle bg-bg-subtle border-border/60 rounded-md border border-dashed px-3 py-2 text-[11px]">
-          Cada fluxo tem ciclo independente (coluna atual e finalização separadas). O kanban dos
-          fluxos vinculados ainda não exibe o card — funcionalidade completa chega na próxima
-          iteração desta feature.
+          Cada fluxo tem ciclo independente — coluna atual e finalização separadas. Mover por aqui
+          afeta só o fluxo escolhido; o card aparece no kanban de cada fluxo onde está vinculado.
         </p>
       </div>
 
@@ -94,9 +94,10 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
   const isCompleted = Boolean(flow.completedAt);
   const currentIdx = lists.findIndex((l) => l.id === flow.listId);
 
-  // Move só funciona no fluxo primário nesta iteração (cards/move legacy).
+  // Move por fluxo (iteração 2): funciona em qualquer presença, não só a primária.
   const moveMut = useMutation({
-    mutationFn: (toListId: string) => moveCard(card.id, { toListId, afterCardId: null }),
+    mutationFn: (toListId: string) =>
+      moveCardInFlow(card.id, flow.boardId, { toListId, afterCardId: null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
       queryClient.invalidateQueries({ queryKey: cardsQueries.flows(card.id).queryKey });
@@ -211,7 +212,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
             const isCurrent = l.id === flow.listId && !isCompleted;
             const isFilled = !isCompleted && currentIdx >= 0 && idx <= currentIdx;
             const pending = moveMut.isPending && moveMut.variables === l.id;
-            const canClick = flow.isPrimary && !isCurrent && !moveMut.isPending;
+            const canClick = !isCurrent && !moveMut.isPending;
             return (
               <button
                 key={l.id}
@@ -220,13 +221,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
                   if (canClick) moveMut.mutate(l.id);
                 }}
                 disabled={!canClick}
-                title={
-                  isCurrent
-                    ? `Coluna atual: ${l.name}`
-                    : flow.isPrimary
-                      ? `Mover para ${l.name}`
-                      : 'Mover por fluxo chega na próxima iteração'
-                }
+                title={isCurrent ? `Coluna atual: ${l.name}` : `Mover para ${l.name}`}
                 className={`group/col relative flex flex-1 items-center justify-center px-3 py-2 text-center text-[11px] font-medium transition-colors ${
                   isFilled
                     ? isCurrent

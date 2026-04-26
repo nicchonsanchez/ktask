@@ -171,6 +171,11 @@ export class BoardsService {
 
   async getOne(userId: string, tenant: TenantContext, boardId: string) {
     const { role: myRole } = await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
+    // Cards multi-fluxo (iteração 2): kanban lê de CardPresence em vez de
+    // Card.boardId direto. Assim cards vinculados a este board via linkToFlow
+    // aparecem aqui mesmo se o Card.boardId primário for outro.
+    // Cada presença carrega os dados do Card; a posição/coluna/finalização é
+    // por presença (não por Card legacy).
     const [board, completedCount] = await Promise.all([
       this.prisma.board.findUnique({
         where: { id: boardId },
@@ -180,16 +185,26 @@ export class BoardsService {
             where: { isArchived: false },
             orderBy: { position: 'asc' },
             include: {
-              cards: {
-                where: { isArchived: false, completedAt: null },
+              cardPresences: {
+                where: {
+                  removedAt: null,
+                  completedAt: null,
+                  card: { isArchived: false },
+                },
                 orderBy: { position: 'asc' },
                 include: {
-                  members: {
-                    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+                  card: {
+                    include: {
+                      members: {
+                        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+                      },
+                      labels: { include: { label: true } },
+                      cover: { select: { id: true, storageKey: true, mimeType: true } },
+                      _count: {
+                        select: { comments: true, attachments: true, checklists: true },
+                      },
+                    },
                   },
-                  labels: { include: { label: true } },
-                  cover: { select: { id: true, storageKey: true, mimeType: true } },
-                  _count: { select: { comments: true, attachments: true, checklists: true } },
                 },
               },
             },
@@ -200,12 +215,40 @@ export class BoardsService {
           },
         },
       }),
-      this.prisma.card.count({
-        where: { boardId, isArchived: false, completedAt: { not: null } },
+      this.prisma.cardPresence.count({
+        where: {
+          boardId,
+          removedAt: null,
+          completedAt: { not: null },
+          card: { isArchived: false },
+        },
       }),
     ]);
     if (!board) return null;
-    return this.hydrateCoverInListResult({ ...board, completedCount, myRole });
+
+    // Transforma list.cardPresences[] em list.cards[] mantendo o contrato
+    // antigo da API. Sobrescreve listId/position/completedAt/completedById
+    // com valores da PRESENÇA (não do Card legacy), pra refletir o estado
+    // independente de cada fluxo.
+    const transformedLists = board.lists.map((list) => {
+      const cards = list.cardPresences.map((p) => ({
+        ...p.card,
+        listId: p.listId,
+        position: p.position,
+        completedAt: p.completedAt,
+        completedById: p.completedById,
+      }));
+      // Remove cardPresences do response (não é parte do contrato público)
+      const { cardPresences: _, ...rest } = list;
+      return { ...rest, cards };
+    });
+
+    return this.hydrateCoverInListResult({
+      ...board,
+      lists: transformedLists,
+      completedCount,
+      myRole,
+    });
   }
 
   async listCompleted(
@@ -217,29 +260,58 @@ export class BoardsService {
     await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
     const limit = Math.min(params.limit ?? 30, 100);
 
-    const items = await this.prisma.card.findMany({
+    // Multi-fluxo: lista as presenças finalizadas neste board (não o Card.completedAt
+    // legacy). Assim o "Concluído" deste fluxo só conta o que foi finalizado AQUI,
+    // não o que foi finalizado em outro fluxo onde o card também tem presença.
+    // Cursor = "{cardId}:{boardId}" pra paginar via composite key.
+    const cursorKeys = params.cursor ? params.cursor.split(':') : null;
+    const cursorWhere =
+      cursorKeys && cursorKeys.length === 2
+        ? { cardId_boardId: { cardId: cursorKeys[0]!, boardId: cursorKeys[1]! } }
+        : undefined;
+
+    const presences = await this.prisma.cardPresence.findMany({
       where: {
         boardId,
-        organizationId: tenant.organizationId,
-        isArchived: false,
+        removedAt: null,
         completedAt: { not: null },
+        card: { isArchived: false, organizationId: tenant.organizationId },
       },
-      orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ completedAt: 'desc' }, { cardId: 'desc' }],
       take: limit + 1,
-      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      ...(cursorWhere ? { cursor: cursorWhere, skip: 1 } : {}),
       include: {
         list: { select: { id: true, name: true, isArchived: true } },
         completedBy: { select: { id: true, name: true, email: true, avatarUrl: true } },
-        labels: { include: { label: true } },
-        _count: { select: { comments: true, attachments: true, checklists: true } },
+        card: {
+          include: {
+            labels: { include: { label: true } },
+            _count: { select: { comments: true, attachments: true, checklists: true } },
+          },
+        },
       },
     });
 
-    const hasMore = items.length > limit;
-    const page = hasMore ? items.slice(0, limit) : items;
-    const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
+    const hasMore = presences.length > limit;
+    const page = hasMore ? presences.slice(0, limit) : presences;
+    const nextCursor = hasMore
+      ? (() => {
+          const last = page[page.length - 1];
+          return last ? `${last.cardId}:${last.boardId}` : null;
+        })()
+      : null;
 
-    return { items: page, nextCursor };
+    // Transforma em formato de Card (com overrides do presence) pra manter contrato.
+    const items = page.map((p) => ({
+      ...p.card,
+      listId: p.listId,
+      list: p.list,
+      completedAt: p.completedAt,
+      completedById: p.completedById,
+      completedBy: p.completedBy,
+    }));
+
+    return { items, nextCursor };
   }
 
   async update(userId: string, tenant: TenantContext, boardId: string, input: UpdateBoardInput) {

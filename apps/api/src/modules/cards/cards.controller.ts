@@ -20,6 +20,7 @@ import {
   CreateChildCardSchema,
   SetParentSchema,
   LinkFlowSchema,
+  MoveInFlowSchema,
   type CreateCardRequest,
   type UpdateCardRequest,
   type MoveCardRequest,
@@ -27,6 +28,7 @@ import {
   type CreateChildCardRequest,
   type SetParentRequest,
   type LinkFlowRequest,
+  type MoveInFlowRequest,
 } from './dto/card.schemas';
 
 @ApiTags('cards')
@@ -250,5 +252,17 @@ export class CardsController {
     @Param('boardId') boardId: string,
   ) {
     return this.cards.unlinkFromFlow(user.userId, org, cardId, boardId);
+  }
+
+  @Patch(':cardId/flows/:boardId/move')
+  @ApiOperation({ summary: 'Move o card pra outra coluna dentro de um fluxo específico' })
+  moveInFlow(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+    @Param('boardId') boardId: string,
+    @Body(new ZodValidationPipe(MoveInFlowSchema)) body: MoveInFlowRequest,
+  ) {
+    return this.cards.moveInFlow(user.userId, org, cardId, boardId, body);
   }
 }

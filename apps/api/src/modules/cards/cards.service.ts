@@ -1452,6 +1452,130 @@ export class CardsService {
   }
 
   /**
+   * Move o card pra outra coluna DENTRO de um fluxo específico (CardPresence).
+   * Permite mover por qualquer fluxo onde o card tem presença ativa, não só
+   * o primário. Quando o boardId é o primário, também espelha em Card.* pra
+   * manter a fonte legacy consistente (ainda usada pelo kanban na iteração 1).
+   */
+  async moveInFlow(
+    userId: string,
+    tenant: TenantContext,
+    cardId: string,
+    boardId: string,
+    input: { toListId: string; afterCardId?: string | null },
+  ) {
+    const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
+
+    const presence = await this.prisma.cardPresence.findUnique({
+      where: { cardId_boardId: { cardId, boardId } },
+    });
+    if (!presence || presence.removedAt) {
+      throw new NotFoundException('Card não está vinculado a este fluxo.');
+    }
+
+    const destList = await this.prisma.list.findUnique({ where: { id: input.toListId } });
+    if (!destList || destList.boardId !== boardId || destList.isArchived) {
+      throw new BadRequestException('Lista destino inválida pra este fluxo.');
+    }
+
+    // Idempotência: se o card já está na coluna alvo, no-op.
+    if (presence.listId === input.toListId && !input.afterCardId) {
+      return presence;
+    }
+
+    // Posição: insere após afterCardId se passado, senão no fim da lista destino.
+    let position: number;
+    if (input.afterCardId) {
+      const after = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId: input.afterCardId, boardId } },
+      });
+      if (!after || after.listId !== input.toListId) {
+        throw new BadRequestException('afterCardId inválido pra esta lista.');
+      }
+      const next = await this.prisma.cardPresence.findFirst({
+        where: {
+          boardId,
+          listId: input.toListId,
+          removedAt: null,
+          position: { gt: after.position },
+          NOT: { cardId },
+        },
+        orderBy: { position: 'asc' },
+        select: { position: true },
+      });
+      position = computeInsertPosition(after.position, next?.position ?? null);
+    } else {
+      const last = await this.prisma.cardPresence.findFirst({
+        where: {
+          boardId,
+          listId: input.toListId,
+          removedAt: null,
+          NOT: { cardId },
+        },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      position = computeInsertPosition(last?.position ?? null, null);
+    }
+
+    const updated = await this.prisma.cardPresence.update({
+      where: { cardId_boardId: { cardId, boardId } },
+      data: { listId: input.toListId, position },
+    });
+
+    // Espelha legacy se for o fluxo primário (Card.boardId == boardId)
+    if (card.boardId === boardId) {
+      await this.prisma.card.update({
+        where: { id: cardId },
+        data: {
+          listId: input.toListId,
+          position,
+          enteredListAt: presence.listId !== input.toListId ? new Date() : undefined,
+        },
+      });
+    }
+
+    // Activity log no contexto do board onde rolou a movimentação
+    if (presence.listId !== input.toListId) {
+      const fromList = await this.prisma.list.findUnique({
+        where: { id: presence.listId },
+        select: { name: true },
+      });
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId,
+          cardId,
+          actorId: userId,
+          type: 'CARD_MOVED',
+          payload: {
+            cardId,
+            fromListId: presence.listId,
+            toListId: input.toListId,
+            fromListName: fromList?.name ?? null,
+            toListName: destList.name,
+            position,
+            inFlow: boardId,
+          },
+        },
+      });
+
+      this.events.emit(EVENT_NAMES.CARD_MOVED, {
+        boardId,
+        organizationId: tenant.organizationId,
+        actorId: userId,
+        cardId,
+        fromListId: presence.listId,
+        toListId: input.toListId,
+        position,
+      });
+    }
+
+    return updated;
+  }
+
+  /**
    * Desvincula o card de um fluxo. Soft-delete: marca `removedAt` na presença.
    * Não permite desvincular o fluxo primário (boardId == card.boardId) — pra
    * "remover do todo", use archive/delete do card.

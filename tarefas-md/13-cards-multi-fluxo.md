@@ -1,11 +1,10 @@
 # 13 — Cards em múltiplos fluxos (presença M:N com Board)
 
-> **Status**: iteração 1 entregue (aditivo). Tabela `CardPresence` criada e
-> backfilled, endpoints de listar/vincular/desvincular funcionais, aba
-> "Fluxos" no modal lê do endpoint real e permite vincular o card a outro
-> fluxo. **Iteração 2** (kanban lendo de CardPresence + move/complete por
-> fluxo) e **iteração 3** (remoção dos campos legacy do Card) ficam pra
-> próximas sessões.
+> **Status**: iterações 1 e 2 entregues. Cards agora aparecem no kanban de
+> qualquer fluxo onde estão vinculados, e mover por fluxo na aba "Fluxos"
+> afeta só aquele fluxo. **Iteração 3** (remoção dos campos legacy do Card)
+> fica pra próxima sessão — hoje Card.boardId/listId/position/completedAt
+> ainda existem como espelho do fluxo primário.
 
 ## Iteração 1 (entregue)
 
@@ -24,15 +23,19 @@
 - [x] Aba "Fluxos" do modal lê o endpoint, mostra todas as presences,
       permite vincular/desvincular e move só no fluxo primário (legacy)
 
-## Iteração 2 (próxima)
+## Iteração 2 (entregue)
 
-- [ ] `PATCH /cards/:id/flows/:boardId/move` — mover por fluxo
-- [ ] Kanban lê de `CardPresence` (passa a renderizar cards vinculados nos
-      fluxos não-primários)
-- [ ] Move otimista no kanban atualiza `CardPresence` ao invés de `Card.*`
-- [ ] Finalizar card: por padrão finaliza só no fluxo onde a ação rolou,
-      não em todos
-- [ ] Coluna virtual "Finalizado" filtra por presence
+- [x] `PATCH /cards/:id/flows/:boardId/move` — mover por fluxo
+- [x] Kanban (`boards.getOne`) lê de `CardPresence` (cards vinculados aparecem
+      em todos os fluxos onde têm presença ativa)
+- [x] Aba "Fluxos" no modal usa `moveCardInFlow` em todos os fluxos (não só o primário)
+- [x] Coluna virtual "Finalizado" (`listCompleted` + `completedCount`) usa
+      presence (cada fluxo tem contagem própria)
+- [ ] Move otimista no kanban via dnd ainda chama `cards/move` legacy
+      (espelha automaticamente, mas sem semântica per-flow ainda)
+- [ ] Finalizar card via dnd na coluna "Finalizado" do kanban: hoje
+      finaliza Card.completedAt (espelha primário). Per-flow complete fica
+      pra um follow-up separado
 
 ## Iteração 3 (cleanup)
 

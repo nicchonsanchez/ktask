@@ -102,6 +102,20 @@ export function unlinkCardFromFlow(cardId: string, boardId: string) {
   return api.delete(`/api/v1/cards/${cardId}/flows/${boardId}`);
 }
 
+/**
+ * Move um card pra outra coluna dentro de um fluxo específico (CardPresence).
+ * Funciona em qualquer fluxo onde o card tem presença ativa, não só o
+ * primário. Quando o boardId é o primário, a Card.* legacy também é
+ * atualizada (espelhamento; iteração 1).
+ */
+export function moveCardInFlow(
+  cardId: string,
+  boardId: string,
+  input: { toListId: string; afterCardId?: string | null },
+) {
+  return api.patch(`/api/v1/cards/${cardId}/flows/${boardId}/move`, input);
+}
+
 export interface UpdateCardInput {
   title?: string;
   description?: unknown | null;

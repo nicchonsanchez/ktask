@@ -81,3 +81,9 @@ export const LinkFlowSchema = z.object({
   listId: z.string().cuid().optional(),
 });
 export type LinkFlowRequest = z.infer<typeof LinkFlowSchema>;
+
+export const MoveInFlowSchema = z.object({
+  toListId: z.string().cuid(),
+  afterCardId: z.string().cuid().nullable().optional(),
+});
+export type MoveInFlowRequest = z.infer<typeof MoveInFlowSchema>;
