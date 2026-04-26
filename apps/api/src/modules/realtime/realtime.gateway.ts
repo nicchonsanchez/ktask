@@ -64,6 +64,13 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(RealtimeGateway.name);
 
+  /**
+   * Presença por board: boardId → (userId → set de socketIds).
+   * Um mesmo usuário pode ter N abas/dispositivos abertos no mesmo board;
+   * só removemos do conjunto quando o último socket sai.
+   */
+  private readonly presence = new Map<string, Map<string, Set<string>>>();
+
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
@@ -98,6 +105,17 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   handleDisconnect(client: AuthedSocket) {
     if (client.data?.userId) {
       this.logger.log(`[disconnect] user=${client.data.userId} sid=${client.id}`);
+      // Limpa presença em todos os boards onde este socket estava
+      for (const [boardId, users] of this.presence.entries()) {
+        const sockets = users.get(client.data.userId);
+        if (!sockets || !sockets.has(client.id)) continue;
+        sockets.delete(client.id);
+        if (sockets.size === 0) {
+          users.delete(client.data.userId);
+          this.emitPresence(boardId);
+        }
+        if (users.size === 0) this.presence.delete(boardId);
+      }
     }
   }
 
@@ -137,7 +155,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     await client.join(`board:${boardId}`);
     client.data.organizationId = organizationId;
-    return { ok: true, role };
+    this.addPresence(boardId, client.data.userId, client.id);
+    this.emitPresence(boardId);
+    // Resposta inclui snapshot atual pra cliente popular UI sem esperar broadcast
+    return { ok: true, role, online: this.snapshotPresence(boardId) };
   }
 
   @SubscribeMessage('board.leave')
@@ -145,8 +166,52 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: AuthedSocket,
     @MessageBody() data: { boardId: string },
   ) {
-    if (data?.boardId) await client.leave(`board:${data.boardId}`);
+    if (data?.boardId) {
+      await client.leave(`board:${data.boardId}`);
+      const removed = this.removePresence(data.boardId, client.data.userId, client.id);
+      if (removed) this.emitPresence(data.boardId);
+    }
     return { ok: true };
+  }
+
+  // ---------------- Presence helpers ----------------
+
+  private addPresence(boardId: string, userId: string, socketId: string) {
+    let users = this.presence.get(boardId);
+    if (!users) {
+      users = new Map();
+      this.presence.set(boardId, users);
+    }
+    let sockets = users.get(userId);
+    if (!sockets) {
+      sockets = new Set();
+      users.set(userId, sockets);
+    }
+    sockets.add(socketId);
+  }
+
+  /** Retorna true se o último socket do user saiu (precisa rebroadcast). */
+  private removePresence(boardId: string, userId: string, socketId: string): boolean {
+    const users = this.presence.get(boardId);
+    if (!users) return false;
+    const sockets = users.get(userId);
+    if (!sockets) return false;
+    sockets.delete(socketId);
+    if (sockets.size > 0) return false;
+    users.delete(userId);
+    if (users.size === 0) this.presence.delete(boardId);
+    return true;
+  }
+
+  private snapshotPresence(boardId: string): string[] {
+    const users = this.presence.get(boardId);
+    return users ? Array.from(users.keys()) : [];
+  }
+
+  private emitPresence(boardId: string) {
+    this.io
+      .to(`board:${boardId}`)
+      .emit('presence.update', { boardId, userIds: this.snapshotPresence(boardId) });
   }
 
   // -----------------------------------------------------------------

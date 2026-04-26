@@ -63,7 +63,7 @@ export default function BoardPage() {
   const searchNorm = search.trim().toLowerCase();
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
-  useRealtimeBoard({
+  const { onlineUserIds } = useRealtimeBoard({
     boardId,
     organizationId: boardQuery.data?.organizationId ?? null,
   });
@@ -317,6 +317,7 @@ export default function BoardPage() {
         onSearchChange={setSearch}
         filters={filters}
         onFiltersChange={setFilters}
+        onlineUserIds={onlineUserIds}
       />
 
       <DndContext

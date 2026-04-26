@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/stores/auth-store';
@@ -14,11 +14,14 @@ import { boardsQueries } from '@/lib/queries/boards';
  *   - Invalida query do card específico em card.updated
  *   - Sai do room ao desmontar.
  */
-export function useRealtimeBoard(params: { boardId: string; organizationId: string | null }) {
+export function useRealtimeBoard(params: { boardId: string; organizationId: string | null }): {
+  onlineUserIds: string[];
+} {
   const { boardId, organizationId } = params;
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.accessToken);
+  const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!boardId || !organizationId || !user || !token) return;
@@ -56,10 +59,20 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
       'comment.added': (payload: { cardId: string }) => {
         queryClient.invalidateQueries({ queryKey: ['cards', payload.cardId] });
       },
+      'presence.update': (payload: { boardId: string; userIds: string[] }) => {
+        if (payload.boardId !== boardId) return;
+        setOnlineUserIds(payload.userIds);
+      },
     };
 
     function join() {
-      socket.emit('board.join', { boardId, organizationId });
+      socket.emit(
+        'board.join',
+        { boardId, organizationId },
+        (ack: { ok: boolean; online?: string[] }) => {
+          if (ack?.ok && Array.isArray(ack.online)) setOnlineUserIds(ack.online);
+        },
+      );
     }
 
     socket.on('connect', join);
@@ -75,8 +88,11 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
       for (const [event, fn] of Object.entries(handlers)) {
         socket.off(event, fn);
       }
+      setOnlineUserIds([]);
     };
   }, [boardId, organizationId, queryClient, user, token]);
+
+  return { onlineUserIds };
 }
 
 /**

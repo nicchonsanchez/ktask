@@ -31,13 +31,16 @@ export function BoardHeader({
   onSearchChange,
   filters,
   onFiltersChange,
+  onlineUserIds = [],
 }: {
   board: BoardDetail;
   search: string;
   onSearchChange: (value: string) => void;
   filters: BoardFilters;
   onFiltersChange: (next: BoardFilters) => void;
+  onlineUserIds?: string[];
 }) {
+  const onlineSet = new Set(onlineUserIds);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -111,16 +114,30 @@ export function BoardHeader({
                 aria-label={`Equipe do fluxo (${board.members.length} pessoas)`}
               >
                 <div className="flex -space-x-2">
-                  {visibleMembers.map((m) => (
-                    <UserAvatar
-                      key={m.user.id}
-                      name={m.user.name}
-                      userId={m.user.id}
-                      avatarUrl={m.user.avatarUrl}
-                      size="sm"
-                      stacked
-                    />
-                  ))}
+                  {visibleMembers.map((m) => {
+                    const online = onlineSet.has(m.user.id);
+                    return (
+                      <span
+                        key={m.user.id}
+                        className="relative inline-flex"
+                        title={online ? `${m.user.name} (online)` : m.user.name}
+                      >
+                        <UserAvatar
+                          name={m.user.name}
+                          userId={m.user.id}
+                          avatarUrl={m.user.avatarUrl}
+                          size="sm"
+                          stacked
+                        />
+                        {online && (
+                          <span
+                            aria-hidden
+                            className="border-bg absolute -bottom-0.5 -right-0.5 size-2 rounded-full border-2 bg-emerald-500"
+                          />
+                        )}
+                      </span>
+                    );
+                  })}
                   {overflow > 0 && (
                     <span className="border-bg bg-bg-muted text-fg-muted inline-flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold">
                       +{overflow}
