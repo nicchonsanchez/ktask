@@ -15,10 +15,32 @@ export function ThemeToggle() {
     return <div className="size-9" aria-hidden />;
   }
 
-  const cycle = () => {
-    if (theme === 'light') setTheme('dark');
-    else if (theme === 'dark') setTheme('system');
-    else setTheme('light');
+  const cycle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
+
+    // Posiciona o circulo de revelacao no ponto do clique. Quando vier
+    // de teclado (Enter/Space), event.clientX/Y == 0 — ai a gente cai pro
+    // centro da viewport.
+    const root = document.documentElement;
+    const x = event.clientX || window.innerWidth / 2;
+    const y = event.clientY || window.innerHeight / 2;
+    root.style.setProperty('--vt-x', `${x}px`);
+    root.style.setProperty('--vt-y', `${y}px`);
+
+    // Fallback: navegador sem View Transitions API (Firefox atual) ou
+    // user com prefers-reduced-motion — troca direta sem efeito.
+    const startVT = (
+      document as Document & {
+        startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+      }
+    ).startViewTransition;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!startVT || reduced) {
+      setTheme(next);
+      return;
+    }
+
+    startVT.call(document, () => setTheme(next));
   };
 
   const icon =

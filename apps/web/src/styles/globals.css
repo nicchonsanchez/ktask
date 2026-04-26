@@ -134,4 +134,32 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /**
+   * View Transitions — efeito de revelação circular saindo do clique
+   * quando alterna o tema. JS no theme-toggle.tsx seta --vt-x e --vt-y
+   * com a posição do clique. Fallback (sem suporte) faz crossfade default.
+   */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-new(root) {
+    animation: vt-theme-reveal 450ms cubic-bezier(0.4, 0, 0.2, 1);
+    clip-path: circle(0% at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+
+  @keyframes vt-theme-reveal {
+    to {
+      clip-path: circle(150% at var(--vt-x, 50%) var(--vt-y, 50%));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-new(root) {
+      animation: none;
+    }
+  }
 }
