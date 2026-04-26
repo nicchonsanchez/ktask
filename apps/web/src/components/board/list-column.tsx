@@ -121,7 +121,7 @@ export function ListColumn({
           <button
             type="button"
             {...listeners}
-            className="text-fg-muted hover:text-fg cursor-grab touch-none opacity-0 transition-opacity active:cursor-grabbing group-hover/header:opacity-100"
+            className="text-fg-muted hover:text-fg cursor-grab touch-none transition-opacity active:cursor-grabbing md:opacity-0 md:group-hover/header:opacity-100"
             aria-label="Reordenar coluna"
           >
             <GripVertical size={14} />
@@ -179,7 +179,7 @@ export function ListColumn({
             onClick={() => setEditingName(true)}
             aria-label="Renomear coluna"
             title="Renomear"
-            className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 opacity-0 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover/header:opacity-100"
+            className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 md:opacity-0 md:group-hover/header:opacity-100"
           >
             <Pencil size={13} />
           </button>
@@ -309,7 +309,7 @@ function ListMenu({ onRename, onArchive }: { onRename: () => void; onArchive: ()
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 opacity-0 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover/header:opacity-100 aria-expanded:opacity-100"
+        className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 aria-expanded:opacity-100 md:opacity-0 md:group-hover/header:opacity-100"
         aria-label="Opções da coluna"
         aria-haspopup="menu"
         aria-expanded={open}
