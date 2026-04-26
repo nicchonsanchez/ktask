@@ -52,6 +52,8 @@ export default function BoardPage() {
   const boardQuery = useQuery(boardsQueries.detail(boardId));
   const queryClient = useQueryClient();
   const [activeCard, setActiveCard] = useState<CardListItem | null>(null);
+  const [search, setSearch] = useState('');
+  const searchNorm = search.trim().toLowerCase();
 
   useRealtimeBoard({
     boardId,
@@ -301,7 +303,7 @@ export default function BoardPage() {
 
   return (
     <div className="bg-bg-subtle flex h-[calc(100vh-52px)] flex-col">
-      <BoardHeader board={board} />
+      <BoardHeader board={board} search={search} onSearchChange={setSearch} />
 
       <DndContext
         sensors={sensors}
@@ -318,13 +320,16 @@ export default function BoardPage() {
             >
               {board.lists.map((list) => {
                 const sortedCards = sortCardsForBoard(list.cards, board.cardOrdering);
+                const visibleCards = searchNorm
+                  ? sortedCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
+                  : sortedCards;
                 return (
                   <ListColumn key={list.id} list={list}>
                     <SortableContext
-                      items={sortedCards.map((c) => c.id)}
+                      items={visibleCards.map((c) => c.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {sortedCards.map((card) => (
+                      {visibleCards.map((card) => (
                         <CardItem key={card.id} card={card} />
                       ))}
                     </SortableContext>

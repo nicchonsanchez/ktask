@@ -24,7 +24,15 @@ import { BoardSettingsDialog } from './board-settings-dialog';
 
 const STACK_LIMIT = 4;
 
-export function BoardHeader({ board }: { board: BoardDetail }) {
+export function BoardHeader({
+  board,
+  search,
+  onSearchChange,
+}: {
+  board: BoardDetail;
+  search: string;
+  onSearchChange: (value: string) => void;
+}) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -128,15 +136,28 @@ export function BoardHeader({ board }: { board: BoardDetail }) {
 
           <VisibilityButton board={board} />
 
-          <div className="border-border/70 hidden h-8 items-center gap-1.5 rounded-md border px-2 md:flex">
+          <div className="border-border/70 focus-within:border-primary/40 focus-within:ring-primary/30 hidden h-8 items-center gap-1.5 rounded-md border px-2 transition-colors focus-within:ring-1 md:flex">
             <Search size={13} className="text-fg-muted shrink-0" />
             <input
               type="text"
-              disabled
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Filtrar por palavra"
-              title="Em breve"
-              className="text-fg-muted placeholder:text-fg-muted/70 w-44 cursor-not-allowed bg-transparent text-xs focus:outline-none"
+              className="text-fg placeholder:text-fg-muted/70 w-44 bg-transparent text-xs focus:outline-none"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="text-fg-muted hover:text-fg shrink-0 rounded p-0.5"
+                aria-label="Limpar busca"
+                title="Limpar"
+              >
+                <span aria-hidden className="block size-3 leading-none">
+                  ×
+                </span>
+              </button>
+            )}
           </div>
 
           <button
