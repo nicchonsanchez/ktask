@@ -55,7 +55,7 @@ export class TimeTrackingService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'COMMENTER');
+    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Fecha qualquer entry pendente do user
@@ -202,7 +202,7 @@ export class TimeTrackingService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'COMMENTER');
+    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
 
     const targetUserId = input.userId && input.userId !== userId ? input.userId : userId;
     if (targetUserId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {

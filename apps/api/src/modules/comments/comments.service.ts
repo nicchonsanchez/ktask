@@ -147,7 +147,8 @@ export class CommentsService {
       throw new NotFoundException('Comentário não encontrado.');
     }
     if (existing.authorId !== userId) {
-      throw new ForbiddenException('Você só pode editar seus próprios comentários.');
+      // Modelo unificado: autor sempre pode; ou EDITOR+ no board (MEMBER ou superior).
+      await this.access.assertAccess(userId, existing.card.boardId, tenant, 'EDITOR');
     }
     if (existing.deletedAt) {
       throw new BadRequestException('Comentário já foi excluído.');
@@ -188,8 +189,8 @@ export class CommentsService {
       throw new NotFoundException('Comentário não encontrado.');
     }
     if (existing.authorId !== userId) {
-      // Pode ser um Admin do quadro também
-      await this.access.assertAccess(userId, existing.card.boardId, tenant, 'ADMIN');
+      // Modelo unificado: autor sempre pode; ou EDITOR+ no board (MEMBER ou superior).
+      await this.access.assertAccess(userId, existing.card.boardId, tenant, 'EDITOR');
     }
 
     await this.prisma.comment.update({

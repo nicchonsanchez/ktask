@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Board, BoardRole, BoardVisibility, CardOrdering, Prisma } from '@prisma/client';
 import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
 
@@ -102,9 +107,11 @@ export class BoardsService {
   }): Promise<Board> {
     const { userId, tenant, input } = params;
 
-    // Quem pode criar quadro? GESTOR+ em geral. GUEST não.
-    if (tenant.role === 'GUEST') {
-      throw new NotFoundException('Você não tem permissão para criar quadros.');
+    // Quem pode criar fluxo? GESTOR+ apenas (decisão do modelo unificado de roles).
+    // MEMBER trabalha nos fluxos existentes mas não cria estrutura nova.
+    const allowed: (typeof tenant.role)[] = ['OWNER', 'ADMIN', 'GESTOR'];
+    if (!allowed.includes(tenant.role)) {
+      throw new ForbiddenException('Apenas Gestor, Administrador ou Dono podem criar fluxos.');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -168,7 +175,7 @@ export class BoardsService {
   }
 
   async getOne(userId: string, tenant: TenantContext, boardId: string) {
-    await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
+    const { role: myRole } = await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
     const [board, completedCount] = await Promise.all([
       this.prisma.board.findUnique({
         where: { id: boardId },
@@ -203,7 +210,7 @@ export class BoardsService {
       }),
     ]);
     if (!board) return null;
-    return this.hydrateCoverInListResult({ ...board, completedCount });
+    return this.hydrateCoverInListResult({ ...board, completedCount, myRole });
   }
 
   async listCompleted(

@@ -325,7 +325,12 @@ export default function BoardPage() {
                   : sortedCards;
                 const otherLists = board.lists.filter((l) => l.id !== list.id);
                 return (
-                  <ListColumn key={list.id} list={list} otherLists={otherLists}>
+                  <ListColumn
+                    key={list.id}
+                    list={list}
+                    otherLists={otherLists}
+                    isAdmin={board.myRole === 'ADMIN'}
+                  >
                     <SortableContext
                       items={visibleCards.map((c) => c.id)}
                       strategy={verticalListSortingStrategy}
@@ -338,7 +343,7 @@ export default function BoardPage() {
                 );
               })}
             </SortableContext>
-            <AddColumnButton boardId={boardId} />
+            {board.myRole === 'ADMIN' && <AddColumnButton boardId={boardId} />}
             <CompletedColumn boardId={boardId} completedCount={board.completedCount ?? 0} />
           </div>
         </div>

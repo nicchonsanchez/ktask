@@ -158,7 +158,7 @@ export class ChecklistsService {
     userId: string,
     tenant: TenantContext,
     checklistId: string,
-    input: { text: string },
+    input: { text: string; assigneeId?: string | null; dueDate?: string | null },
   ) {
     const { card } = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
     await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
@@ -170,8 +170,30 @@ export class ChecklistsService {
     });
     const position = computeInsertPosition(last?.position ?? null, null);
 
+    // Modelo unificado de roles: por padrão, quem cria a subtarefa fica
+    // automaticamente como assignee. Pra criar sem assignee, passar null
+    // explicitamente. Pra atribuir a outro, passar o cuid dele.
+    const assigneeId = input.assigneeId === undefined ? userId : input.assigneeId;
+
+    if (assigneeId) {
+      const isMember = await this.prisma.membership.findUnique({
+        where: {
+          userId_organizationId: { userId: assigneeId, organizationId: tenant.organizationId },
+        },
+      });
+      if (!isMember) {
+        throw new BadRequestException('Usuário designado não pertence à organização.');
+      }
+    }
+
     const item = await this.prisma.checklistItem.create({
-      data: { checklistId, text: input.text, position },
+      data: {
+        checklistId,
+        text: input.text,
+        position,
+        assigneeId,
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      },
     });
 
     await this.prisma.activity.create({

@@ -63,6 +63,8 @@ export interface BoardDetail {
   createdAt: string;
   createdBy: { id: string; name: string; avatarUrl: string | null };
   completedCount: number;
+  /** Papel efetivo do usuário logado neste board (modelo unificado de roles). */
+  myRole: 'ADMIN' | 'EDITOR' | 'COMMENTER' | 'VIEWER';
   lists: ListWithCards[];
   labels: Array<{ id: string; name: string; color: string }>;
   members: Array<{

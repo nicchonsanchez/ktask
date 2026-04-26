@@ -35,7 +35,7 @@ export class ListsService {
   ) {}
 
   async create(userId: string, tenant: TenantContext, input: CreateListInput) {
-    await this.access.assertAccess(userId, input.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, input.boardId, tenant, 'ADMIN');
 
     const last = await this.prisma.list.findFirst({
       where: { boardId: input.boardId, isArchived: false },
@@ -76,7 +76,7 @@ export class ListsService {
 
   async update(userId: string, tenant: TenantContext, listId: string, input: UpdateListInput) {
     const list = await this.getOneOrThrow(listId);
-    await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
     const updated = await this.prisma.list.update({
       where: { id: listId },
@@ -105,7 +105,7 @@ export class ListsService {
 
   async move(userId: string, tenant: TenantContext, listId: string, input: MoveListInput) {
     const list = await this.getOneOrThrow(listId);
-    await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
     const { beforePos, afterPos } = await this.resolveNeighbors(
       list.boardId,
@@ -136,7 +136,7 @@ export class ListsService {
     opts: { cardsAction?: 'archive' | 'move'; targetListId?: string } = {},
   ) {
     const list = await this.getOneOrThrow(listId);
-    await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
     const cards = await this.prisma.card.findMany({
       where: { listId, isArchived: false },
@@ -223,7 +223,7 @@ export class ListsService {
    */
   async restore(userId: string, tenant: TenantContext, listId: string) {
     const list = await this.getOneOrThrow(listId);
-    await this.access.assertAccess(userId, list.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
     if (!list.isArchived) {
       return list; // idempotente

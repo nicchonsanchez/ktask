@@ -26,11 +26,14 @@ export const LIST_SORT_PREFIX = 'col:';
 export function ListColumn({
   list,
   otherLists,
+  isAdmin,
   children,
 }: {
   list: ListWithCards;
   /** Outras colunas não-arquivadas do mesmo board, pra alimentar o seletor de destino do modal de arquivar. */
   otherLists: ListWithCards[];
+  /** Se true, mostra controles de admin (drag, rename, archive, automações). MEMBER vê coluna normal sem esses. */
+  isAdmin: boolean;
   children: React.ReactNode;
 }) {
   const sortable = useSortable({
@@ -114,14 +117,16 @@ export function ListColumn({
       }`}
     >
       <div className="group/header flex items-center justify-between gap-2 px-3 pb-1 pt-2.5">
-        <button
-          type="button"
-          {...listeners}
-          className="text-fg-muted hover:text-fg cursor-grab touch-none opacity-0 transition-opacity active:cursor-grabbing group-hover/header:opacity-100"
-          aria-label="Reordenar coluna"
-        >
-          <GripVertical size={14} />
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            {...listeners}
+            className="text-fg-muted hover:text-fg cursor-grab touch-none opacity-0 transition-opacity active:cursor-grabbing group-hover/header:opacity-100"
+            aria-label="Reordenar coluna"
+          >
+            <GripVertical size={14} />
+          </button>
+        )}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {editingName ? (
             <input
@@ -142,9 +147,9 @@ export function ListColumn({
           ) : (
             <button
               type="button"
-              onDoubleClick={() => setEditingName(true)}
+              onDoubleClick={() => isAdmin && setEditingName(true)}
               className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
-              title="Clique duas vezes para renomear"
+              title={isAdmin ? 'Clique duas vezes para renomear' : list.name}
             >
               {list.name}
             </button>
@@ -157,43 +162,48 @@ export function ListColumn({
             Abre modal com 3 tabs (Detalhes/Automações/Avançado). Engine
             ainda não está pronta — catálogo das 18 automações fica
             disabled "em breve" (ver tarefas-md/23-automacoes-coluna.md). */}
-        <button
-          type="button"
-          onClick={() => setAutomationsOpen(true)}
-          aria-label="Automações da coluna"
-          title="Automações"
-          className="text-fg-muted hover:bg-bg-muted hover:text-primary inline-flex shrink-0 items-center justify-center rounded p-1"
-        >
-          <Bot size={14} />
-        </button>
-        {/* Lápis: atalho direto pra renomear; aparece no hover do header */}
-        <button
-          type="button"
-          onClick={() => setEditingName(true)}
-          aria-label="Renomear coluna"
-          title="Renomear"
-          className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 opacity-0 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover/header:opacity-100"
-        >
-          <Pencil size={13} />
-        </button>
-        <ListMenu
-          onRename={() => setEditingName(true)}
-          onArchive={async () => {
-            // Coluna vazia: confirmação simples. Coluna com cards: dialog
-            // dedicado pra escolher mover ou arquivar junto.
-            if (list.cards.length === 0) {
-              const ok = await confirm({
-                title: `Arquivar coluna "${list.name}"?`,
-                description: 'A coluna está vazia e pode ser restaurada depois.',
-                confirmLabel: 'Arquivar',
-                danger: true,
-              });
-              if (ok) archiveMut.mutate({});
-            } else {
-              setArchiveDialogOpen(true);
-            }
-          }}
-        />
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setAutomationsOpen(true)}
+            aria-label="Automações da coluna"
+            title="Automações"
+            className="text-fg-muted hover:bg-bg-muted hover:text-primary inline-flex shrink-0 items-center justify-center rounded p-1"
+          >
+            <Bot size={14} />
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setEditingName(true)}
+            aria-label="Renomear coluna"
+            title="Renomear"
+            className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 opacity-0 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover/header:opacity-100"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+        {isAdmin && (
+          <ListMenu
+            onRename={() => setEditingName(true)}
+            onArchive={async () => {
+              // Coluna vazia: confirmação simples. Coluna com cards: dialog
+              // dedicado pra escolher mover ou arquivar junto.
+              if (list.cards.length === 0) {
+                const ok = await confirm({
+                  title: `Arquivar coluna "${list.name}"?`,
+                  description: 'A coluna está vazia e pode ser restaurada depois.',
+                  confirmLabel: 'Arquivar',
+                  danger: true,
+                });
+                if (ok) archiveMut.mutate({});
+              } else {
+                setArchiveDialogOpen(true);
+              }
+            }}
+          />
+        )}
       </div>
 
       <div className="px-2 pt-1">

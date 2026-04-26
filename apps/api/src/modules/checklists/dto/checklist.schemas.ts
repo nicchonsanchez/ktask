@@ -13,6 +13,9 @@ export type UpdateChecklistRequest = z.infer<typeof UpdateChecklistSchema>;
 
 export const CreateItemSchema = z.object({
   text: z.string().min(1).max(500).trim(),
+  // assigneeId: undefined = caller (default), null = sem assignee, cuid = outro membro
+  assigneeId: z.string().cuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
 });
 export type CreateItemRequest = z.infer<typeof CreateItemSchema>;
 

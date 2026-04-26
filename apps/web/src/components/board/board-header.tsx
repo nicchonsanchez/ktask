@@ -41,6 +41,7 @@ export function BoardHeader({
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const notify = useNotify();
+  const isAdmin = board.myRole === 'ADMIN';
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: boardsQueries.detail(board.id).queryKey });
@@ -136,7 +137,7 @@ export function BoardHeader({
             </PopoverContent>
           </Popover>
 
-          <VisibilityButton board={board} />
+          {isAdmin && <VisibilityButton board={board} />}
 
           <div className="border-border/70 focus-within:border-primary/40 focus-within:ring-primary/30 hidden h-8 items-center gap-1.5 rounded-md border px-2 transition-colors focus-within:ring-1 md:flex">
             <Search size={13} className="text-fg-muted shrink-0" />
@@ -172,14 +173,16 @@ export function BoardHeader({
             Filtrar
           </button>
 
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded-md p-1.5 focus-visible:outline-none focus-visible:ring-2"
-            aria-label="Configurações do fluxo"
-          >
-            <Settings size={16} />
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded-md p-1.5 focus-visible:outline-none focus-visible:ring-2"
+              aria-label="Configurações do fluxo"
+            >
+              <Settings size={16} />
+            </button>
+          )}
 
           <div className="relative">
             <button
@@ -196,34 +199,42 @@ export function BoardHeader({
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="border-border bg-bg absolute right-0 top-full z-20 mt-1 flex w-56 flex-col rounded-md border p-1 text-xs shadow-lg">
-                  <MenuItem
-                    label="Configurações do fluxo"
-                    icon={<Settings size={14} />}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setSettingsOpen(true);
-                    }}
-                  />
+                  {isAdmin && (
+                    <MenuItem
+                      label="Configurações do fluxo"
+                      icon={<Settings size={14} />}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setSettingsOpen(true);
+                      }}
+                    />
+                  )}
                   <MenuItem
                     label={copied ? 'URL copiada' : 'Copiar URL do fluxo'}
                     icon={<LinkIcon size={14} />}
                     onClick={copyUrl}
                   />
-                  <MenuItem
-                    label="Arquivados"
-                    icon={<Archive size={14} />}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setArchivedOpen(true);
-                    }}
-                  />
-                  <div className="border-border my-1 border-t" />
-                  <MenuItem
-                    label="Inativar fluxo"
-                    icon={<Archive size={14} />}
-                    danger
-                    onClick={handleArchive}
-                  />
+                  {isAdmin && (
+                    <MenuItem
+                      label="Arquivados"
+                      icon={<Archive size={14} />}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setArchivedOpen(true);
+                      }}
+                    />
+                  )}
+                  {isAdmin && (
+                    <>
+                      <div className="border-border my-1 border-t" />
+                      <MenuItem
+                        label="Inativar fluxo"
+                        icon={<Archive size={14} />}
+                        danger
+                        onClick={handleArchive}
+                      />
+                    </>
+                  )}
                 </div>
               </>
             )}
