@@ -35,7 +35,10 @@ import {
   type AutomationActionType,
 } from '@/lib/queries/automations';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
+import { labelsQueries } from '@/lib/queries/labels';
+import { orgMembersQuery } from '@/lib/queries/cards';
 import { CreateAutomationForm } from './create-automation-form';
+import { describeAutomationRich } from './describe-automation';
 
 /**
  * Modal de automações da coluna — Fase A.
@@ -74,7 +77,14 @@ export function ColumnAutomationsDialog({
     enabled: open,
   });
 
+  const labelsQ = useQuery({ ...labelsQueries.byBoard(boardId), enabled: open });
+  const membersQ = useQuery({ ...orgMembersQuery, enabled: open });
+
   const automations = automationsQuery.data ?? [];
+  const lookups = {
+    labels: labelsQ.data ?? [],
+    members: (membersQ.data ?? []).map((m) => ({ id: m.userId, name: m.user.name })),
+  };
 
   return (
     <>
@@ -163,6 +173,7 @@ export function ColumnAutomationsDialog({
                         key={auto.id}
                         automation={auto}
                         listId={list.id}
+                        lookups={lookups}
                         onEdit={() => setEditingAutomation(auto)}
                       />
                     ))}
@@ -292,13 +303,20 @@ function TabBtn({
 
 // ---------------- AutomationRow ----------------
 
+interface RowLookups {
+  members: Array<{ id: string; name: string }>;
+  labels: Array<{ id: string; name: string; color: string }>;
+}
+
 function AutomationRow({
   automation,
   listId,
+  lookups,
   onEdit,
 }: {
   automation: Automation;
   listId: string;
+  lookups: RowLookups;
   onEdit: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -340,8 +358,12 @@ function AutomationRow({
         {iconFor(automation.actionType)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-fg text-[13px] font-medium leading-snug">
-          {automation.label || describeAction(automation.actionType)}
+        <p className="text-fg-muted text-[13px] leading-snug">
+          {automation.label ? (
+            <span className="text-fg font-medium">{automation.label}</span>
+          ) : (
+            describeAutomationRich(automation, lookups)
+          )}
         </p>
         <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
           Quando: <strong>{describeTrigger(automation.trigger)}</strong>
