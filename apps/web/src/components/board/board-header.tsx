@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
-  Filter,
   Globe,
   Layout,
   Link as LinkIcon,
@@ -22,6 +21,7 @@ import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
 import { BoardSettingsDialog } from './board-settings-dialog';
 import { ArchivedDrawer } from './archived-drawer';
+import { BoardFilterPopover, type BoardFilters } from './board-filter-popover';
 
 const STACK_LIMIT = 4;
 
@@ -29,10 +29,14 @@ export function BoardHeader({
   board,
   search,
   onSearchChange,
+  filters,
+  onFiltersChange,
 }: {
   board: BoardDetail;
   search: string;
   onSearchChange: (value: string) => void;
+  filters: BoardFilters;
+  onFiltersChange: (next: BoardFilters) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
@@ -163,15 +167,7 @@ export function BoardHeader({
             )}
           </div>
 
-          <button
-            type="button"
-            disabled
-            title="Em breve"
-            className="border-border/70 text-fg-muted hidden h-8 cursor-not-allowed items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium md:inline-flex"
-          >
-            <Filter size={13} />
-            Filtrar
-          </button>
+          <BoardFilterPopover board={board} filters={filters} onFiltersChange={onFiltersChange} />
 
           {isAdmin && (
             <button

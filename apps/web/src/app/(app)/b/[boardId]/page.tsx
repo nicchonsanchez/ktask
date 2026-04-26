@@ -43,8 +43,14 @@ import { CardModal } from '@/components/board/card-modal';
 import { CompletedColumn, COMPLETED_DROPPABLE_ID } from '@/components/board/completed-column';
 import { AddColumnButton } from '@/components/board/add-column-button';
 import { BoardHeader } from '@/components/board/board-header';
+import {
+  applyBoardFilters,
+  EMPTY_FILTERS,
+  type BoardFilters,
+} from '@/components/board/board-filter-popover';
 import { ApiError } from '@/lib/api-client';
 import { useRealtimeBoard } from '@/hooks/use-realtime-board';
+import { useAuthStore } from '@/stores/auth-store';
 
 export default function BoardPage() {
   const params = useParams<{ boardId: string }>();
@@ -53,7 +59,9 @@ export default function BoardPage() {
   const queryClient = useQueryClient();
   const [activeCard, setActiveCard] = useState<CardListItem | null>(null);
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
   const searchNorm = search.trim().toLowerCase();
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
   useRealtimeBoard({
     boardId,
@@ -303,7 +311,13 @@ export default function BoardPage() {
 
   return (
     <div className="bg-bg-subtle flex h-[calc(100vh-52px)] flex-col">
-      <BoardHeader board={board} search={search} onSearchChange={setSearch} />
+      <BoardHeader
+        board={board}
+        search={search}
+        onSearchChange={setSearch}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
 
       <DndContext
         sensors={sensors}
@@ -320,9 +334,10 @@ export default function BoardPage() {
             >
               {board.lists.map((list) => {
                 const sortedCards = sortCardsForBoard(list.cards, board.cardOrdering);
+                const filteredCards = applyBoardFilters(sortedCards, filters, currentUserId);
                 const visibleCards = searchNorm
-                  ? sortedCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
-                  : sortedCards;
+                  ? filteredCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
+                  : filteredCards;
                 const otherLists = board.lists.filter((l) => l.id !== list.id);
                 return (
                   <ListColumn
