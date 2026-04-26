@@ -40,6 +40,15 @@ interface LoginParams {
   ip?: string;
 }
 
+/**
+ * Limites do bloqueio por conta (complementa o ThrottlerGuard que bloqueia
+ * por IP). Funciona separado: 10 tentativas em 30min na mesma conta — mesmo
+ * que o atacante use IPs diferentes — viram um lock de 15min.
+ */
+const FAIL_LIMIT = 10;
+const LOCK_DURATION_MS = 15 * 60_000;
+const ATTEMPT_WINDOW_MS = 30 * 60_000;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -55,16 +64,57 @@ export class AuthService {
   async login({ email, password, userAgent, ip }: LoginParams): Promise<LoginResult> {
     const user = await this.users.findByEmail(email);
 
+    // Conta bloqueada — recusa antes de verificar senha. Não vazamos
+    // existência: a mesma mensagem genérica é usada quando user é null e
+    // como fallback abaixo.
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      const minutes = Math.max(1, Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000));
+      throw new UnauthorizedException(
+        `Conta temporariamente bloqueada por excesso de tentativas. Tente novamente em ${minutes} minuto(s).`,
+      );
+    }
+
     // Timing: fazemos verify sempre (mesmo com hash fake) para não vazar existência.
     const hash = user?.passwordHash ?? '$argon2id$v=19$m=65536,t=3,p=4$dummydummydummy$dummy';
     const verified = await this.password.verify(hash, password);
 
     if (!verified || !user) {
+      if (user) {
+        // Tentativa falhou em conta existente — incrementa contador. Janela
+        // deslizante: se a última falha foi antes do ATTEMPT_WINDOW_MS, o
+        // contador é resetado pra 1 ao invés de incrementado.
+        const now = new Date();
+        const inWindow =
+          user.lastFailedAt && now.getTime() - user.lastFailedAt.getTime() < ATTEMPT_WINDOW_MS;
+        const newCount = inWindow ? user.failedLoginCount + 1 : 1;
+        const shouldLock = newCount >= FAIL_LIMIT;
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginCount: shouldLock ? 0 : newCount,
+            lastFailedAt: now,
+            lockedUntil: shouldLock ? new Date(now.getTime() + LOCK_DURATION_MS) : null,
+          },
+        });
+        if (shouldLock) {
+          this.logger.warn(
+            `Conta bloqueada por excesso de tentativas: userId=${user.id} email=${email}`,
+          );
+        }
+      }
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
     if (user.deletedAt) {
       throw new ForbiddenException('Conta desativada.');
+    }
+
+    // Login bem-sucedido — limpa contadores se houver algum estado pendente
+    if (user.failedLoginCount > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null, lastFailedAt: null },
+      });
     }
 
     // Re-hash se parâmetros mudaram

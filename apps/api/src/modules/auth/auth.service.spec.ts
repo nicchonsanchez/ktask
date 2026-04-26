@@ -13,6 +13,9 @@ type MockedUser = {
   email: string;
   passwordHash: string;
   deletedAt: Date | null;
+  failedLoginCount: number;
+  lastFailedAt: Date | null;
+  lockedUntil: Date | null;
 };
 
 describe('AuthService', () => {
@@ -29,6 +32,9 @@ describe('AuthService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
     };
+    user: {
+      update: jest.Mock;
+    };
   };
   let jwt: jest.Mocked<Pick<JwtService, 'signAsync' | 'verifyAsync'>>;
 
@@ -37,6 +43,9 @@ describe('AuthService', () => {
     email: 'admin@kharis.local',
     passwordHash: '$argon2id$...',
     deletedAt: null,
+    failedLoginCount: 0,
+    lastFailedAt: null,
+    lockedUntil: null,
   };
 
   beforeEach(async () => {
@@ -61,6 +70,9 @@ describe('AuthService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      user: {
+        update: jest.fn().mockResolvedValue({}),
       },
     };
     jwt = {
@@ -162,6 +174,107 @@ describe('AuthService', () => {
       await service.login({ email: mockUser.email, password: 'ktask123' });
 
       expect(users.updatePasswordHash).toHaveBeenCalledWith(mockUser.id, '$argon2id$NEW');
+    });
+
+    it('incrementa failedLoginCount em senha errada e nao bloqueia antes de 10', async () => {
+      users.findByEmail.mockResolvedValue({
+        ...mockUser,
+        failedLoginCount: 4,
+        lastFailedAt: new Date(),
+      } as never);
+      password.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: mockUser.email, password: 'wrong' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: expect.objectContaining({
+          failedLoginCount: 5,
+          lockedUntil: null,
+        }),
+      });
+    });
+
+    it('bloqueia conta apos 10 tentativas dentro da janela', async () => {
+      users.findByEmail.mockResolvedValue({
+        ...mockUser,
+        failedLoginCount: 9,
+        lastFailedAt: new Date(),
+      } as never);
+      password.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: mockUser.email, password: 'wrong' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      const call = prisma.user.update.mock.calls[0]![0];
+      expect(call.data.failedLoginCount).toBe(0);
+      expect(call.data.lockedUntil).toBeInstanceOf(Date);
+      expect((call.data.lockedUntil as Date).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('reseta contador se ultima falha foi fora da janela de 30min', async () => {
+      const longAgo = new Date(Date.now() - 31 * 60_000);
+      users.findByEmail.mockResolvedValue({
+        ...mockUser,
+        failedLoginCount: 9,
+        lastFailedAt: longAgo,
+      } as never);
+      password.verify.mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: mockUser.email, password: 'wrong' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      // Como esta fora da janela, conta como tentativa #1, nao bloqueia
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: expect.objectContaining({ failedLoginCount: 1, lockedUntil: null }),
+      });
+    });
+
+    it('rejeita login se conta esta com lockedUntil no futuro', async () => {
+      const future = new Date(Date.now() + 5 * 60_000);
+      users.findByEmail.mockResolvedValue({
+        ...mockUser,
+        lockedUntil: future,
+      } as never);
+
+      await expect(service.login({ email: mockUser.email, password: 'ktask123' })).rejects.toThrow(
+        /bloqueada/i,
+      );
+
+      // Nao chega a fazer verify nem incrementar
+      expect(password.verify).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('reseta failedLoginCount em login bem-sucedido', async () => {
+      users.findByEmail.mockResolvedValue({
+        ...mockUser,
+        failedLoginCount: 3,
+        lastFailedAt: new Date(),
+      } as never);
+      password.verify.mockResolvedValue(true);
+      users.findPublicById.mockResolvedValue({
+        id: mockUser.id,
+        email: mockUser.email,
+        name: 'Admin',
+        avatarUrl: null,
+        locale: 'pt-BR',
+        timezone: 'America/Sao_Paulo',
+        twoFactorEnabled: false,
+        createdAt: new Date('2026-01-01'),
+      });
+
+      await service.login({ email: mockUser.email, password: 'ktask123' });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { failedLoginCount: 0, lockedUntil: null, lastFailedAt: null },
+      });
     });
   });
 
