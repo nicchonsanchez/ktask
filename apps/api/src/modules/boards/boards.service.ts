@@ -34,8 +34,10 @@ export class BoardsService {
 
   /**
    * Lista os quadros visíveis ao usuário na Org atual.
-   * OWNER/ADMIN/GESTOR veem todos (bypass). MEMBER vê BoardMember + ORGANIZATION-visible.
-   * GUEST só vê BoardMember.
+   * OWNER/ADMIN/GESTOR veem todos (bypass).
+   * MEMBER e GUEST veem BoardMember explícito + qualquer board ORGANIZATION-visible
+   * (a diferença está no role efetivo: MEMBER → EDITOR, GUEST → VIEWER, conforme
+   * resolveBoardRole). Board PRIVATE só aparece via BoardMember explícito.
    */
   async listForUser(userId: string, tenant: TenantContext) {
     const bypass = (ORG_ROLES_WITH_BOARD_BYPASS as readonly string[]).includes(tenant.role);
@@ -45,10 +47,7 @@ export class BoardsService {
       : {
           organizationId: tenant.organizationId,
           isArchived: false,
-          OR: [
-            { members: { some: { userId } } },
-            ...(tenant.role !== 'GUEST' ? [{ visibility: 'ORGANIZATION' as const }] : []),
-          ],
+          OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
         };
 
     const boards = await this.prisma.board.findMany({
