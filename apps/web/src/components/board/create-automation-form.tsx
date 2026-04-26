@@ -88,7 +88,8 @@ export function CreateAutomationForm({
       });
       const input: CreateAutomationInput = {
         trigger,
-        triggerConfig: trigger === 'TIME_IN_LIST' ? { minutes } : {},
+        triggerConfig:
+          trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {},
         actionType,
         actionConfig,
         label: label.trim() || undefined,
@@ -157,10 +158,12 @@ export function CreateAutomationForm({
             ))}
           </div>
 
-          {trigger === 'TIME_IN_LIST' && (
+          {(trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION') && (
             <div className="mt-3">
               <label className="text-fg-muted block text-[11px] font-medium">
-                Tempo na coluna (minutos)
+                {trigger === 'TIME_IN_LIST'
+                  ? 'Tempo na coluna (minutos)'
+                  : 'Tempo sem interação (minutos)'}
               </label>
               <input
                 type="number"
@@ -170,7 +173,17 @@ export function CreateAutomationForm({
                 onChange={(e) => setMinutes(Number(e.target.value))}
                 className="border-border focus:border-primary mt-1 w-32 rounded-md border px-2 py-1 text-sm focus:outline-none"
               />
+              <p className="text-fg-subtle mt-1 text-[10px]">
+                A automação roda quando o tempo é atingido (verificado a cada minuto).
+              </p>
             </div>
+          )}
+          {(trigger === 'DUE_DATE_TODAY' || trigger === 'DUE_DATE_OVERDUE') && (
+            <p className="text-fg-subtle mt-3 text-[11px]">
+              {trigger === 'DUE_DATE_TODAY'
+                ? 'Roda 1x quando o prazo do card cair pra hoje (verificação horária).'
+                : 'Roda 1x por dia para cada card vencido (verificação horária).'}
+            </p>
           )}
         </section>
 
@@ -299,14 +312,13 @@ const IMPLEMENTED = new Set<AutomationActionType>([
 const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: boolean }> = [
   { value: 'CARD_ENTERED', label: 'Quando um card entrar na coluna' },
   { value: 'CARD_LEFT', label: 'Quando um card sair da coluna' },
-  { value: 'TIME_IN_LIST', label: 'Quando um card ficar tempo demais na coluna', disabled: true },
+  { value: 'TIME_IN_LIST', label: 'Quando um card ficar tempo demais na coluna' },
   {
     value: 'TIME_NO_INTERACTION',
     label: 'Quando um card ficar parado (sem interação)',
-    disabled: true,
   },
-  { value: 'DUE_DATE_TODAY', label: 'Quando o prazo do card cair pra hoje', disabled: true },
-  { value: 'DUE_DATE_OVERDUE', label: 'Quando o prazo do card vencer', disabled: true },
+  { value: 'DUE_DATE_TODAY', label: 'Quando o prazo do card cair pra hoje' },
+  { value: 'DUE_DATE_OVERDUE', label: 'Quando o prazo do card vencer' },
 ];
 
 interface ConfigState {

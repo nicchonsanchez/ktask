@@ -84,6 +84,16 @@ export class AutomationsEngine {
   }
 
   /**
+   * Versão pública usada pelo scheduler de triggers temporais
+   * (TIME_IN_LIST, TIME_NO_INTERACTION, DUE_DATE_TODAY, DUE_DATE_OVERDUE).
+   * O scheduler já filtra qual automação roda em qual card — aqui só
+   * delegamos pra executeAutomation com chainDepth=0.
+   */
+  async executeAutomationDirect(automation: Automation, cardId: string): Promise<AutomationRun> {
+    return this.executeAutomation(automation, cardId, 0);
+  }
+
+  /**
    * Cria uma AutomationRun, dispatcha pro handler certo, atualiza status
    * com base no resultado. Erros não propagam (engine é fire-and-forget).
    */

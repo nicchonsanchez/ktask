@@ -207,11 +207,10 @@ function EngineWarningBanner() {
     <div className="border-warning/40 bg-warning-subtle/40 mx-3 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[11px]">
       <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
       <p className="text-fg-muted leading-snug">
-        <strong className="text-warning">Engine parcial.</strong> Triggers{' '}
-        <strong>CARD_ENTERED</strong> e <strong>CARD_LEFT</strong> rodam ao vivo. 8 actions
-        implementadas (Tags add/remove, Inserir tarefas, Líder, Equipe, Comentário, Status, Card
-        filho). As demais 10 ficam SKIPPED até virem prontas — ver{' '}
-        <code>tarefas-md/23-automacoes-coluna.md</code>.
+        <strong className="text-warning">Engine parcial.</strong> Todos os 6 triggers rodam (eventos
+        + temporais via cron). 8 das 18 actions implementadas (Tags add/remove, Inserir tarefas,
+        Líder, Equipe, Comentário, Status, Card filho); as demais 10 ficam SKIPPED até virem prontas
+        — ver <code>tarefas-md/23-automacoes-coluna.md</code>.
       </p>
     </div>
   );

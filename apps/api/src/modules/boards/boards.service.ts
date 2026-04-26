@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Board, BoardRole, BoardVisibility, CardOrdering, Prisma } from '@prisma/client';
 import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
 
