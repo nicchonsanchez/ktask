@@ -110,7 +110,7 @@ export function TimerWidget() {
           type="button"
           onClick={handlePlayClick}
           disabled={startMut.isPending}
-          className="bg-success/15 text-success hover:bg-success/25 inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors disabled:opacity-60"
+          className="group/timer inline-flex h-9 items-center gap-2 rounded-full bg-emerald-600 pl-1 pr-3 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
@@ -118,11 +118,14 @@ export function TimerWidget() {
           }
           aria-label="Iniciar cronômetro"
         >
-          {startMut.isPending ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Play size={14} fill="currentColor" />
-          )}
+          <span className="inline-flex size-7 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/timer:bg-white/30">
+            {startMut.isPending ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Play size={12} fill="currentColor" />
+            )}
+          </span>
+          <span className="font-mono tabular-nums">00:00:00</span>
         </button>
       </div>
     );
@@ -172,28 +175,33 @@ function RunningPill({
   void tick; // só pra forçar re-render
 
   return (
-    <div className="inline-flex h-9 items-center gap-2 rounded-full bg-fuchsia-600 pl-1.5 pr-1.5 text-white">
+    <div
+      className="group/running inline-flex h-9 items-center rounded-full bg-fuchsia-600 pr-1 text-white shadow-sm transition-shadow hover:shadow"
+      title={`Cronometrando: ${active.card.title}`}
+    >
       <button
         type="button"
         onClick={onPause}
         disabled={loadingPause}
-        className="inline-flex size-6 items-center justify-center rounded-full transition-colors hover:bg-white/20 disabled:opacity-60"
+        className="mr-2 inline-flex size-7 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/30 disabled:opacity-60"
         aria-label="Parar cronômetro"
-        title={`Parar (${active.card.title})`}
+        title={`Parar — ${active.card.title}`}
       >
         {loadingPause ? (
           <Loader2 size={12} className="animate-spin" />
         ) : (
-          <Pause size={12} fill="currentColor" />
+          <Pause size={11} fill="currentColor" />
         )}
       </button>
-      <span className="font-mono text-xs tabular-nums">{formatDuration(elapsedSec)}</span>
+      <span className="select-none font-mono text-xs font-semibold tabular-nums">
+        {formatDuration(elapsedSec)}
+      </span>
       <button
         type="button"
         onClick={onExpand}
-        className="inline-flex size-6 items-center justify-center rounded-full transition-colors hover:bg-white/20"
+        className="ml-2 inline-flex size-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white"
         aria-label="Detalhes do cronômetro"
-        title="Detalhes"
+        title="Detalhes do cronômetro"
       >
         <Maximize2 size={11} />
       </button>

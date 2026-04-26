@@ -97,8 +97,8 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       disabled={startMut.isPending}
       className={
         isOtherCard
-          ? 'bg-info/15 text-info hover:bg-info/25 inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors disabled:opacity-60'
-          : 'bg-success/15 text-success hover:bg-success/25 inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors disabled:opacity-60'
+          ? 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-sky-700 hover:shadow disabled:opacity-60'
+          : 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60'
       }
       title={
         isOtherCard
@@ -107,12 +107,14 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       }
       aria-label="Iniciar cronômetro"
     >
-      {startMut.isPending ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Play size={13} fill="currentColor" />
-      )}
-      <span className="hidden sm:inline">{isOtherCard ? 'Iniciar aqui' : 'Iniciar'}</span>
+      <span className="inline-flex size-6 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/play:bg-white/30">
+        {startMut.isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Play size={11} fill="currentColor" />
+        )}
+      </span>
+      <span className="font-mono tabular-nums">00:00:00</span>
     </button>
   );
 }
@@ -142,16 +144,18 @@ function RunningButton({
       type="button"
       onClick={onStop}
       disabled={stopping}
-      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-fuchsia-600 px-2.5 text-[12px] font-medium text-white transition-opacity hover:bg-fuchsia-700 disabled:opacity-60"
+      className="group/pause inline-flex h-8 items-center gap-1.5 rounded-full bg-fuchsia-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-fuchsia-700 hover:shadow disabled:opacity-60"
       title="Parar cronômetro"
       aria-label="Parar cronômetro"
       data-entry-id={entryId}
     >
-      {stopping ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Pause size={13} fill="currentColor" />
-      )}
+      <span className="inline-flex size-6 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/pause:bg-white/30">
+        {stopping ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Pause size={11} fill="currentColor" />
+        )}
+      </span>
       <span className="font-mono tabular-nums">{formatDuration(elapsedSec)}</span>
     </button>
   );
