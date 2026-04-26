@@ -125,6 +125,32 @@ Total: **18 automações** em 6 categorias.
 | Tempo excedido na coluna   | PRO   | Dispara aviso/automação quando card está há mais de X horas/dias na coluna. Configurável: enviar notificação, mover automaticamente, criar tarefa de follow-up. |
 | Tempo sem interação        | PRO   | Idem mas o relógio é "última atividade no card" (comentário, edição, mudança de campo) em vez de "entrou na coluna". Detecta cards parados/abandonados.         |
 
+## Automações de tarefa (futuro)
+
+Além das automações por coluna, planejamos um conjunto separado escopado em
+**ChecklistItem** (tarefa). No Ummense só existe a primeira; nós queremos as
+três confirmadas + outras conforme demanda.
+
+| Automação                       | Trigger               | Status     | Notas                                                                                                                                         |
+| ------------------------------- | --------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concluir tarefa → mover card    | `TASK_COMPLETED`      | confirmada | Equivalente Ummense. Configura `targetBoardId` + `targetListId` + flag "não inserir se já passou pela coluna".                                |
+| Concluir tarefa → tag no card   | `TASK_COMPLETED`      | confirmada | Adiciona ou remove etiqueta no card pai. Sinaliza estágio (ex: "Briefing aprovado").                                                          |
+| Concluir tarefa → criar próxima | `TASK_COMPLETED`      | confirmada | Cria nova ChecklistItem na mesma checklist com texto template. Permite encadeamento sequencial de tarefas.                                    |
+| Tarefa atrasada → notificar     | `TASK_OVERDUE` (cron) | confirmada | Notifica `assigneeId` da tarefa e/ou `leadId` do card quando `dueDate < now` e ainda não concluída. Idempotente (1 notificação por dia/task). |
+
+Outras ideias parkadas (revisitar conforme uso):
+
+- Concluir todas as tarefas → finalizar card
+- Tarefa criada → atribuir ao líder do card
+- Tarefa atribuída → criar comentário automático no card
+- Card mudou de coluna → reabrir tarefas concluídas
+- Tarefa com prazo → herdar prazo do card com offset
+
+**Modelo de dados:** reusa `Automation` + `AutomationRun`, adicionando
+`scopeType = TASK` e novos triggers `TASK_COMPLETED` / `TASK_OVERDUE` no enum
+`AutomationTrigger`. Handlers novos: `MOVE_PARENT_CARD`, `TOGGLE_PARENT_TAG`,
+`CREATE_NEXT_TASK`, `NOTIFY_TASK_LATE`.
+
 ## Modelo de dados (proposta)
 
 Já temos `Automation` e `AutomationRun` planejados em [09-engine-automacoes.md](09-engine-automacoes.md). Pra automação por coluna, basta adicionar:

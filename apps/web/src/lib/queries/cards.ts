@@ -192,6 +192,8 @@ export const orgMembersQuery = {
 
 /* ----------------- Checklists ----------------- */
 
+export type TaskPriority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
 export interface ChecklistItem {
   id: string;
   checklistId: string;
@@ -199,6 +201,7 @@ export interface ChecklistItem {
   isDone: boolean;
   position: number;
   dueDate: string | null;
+  priority: TaskPriority;
   assigneeId: string | null;
   assignee: { id: string; name: string; avatarUrl: string | null } | null;
   doneAt: string | null;
@@ -228,13 +231,30 @@ export function removeChecklist(checklistId: string) {
   return api.delete(`/api/v1/checklists/${checklistId}`);
 }
 
-export function addChecklistItem(checklistId: string, text: string) {
-  return api.post<ChecklistItem>(`/api/v1/checklists/${checklistId}/items`, { text });
+export function addChecklistItem(
+  checklistId: string,
+  input:
+    | string
+    | {
+        text: string;
+        assigneeId?: string | null;
+        dueDate?: string | null;
+        priority?: TaskPriority;
+      },
+) {
+  const payload = typeof input === 'string' ? { text: input } : input;
+  return api.post<ChecklistItem>(`/api/v1/checklists/${checklistId}/items`, payload);
 }
 
 export function updateChecklistItem(
   itemId: string,
-  input: { text?: string; isDone?: boolean; dueDate?: string | null; assigneeId?: string | null },
+  input: {
+    text?: string;
+    isDone?: boolean;
+    dueDate?: string | null;
+    assigneeId?: string | null;
+    priority?: TaskPriority;
+  },
 ) {
   return api.patch<ChecklistItem>(`/api/v1/checklists/items/${itemId}`, input);
 }

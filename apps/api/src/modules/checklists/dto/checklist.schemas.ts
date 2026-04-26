@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+
 export const CreateChecklistSchema = z.object({
   cardId: z.string().cuid(),
   title: z.string().min(1).max(200).trim().default('Tarefas'),
@@ -16,6 +18,7 @@ export const CreateItemSchema = z.object({
   // assigneeId: undefined = caller (default), null = sem assignee, cuid = outro membro
   assigneeId: z.string().cuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
+  priority: PrioritySchema.optional(),
 });
 export type CreateItemRequest = z.infer<typeof CreateItemSchema>;
 
@@ -24,6 +27,7 @@ export const UpdateItemSchema = z.object({
   isDone: z.boolean().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   assigneeId: z.string().cuid().nullable().optional(),
+  priority: PrioritySchema.optional(),
 });
 export type UpdateItemRequest = z.infer<typeof UpdateItemSchema>;
 

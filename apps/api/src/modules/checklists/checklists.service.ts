@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { Priority } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
@@ -158,7 +159,12 @@ export class ChecklistsService {
     userId: string,
     tenant: TenantContext,
     checklistId: string,
-    input: { text: string; assigneeId?: string | null; dueDate?: string | null },
+    input: {
+      text: string;
+      assigneeId?: string | null;
+      dueDate?: string | null;
+      priority?: Priority;
+    },
   ) {
     const { card } = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
     await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
@@ -193,6 +199,7 @@ export class ChecklistsService {
         position,
         assigneeId,
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        priority: input.priority ?? 'NONE',
       },
     });
 
@@ -221,7 +228,13 @@ export class ChecklistsService {
     userId: string,
     tenant: TenantContext,
     itemId: string,
-    input: { text?: string; isDone?: boolean; dueDate?: string | null; assigneeId?: string | null },
+    input: {
+      text?: string;
+      isDone?: boolean;
+      dueDate?: string | null;
+      assigneeId?: string | null;
+      priority?: Priority;
+    },
   ) {
     const { card, item } = await this.getItemOrThrow(itemId, tenant.organizationId);
     await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
@@ -242,6 +255,7 @@ export class ChecklistsService {
               : null
             : undefined,
         assigneeId: input.assigneeId !== undefined ? input.assigneeId : undefined,
+        priority: input.priority,
         doneAt: isToggling ? (input.isDone ? new Date() : null) : undefined,
         doneById: isToggling ? (input.isDone ? userId : null) : undefined,
       },

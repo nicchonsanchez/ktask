@@ -457,6 +457,7 @@ model ChecklistItem {
   isDone      Boolean   @default(false)
   position    Float
   dueDate     DateTime?
+  priority    Priority  @default(NONE)
   assigneeId  String?
   doneAt      DateTime?
   doneById    String?

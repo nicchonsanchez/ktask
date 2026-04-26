@@ -14,8 +14,9 @@ import {
   type CardDetail,
   type Checklist,
   type ChecklistItem,
+  type TaskPriority,
 } from '@/lib/queries/cards';
-import { Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
 import { UserAvatar } from '@/components/user-avatar';
@@ -301,6 +302,14 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
     mutationFn: (userId: string | null) => updateChecklistItem(item.id, { assigneeId: userId }),
     onSuccess: onChange,
   });
+  const dueMut = useMutation({
+    mutationFn: (iso: string | null) => updateChecklistItem(item.id, { dueDate: iso }),
+    onSuccess: onChange,
+  });
+  const priorityMut = useMutation({
+    mutationFn: (p: TaskPriority) => updateChecklistItem(item.id, { priority: p }),
+    onSuccess: onChange,
+  });
 
   function saveText() {
     const trimmed = text.trim();
@@ -313,8 +322,14 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
     setEditing(false);
   }
 
+  const priorityMeta = PRIORITY_META[item.priority];
+  const borderClass =
+    !item.isDone && item.priority !== 'NONE' ? `border-l-2 ${priorityMeta.borderClass}` : '';
+
   return (
-    <li className="group/item hover:bg-bg-muted/60 -mx-1 flex items-center gap-2 rounded px-1 py-1">
+    <li
+      className={`group/item hover:bg-bg-muted/60 -mx-1 flex items-center gap-2 rounded py-1 pl-1 pr-1 ${borderClass}`}
+    >
       <input
         type="checkbox"
         checked={item.isDone}
@@ -351,6 +366,18 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
         </button>
       )}
 
+      <DueDatePicker
+        dueDate={item.dueDate}
+        onChange={(iso) => dueMut.mutate(iso)}
+        disabled={dueMut.isPending}
+      />
+
+      <PriorityPicker
+        priority={item.priority}
+        onChange={(p) => priorityMut.mutate(p)}
+        disabled={priorityMut.isPending}
+      />
+
       <AssigneePicker
         assignee={item.assignee}
         onAssign={(userId) => assignMut.mutate(userId)}
@@ -368,6 +395,249 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
         <X size={12} />
       </button>
     </li>
+  );
+}
+
+const PRIORITY_META: Record<
+  TaskPriority,
+  { label: string; dotClass: string; borderClass: string; textClass: string }
+> = {
+  NONE: {
+    label: 'Sem prioridade',
+    dotClass: 'bg-fg-muted/40',
+    borderClass: 'border-transparent',
+    textClass: 'text-fg-muted',
+  },
+  LOW: {
+    label: 'Baixa',
+    dotClass: 'bg-blue-400',
+    borderClass: 'border-blue-400',
+    textClass: 'text-blue-500',
+  },
+  MEDIUM: {
+    label: 'Média',
+    dotClass: 'bg-amber-400',
+    borderClass: 'border-amber-400',
+    textClass: 'text-amber-500',
+  },
+  HIGH: {
+    label: 'Alta',
+    dotClass: 'bg-orange-500',
+    borderClass: 'border-orange-500',
+    textClass: 'text-orange-500',
+  },
+  URGENT: {
+    label: 'Urgente',
+    dotClass: 'bg-red-500',
+    borderClass: 'border-red-500',
+    textClass: 'text-red-500',
+  },
+};
+
+function formatDueLabel(iso: string): { label: string; tone: 'past' | 'today' | 'future' } {
+  const due = new Date(iso);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
+  const dayAfter = new Date(today.getTime() + 2 * 24 * 60 * 60_000);
+
+  if (due.getTime() === today.getTime()) return { label: 'Hoje', tone: 'today' };
+  if (due.getTime() < today.getTime())
+    return { label: due.toLocaleDateString('pt-BR'), tone: 'past' };
+  if (due.getTime() < dayAfter.getTime() && due.getTime() >= tomorrow.getTime())
+    return { label: 'Amanhã', tone: 'future' };
+  return { label: due.toLocaleDateString('pt-BR'), tone: 'future' };
+}
+
+function DueDatePicker({
+  dueDate,
+  onChange,
+  disabled,
+}: {
+  dueDate: string | null;
+  onChange: (iso: string | null) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  function setToday() {
+    const d = new Date();
+    d.setHours(23, 59, 0, 0);
+    onChange(d.toISOString());
+    setOpen(false);
+  }
+  function setTomorrow() {
+    const d = new Date(Date.now() + 24 * 60 * 60_000);
+    d.setHours(23, 59, 0, 0);
+    onChange(d.toISOString());
+    setOpen(false);
+  }
+  function clear() {
+    onChange(null);
+    setOpen(false);
+  }
+  function setExact(value: string) {
+    if (!value) return;
+    // value vem como YYYY-MM-DD; interpretamos no fuso local com 23:59
+    const [y, m, d] = value.split('-').map(Number);
+    if (!y || !m || !d) return;
+    const dt = new Date(y, m - 1, d, 23, 59, 0, 0);
+    onChange(dt.toISOString());
+    setOpen(false);
+  }
+
+  const display = dueDate ? formatDueLabel(dueDate) : null;
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        title={display ? `Prazo: ${display.label}` : 'Definir prazo'}
+        className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] transition-opacity ${
+          display
+            ? display.tone === 'today'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : display.tone === 'past'
+                ? 'text-red-500'
+                : 'text-fg-muted'
+            : 'text-fg-muted hover:text-fg opacity-0 group-hover/item:opacity-100'
+        }`}
+        aria-label="Definir prazo"
+      >
+        {display ? (
+          <span className="font-medium">{display.label}</span>
+        ) : (
+          <CalendarDays size={13} />
+        )}
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute right-0 top-full z-30 mt-1 flex w-56 flex-col overflow-hidden rounded-md border p-2 shadow-lg">
+          <div className="mb-2 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={setToday}
+              className="bg-primary text-primary-fg hover:bg-primary-hover flex-1 rounded-md px-2 py-1 text-[11px] font-medium"
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              onClick={setTomorrow}
+              className="border-border text-fg hover:bg-bg-muted flex-1 rounded-md border px-2 py-1 text-[11px]"
+            >
+              Amanhã
+            </button>
+            <button
+              type="button"
+              onClick={clear}
+              className="border-border text-fg hover:bg-bg-muted flex-1 rounded-md border px-2 py-1 text-[11px]"
+            >
+              Sem data
+            </button>
+          </div>
+          <input
+            type="date"
+            defaultValue={dueDate ? new Date(dueDate).toISOString().slice(0, 10) : ''}
+            onChange={(e) => setExact(e.target.value)}
+            className="border-border bg-bg w-full rounded-md border px-2 py-1 text-xs"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriorityPicker({
+  priority,
+  onChange,
+  disabled,
+}: {
+  priority: TaskPriority;
+  onChange: (p: TaskPriority) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  const meta = PRIORITY_META[priority];
+  const isSet = priority !== 'NONE';
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        title={`Prioridade: ${meta.label}`}
+        className={`inline-flex items-center justify-center rounded p-0.5 transition-opacity ${
+          isSet
+            ? meta.textClass
+            : 'text-fg-muted hover:text-fg opacity-0 group-hover/item:opacity-100'
+        }`}
+        aria-label="Definir prioridade"
+      >
+        <Flag size={13} fill={isSet ? 'currentColor' : 'none'} />
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute right-0 top-full z-30 mt-1 flex w-44 flex-col overflow-hidden rounded-md border p-1 shadow-lg">
+          {(['URGENT', 'HIGH', 'MEDIUM', 'LOW', 'NONE'] as TaskPriority[]).map((p) => {
+            const m = PRIORITY_META[p];
+            const isCurrent = p === priority;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => {
+                  onChange(p);
+                  setOpen(false);
+                }}
+                className={`hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[12px] ${
+                  isCurrent ? 'bg-bg-muted' : ''
+                }`}
+              >
+                <span aria-hidden className={`size-2.5 rounded-full ${m.dotClass}`} />
+                <span className="text-fg flex-1">{m.label}</span>
+                {isCurrent && <span className="text-primary text-[10px]">atual</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
