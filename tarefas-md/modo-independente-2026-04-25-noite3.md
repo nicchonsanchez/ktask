@@ -50,3 +50,9 @@ Resposta às 6 perguntas-âncora:
 2026-04-25T20:55 — Etapa 1 da home concluída (commit `8eb4c1a`): /empresa criada com view atual; nav atualizada. /page.tsx continua igual até etapa 3 substituir.
 
 2026-04-25T20:55 — Próximo: Etapa 2 — schema (ChecklistItem + dueDate + assigneeId + description) e endpoints /me/tasks /me/recent-cards /me/calendar.
+
+2026-04-25T21:25 — Etapa 2 (backend) concluída (commit `0611d95`). Migration adiciona FK ChecklistItem.assignee/doneBy, index composto e nova tabela CardVisit. Módulo `me` com 4 endpoints. Hook fire-and-forget no GET /cards/:id pra alimentar visitas. ChecklistItem.dueDate/assigneeId já existiam no schema desde a migration inicial — descoberta agradável. Não criei coluna `description`: `text` já cobre o nome curto e descrição rica vai no card pai. Bate com escopo Ummense.
+
+2026-04-25T21:50 — Etapa 3 (frontend) concluída (commit `a4220ac`). HomePage, TarefasPanel (4 seções com colapsar + barra de progresso + atalho "atualizar todas"), TarefaRow (toggle otimista, formatador de prazo BRT), CardsRecentesCarousel (scroll-x com setas dinâmicas), MiniCalendar (grid 6 semanas + pontos por dia), EventosPanel (placeholder Fase 2). Topbar atualizada na etapa 1. Tipos consistentes entre lib/queries/me.ts e backend.
+
+2026-04-25T21:50 — Próximo: validar deploy. Se subir, etapa 4 (interações de adicionar tarefa inline + filtro do MiniCalendar) e backlog. Pipeline rodando agora.
