@@ -4,7 +4,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 
-import { meQueries, bulkRescheduleToday, type MeTask } from '@/lib/queries/me';
+import {
+  meQueries,
+  bulkRescheduleToday,
+  createStandaloneTask,
+  type MeTask,
+} from '@/lib/queries/me';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { TarefaRow } from './tarefa-row';
 import { CreateTaskDialog } from './create-task-dialog';
@@ -163,13 +168,91 @@ function TodaySection({ tasks }: { tasks: MeTask[] }) {
         )}
       </div>
       {tasks.length === 0 ? (
-        <p className="text-fg-subtle px-4 py-3 text-[12px] italic">
+        <p className="text-fg-subtle px-4 pb-1 pt-3 text-[12px] italic">
           Sem tarefas pra hoje. Bom dia tranquilo.
         </p>
       ) : (
         tasks.map((t) => <TarefaRow key={t.id} task={t} variant="today" />)
       )}
+      <InlineAddTaskRow />
     </div>
+  );
+}
+
+/**
+ * Linha "Adicionar tarefa" inline no rodapé da seção Hoje.
+ * Cria standalone task com dueDate=hoje (assigneeId default = user logado
+ * via backend).
+ */
+function InlineAddTaskRow() {
+  const [text, setText] = useState('');
+  const [active, setActive] = useState(false);
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const createMut = useMutation({
+    mutationFn: () => {
+      // Hoje em BRT — fixar 00:00 do dia local pra alinhar com a janela
+      // de "today" do /me/tasks.
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      return createStandaloneTask({ text: text.trim(), dueDate: today.toISOString() });
+    },
+    onSuccess: () => {
+      setText('');
+      setActive(false);
+      queryClient.invalidateQueries({ queryKey: meQueries.tasks().queryKey });
+    },
+    onError: () => notify.error('Falha ao criar tarefa.'),
+  });
+
+  if (!active) {
+    return (
+      <button
+        type="button"
+        onClick={() => setActive(true)}
+        className="text-fg-muted hover:text-primary inline-flex w-full items-center gap-1.5 px-3 pb-3 pt-1 text-left text-[12px] sm:px-4"
+      >
+        <Plus size={12} />
+        Adicionar tarefa
+      </button>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim().length === 0 || createMut.isPending) return;
+        createMut.mutate();
+      }}
+      className="flex items-center gap-2 px-3 pb-3 pt-1 sm:px-4"
+    >
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setActive(false);
+            setText('');
+          }
+        }}
+        onBlur={() => {
+          if (text.trim().length === 0) setActive(false);
+        }}
+        placeholder="Nova tarefa pra hoje"
+        maxLength={500}
+        className="bg-bg border-border focus:border-primary flex-1 rounded-md border px-2 py-1 text-sm focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={text.trim().length === 0 || createMut.isPending}
+        className="bg-primary text-primary-fg inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium disabled:opacity-60"
+      >
+        {createMut.isPending && <Loader2 size={11} className="animate-spin" />}
+        Adicionar
+      </button>
+    </form>
   );
 }
 

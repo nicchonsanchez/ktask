@@ -336,10 +336,11 @@ model Card {
   lead        User?        @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
   parent      Card?        @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
   children    Card[]       @relation("Subtasks")
+  cover       Attachment?  @relation("CardCover", fields: [coverAttachmentId], references: [id], onDelete: SetNull)
   members     CardMember[]
   labels      CardLabel[]
   checklists  Checklist[]
-  attachments Attachment[]
+  attachments Attachment[] @relation("CardAttachments")
   comments    Comment[]
   activities  Activity[]
   timeEntries TimeEntry[]
@@ -441,9 +442,10 @@ model Attachment {
   externalUrl String?
   createdAt   DateTime       @default(now())
 
-  card     Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  comment  Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  uploader User     @relation(fields: [uploaderId], references: [id])
+  card        Card     @relation("CardAttachments", fields: [cardId], references: [id], onDelete: Cascade)
+  comment     Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  uploader    User     @relation(fields: [uploaderId], references: [id])
+  coverOfCards Card[]  @relation("CardCover")
 
   @@index([cardId])
   @@index([commentId])

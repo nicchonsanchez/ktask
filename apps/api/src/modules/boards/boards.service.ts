@@ -4,6 +4,7 @@ import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
+import { StorageService } from '@/modules/storage/storage.service';
 
 import { BoardAccessService } from './board-access.service';
 
@@ -30,7 +31,28 @@ export class BoardsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: BoardAccessService,
+    private readonly storage: StorageService,
   ) {}
+
+  /**
+   * Hidrata `coverImageUrl` em cards do listing — a coluna do Prisma traz
+   * só `cover.storageKey` (FK pra Attachment); pra renderizar imagem no
+   * frontend, calculamos a URL pública aqui.
+   */
+  private hydrateCoverInListResult<
+    T extends { lists: Array<{ cards: Array<Record<string, unknown>> }> },
+  >(board: T): T {
+    for (const list of board.lists) {
+      list.cards = list.cards.map((c) => {
+        const cover = c.cover as { storageKey: string; mimeType: string } | null | undefined;
+        if (cover?.storageKey && cover.mimeType.startsWith('image/')) {
+          return { ...c, coverImageUrl: this.storage.publicUrlFor(cover.storageKey) };
+        }
+        return { ...c, coverImageUrl: null };
+      });
+    }
+    return board;
+  }
 
   /**
    * Lista os quadros visíveis ao usuário na Org atual.
@@ -164,6 +186,7 @@ export class BoardsService {
                     include: { user: { select: { id: true, name: true, avatarUrl: true } } },
                   },
                   labels: { include: { label: true } },
+                  cover: { select: { id: true, storageKey: true, mimeType: true } },
                   _count: { select: { comments: true, attachments: true, checklists: true } },
                 },
               },
@@ -180,7 +203,7 @@ export class BoardsService {
       }),
     ]);
     if (!board) return null;
-    return { ...board, completedCount };
+    return this.hydrateCoverInListResult({ ...board, completedCount });
   }
 
   async listCompleted(

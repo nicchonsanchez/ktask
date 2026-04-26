@@ -92,6 +92,7 @@ function CardInner({ card }: { card: CardListItem }) {
   const due = dueState(card.dueDate);
   const priorityColor = PRIORITY_COLOR[card.priority];
   const hasPriorityBar = priorityColor !== null;
+  const hasCover = Boolean(card.coverImageUrl);
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;
   const hasMembers = card.members.length > 0;
@@ -99,10 +100,20 @@ function CardInner({ card }: { card: CardListItem }) {
 
   return (
     <div className="flex flex-col gap-2.5">
-      {/* Topo do card: barra de prioridade (cor sólida) e/ou stripes das
-          labels. Prioridade sempre acima das labels quando ambas existem. */}
-      {(hasPriorityBar || hasLabels) && (
+      {/* Topo do card: capa (se houver) + barra de prioridade + stripes das
+          labels. Capa sempre acima de tudo; depois prioridade; depois labels. */}
+      {(hasCover || hasPriorityBar || hasLabels) && (
         <div className="-mx-3 -mt-3 flex flex-col overflow-hidden rounded-t-lg">
+          {hasCover && (
+            <div className="bg-bg-muted relative h-24 w-full overflow-hidden">
+              <img
+                src={card.coverImageUrl as string}
+                alt=""
+                className="size-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          )}
           {hasPriorityBar && (
             <div
               className="h-1.5"

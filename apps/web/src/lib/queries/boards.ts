@@ -34,6 +34,8 @@ export interface CardListItem {
   updatedAt: string;
   completedAt: string | null;
   leadId: string | null;
+  /** URL pública da capa do card. Null se não há capa ou capa não é imagem. */
+  coverImageUrl: string | null;
   members: Array<{ user: { id: string; name: string; avatarUrl: string | null } }>;
   labels: Array<{ label: { id: string; name: string; color: string } }>;
   _count: { comments: number; attachments: number; checklists: number };
