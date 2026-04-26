@@ -7,7 +7,14 @@ export interface MemberRow {
   organizationId: string;
   role: OrgRole;
   createdAt: string;
-  user: { id: string; email: string; name: string; avatarUrl: string | null };
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    avatarUrl: string | null;
+    phone: string | null;
+    notifyApprovalsOnWhatsApp: boolean;
+  };
 }
 
 export interface InvitationRow {

@@ -4,6 +4,8 @@ import type { User as UserContract } from '@ktask/contracts';
 export function updateProfile(input: {
   name?: string;
   avatarUrl?: string | null;
+  phone?: string | null;
+  notifyApprovalsOnWhatsApp?: boolean;
   locale?: string;
   timezone?: string;
 }) {

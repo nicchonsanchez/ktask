@@ -45,6 +45,7 @@ import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
 import { LabelPicker } from './label-picker';
+import { ApprovalsBlock } from './approvals-block';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER } from './priority-config';
 
@@ -425,6 +426,15 @@ function CardModalContent({
                     ))}
                     <LabelPicker card={card} boardId={boardId} />
                   </div>
+                </Block>
+
+                {/* Aprovações por cliente */}
+                <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
+                  <ApprovalsBlock
+                    cardId={card.id}
+                    boardId={card.boardId}
+                    currentListId={card.listId}
+                  />
                 </Block>
 
                 {/* Tarefas do card */}

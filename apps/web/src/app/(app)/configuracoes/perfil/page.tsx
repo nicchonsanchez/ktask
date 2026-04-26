@@ -56,8 +56,20 @@ export default function ProfilePage() {
       <div className="flex flex-col gap-8">
         <AvatarForm user={user} onChange={(avatarUrl) => setUser({ ...user, avatarUrl })} />
         <ProfileForm
-          initial={{ name: user.name }}
-          onSuccess={(u) => setUser({ ...user, name: u.name, avatarUrl: u.avatarUrl })}
+          initial={{
+            name: user.name,
+            phone: user.phone ?? '',
+            notifyApprovalsOnWhatsApp: user.notifyApprovalsOnWhatsApp ?? false,
+          }}
+          onSuccess={(u) =>
+            setUser({
+              ...user,
+              name: u.name,
+              avatarUrl: u.avatarUrl,
+              phone: u.phone,
+              notifyApprovalsOnWhatsApp: u.notifyApprovalsOnWhatsApp,
+            })
+          }
         />
         <PushNotificationsSection />
         <PasswordForm />
@@ -165,28 +177,58 @@ function ProfileForm({
   initial,
   onSuccess,
 }: {
-  initial: { name: string };
-  onSuccess: (u: { name: string; avatarUrl: string | null }) => void;
+  initial: { name: string; phone: string; notifyApprovalsOnWhatsApp: boolean };
+  onSuccess: (u: {
+    name: string;
+    avatarUrl: string | null;
+    phone: string | null;
+    notifyApprovalsOnWhatsApp: boolean;
+  }) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting, isDirty },
     reset,
   } = useForm<UpdateProfileRequest>({
     resolver: zodResolver(UpdateProfileRequestSchema),
-    defaultValues: { name: initial.name },
+    defaultValues: {
+      name: initial.name,
+      phone: initial.phone || null,
+      notifyApprovalsOnWhatsApp: initial.notifyApprovalsOnWhatsApp,
+    },
   });
 
+  const phoneValue = watch('phone');
+
   const mut = useMutation({
-    mutationFn: (data: UpdateProfileRequest) => updateProfile(data),
+    mutationFn: (data: UpdateProfileRequest) => {
+      // Normaliza telefone: remove tudo que não é dígito; vazio vira null.
+      const phone =
+        data.phone === undefined
+          ? undefined
+          : data.phone === null || data.phone === ''
+            ? null
+            : data.phone.replace(/\D/g, '');
+      return updateProfile({ ...data, phone });
+    },
     onSuccess: (u) => {
       setError(null);
       setSavedAt(Date.now());
-      onSuccess({ name: u.name, avatarUrl: u.avatarUrl });
-      reset({ name: u.name });
+      onSuccess({
+        name: u.name,
+        avatarUrl: u.avatarUrl,
+        phone: u.phone,
+        notifyApprovalsOnWhatsApp: u.notifyApprovalsOnWhatsApp,
+      });
+      reset({
+        name: u.name,
+        phone: u.phone,
+        notifyApprovalsOnWhatsApp: u.notifyApprovalsOnWhatsApp,
+      });
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Erro ao salvar.');
@@ -194,13 +236,55 @@ function ProfileForm({
   });
 
   return (
-    <Section title="Dados pessoais" description="Atualize como seu nome aparece no sistema.">
+    <Section title="Dados pessoais" description="Nome, telefone e preferências de notificação.">
       <form onSubmit={handleSubmit((data) => mut.mutate(data))} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">Nome</Label>
           <Input id="name" error={!!errors.name} {...register('name')} />
           {errors.name && <p className="text-danger text-xs">{errors.name.message}</p>}
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="phone">WhatsApp</Label>
+          <Input
+            id="phone"
+            placeholder="5531999999999"
+            inputMode="numeric"
+            error={!!errors.phone}
+            {...register('phone', {
+              setValueAs: (v) => {
+                if (v === '' || v === null || v === undefined) return null;
+                return String(v).replace(/\D/g, '');
+              },
+            })}
+          />
+          <p className="text-fg-subtle text-[11px]">
+            Apenas dígitos, com DDI e DDD (E.164 sem o &quot;+&quot;). Ex: 5531999999999.
+          </p>
+          {errors.phone && <p className="text-danger text-xs">{errors.phone.message}</p>}
+        </div>
+
+        <label className="border-border bg-bg-muted/30 flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            disabled={!phoneValue}
+            {...register('notifyApprovalsOnWhatsApp')}
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">Receber pedidos de aprovação por WhatsApp</span>
+            <span className="text-fg-muted text-xs leading-relaxed">
+              Quando alguém te escolher como revisor de um card, você receberá uma mensagem direto
+              no WhatsApp do número acima com o link pra aprovar/reprovar.
+            </span>
+            {!phoneValue && (
+              <span className="text-fg-subtle text-[11px]">
+                Preencha o número de WhatsApp pra ativar.
+              </span>
+            )}
+          </span>
+        </label>
+
         {error && (
           <p className="bg-danger-subtle text-danger rounded-md px-3 py-2 text-sm">{error}</p>
         )}
