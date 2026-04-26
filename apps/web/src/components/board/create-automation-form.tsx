@@ -54,6 +54,9 @@ export function CreateAutomationForm({
   const [checklistTitle, setChecklistTitle] = useState(initial?.checklistTitle ?? 'Tarefas');
   const [checklistItemsRaw, setChecklistItemsRaw] = useState(initial?.checklistItemsRaw ?? '');
   const [leadUserId, setLeadUserId] = useState(initial?.leadUserId ?? '');
+  const [leadReplaceMode, setLeadReplaceMode] = useState<LeadReplaceMode>(
+    initial?.leadReplaceMode ?? 'MOVE_TO_TEAM',
+  );
   const [teamUserIds, setTeamUserIds] = useState<string[]>(initial?.teamUserIds ?? []);
   const [commentTemplate, setCommentTemplate] = useState(initial?.commentTemplate ?? '');
   const [cardStatus, setCardStatus] = useState<'COMPLETED' | 'REOPENED' | 'ARCHIVED'>(
@@ -82,6 +85,7 @@ export function CreateAutomationForm({
     setChecklistTitle(next.checklistTitle);
     setChecklistItemsRaw(next.checklistItemsRaw);
     setLeadUserId(next.leadUserId);
+    setLeadReplaceMode(next.leadReplaceMode);
     setTeamUserIds(next.teamUserIds);
     setCommentTemplate(next.commentTemplate);
     setCardStatus(next.cardStatus);
@@ -113,6 +117,7 @@ export function CreateAutomationForm({
         checklistTitle,
         checklistItems: checklistItemsRaw,
         leadUserId,
+        leadReplaceMode,
         teamUserIds,
         commentTemplate,
         cardStatus,
@@ -273,12 +278,15 @@ export function CreateAutomationForm({
           )}
 
           {actionType === 'SET_LEAD' && (
-            <SingleUserConfig
-              members={membersQ.data ?? []}
-              loading={membersQ.isLoading}
-              selectedId={leadUserId}
-              onChange={setLeadUserId}
-            />
+            <div className="flex flex-col gap-3">
+              <SingleUserConfig
+                members={membersQ.data ?? []}
+                loading={membersQ.isLoading}
+                selectedId={leadUserId}
+                onChange={setLeadUserId}
+              />
+              <LeadReplaceModeConfig value={leadReplaceMode} onChange={setLeadReplaceMode} />
+            </div>
           )}
 
           {actionType === 'ADD_TEAM' && (
@@ -380,11 +388,14 @@ const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: bool
   { value: 'DUE_DATE_OVERDUE', label: 'Quando o prazo do card vencer' },
 ];
 
+type LeadReplaceMode = 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';
+
 interface ConfigState {
   tagIds: string[];
   checklistTitle: string;
   checklistItems: string;
   leadUserId: string;
+  leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
   commentTemplate: string;
   cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
@@ -423,7 +434,7 @@ function buildActionConfig(
     case 'UPDATE_FLOW_POSITION':
       return { position: s.flowPosition };
     case 'SET_LEAD':
-      return { userId: s.leadUserId };
+      return { userId: s.leadUserId, replaceMode: s.leadReplaceMode };
     case 'ADD_TEAM':
       return { userIds: s.teamUserIds };
     case 'POST_COMMENT':
@@ -485,6 +496,7 @@ interface InitialState {
   checklistTitle: string;
   checklistItemsRaw: string;
   leadUserId: string;
+  leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
   commentTemplate: string;
   cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
@@ -517,6 +529,10 @@ function extractInitial(a: Automation): InitialState {
       'Tarefas',
     checklistItemsRaw: Array.isArray(cfg.items) ? (cfg.items as string[]).join('\n') : '',
     leadUserId: typeof cfg.userId === 'string' ? (cfg.userId as string) : '',
+    leadReplaceMode:
+      cfg.replaceMode === 'REMOVE_FROM_TEAM' || cfg.replaceMode === 'KEEP_IF_HAS_LEAD'
+        ? (cfg.replaceMode as LeadReplaceMode)
+        : 'MOVE_TO_TEAM',
     teamUserIds: Array.isArray(cfg.userIds) ? (cfg.userIds as string[]) : [],
     commentTemplate: typeof cfg.template === 'string' ? (cfg.template as string) : '',
     cardStatus:
@@ -743,6 +759,68 @@ function CommentTemplateConfig({
         <code className="text-fg-muted">{'{{card.board.name}}'}</code>{' '}
         <code className="text-fg-muted">{'{{actor.name}}'}</code>
       </p>
+    </div>
+  );
+}
+
+function LeadReplaceModeConfig({
+  value,
+  onChange,
+}: {
+  value: LeadReplaceMode;
+  onChange: (v: LeadReplaceMode) => void;
+}) {
+  const options: Array<{ value: LeadReplaceMode; label: string; hint: string }> = [
+    {
+      value: 'MOVE_TO_TEAM',
+      label: 'Substituir o líder atual e defini-lo como equipe do card',
+      hint: 'O líder anterior continua no card como membro da equipe.',
+    },
+    {
+      value: 'REMOVE_FROM_TEAM',
+      label: 'Substituir o líder atual e removê-lo da equipe do card',
+      hint: 'O líder anterior é removido completamente do card.',
+    },
+    {
+      value: 'KEEP_IF_HAS_LEAD',
+      label: 'Não substituir o líder atual do card',
+      hint: 'Se o card já tiver líder, a automação não roda nele.',
+    },
+  ];
+
+  return (
+    <div className="border-border/60 bg-bg-subtle/40 flex flex-col gap-2 rounded-md border p-3">
+      <p className="text-fg text-[12px] font-semibold">
+        O que fazer com cards que já possuem líder?
+      </p>
+      <p className="text-fg-muted -mt-1 text-[11px]">
+        Defina o que deve acontecer caso o card já tenha um líder ao entrar nesta coluna.
+      </p>
+      <div className="mt-1 flex flex-col gap-1.5">
+        {options.map((opt) => (
+          <label
+            key={opt.value}
+            className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 ${
+              value === opt.value
+                ? 'border-primary bg-primary-subtle/30'
+                : 'border-border/60 hover:border-border-strong bg-bg'
+            }`}
+          >
+            <input
+              type="radio"
+              name="lead-replace-mode"
+              value={opt.value}
+              checked={value === opt.value}
+              onChange={() => onChange(opt.value)}
+              className="accent-primary mt-0.5"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-fg text-[12px] font-medium leading-snug">{opt.label}</p>
+              <p className="text-fg-muted mt-0.5 text-[10px] leading-snug">{opt.hint}</p>
+            </div>
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

@@ -30,10 +30,17 @@ export function describeAutomationRich(automation: Automation, lookups: Lookups)
     case 'SET_LEAD': {
       const userId = typeof cfg.userId === 'string' ? cfg.userId : null;
       const member = userId ? lookups.members.find((m) => m.id === userId) : null;
-      if (!member) return 'Definir líder do card';
+      const replaceMode = cfg.replaceMode;
+      const suffix =
+        replaceMode === 'REMOVE_FROM_TEAM'
+          ? ' (substituindo e removendo o anterior da equipe)'
+          : replaceMode === 'KEEP_IF_HAS_LEAD'
+            ? ' (apenas se o card não tiver líder)'
+            : '';
+      if (!member) return `Definir líder do card${suffix}`;
       return (
         <>
-          Definir <Strong>{member.name}</Strong> como líder do card
+          Definir <Strong>{member.name}</Strong> como líder do card{suffix}
         </>
       );
     }

@@ -298,21 +298,38 @@ export class AutomationsEngine {
   }
 
   /**
-   * SET_LEAD — define o líder do card. Valida que o user é membro da
-   * Org. Faz upsert em CardMember (lead também é membro implicitamente).
+   * SET_LEAD — define o líder do card. Suporta replaceMode pra ditar
+   * o que fazer quando o card já tem líder (ver Ummense):
+   *
+   *   - MOVE_TO_TEAM (default): substitui líder atual e mantém o antigo
+   *     na equipe (CardMember).
+   *   - REMOVE_FROM_TEAM: substitui líder atual e remove o antigo da
+   *     equipe.
+   *   - KEEP_IF_HAS_LEAD: se já tem líder, não faz nada (skip).
+   *
+   * Sempre valida que o novo líder é membro da Org e faz upsert em
+   * CardMember pro novo líder.
    */
   private async handleSetLead(
     automation: Automation,
     cardId: string,
-  ): Promise<{ leadId: string | null }> {
-    const config = automation.actionConfig as { userId?: string };
+  ): Promise<{ leadId: string | null; skipped?: boolean; removedFromTeam?: string }> {
+    const config = automation.actionConfig as {
+      userId?: string;
+      replaceMode?: 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';
+    };
     if (!config.userId) return { leadId: null };
+    const replaceMode = config.replaceMode ?? 'MOVE_TO_TEAM';
 
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      select: { organizationId: true },
+      select: { organizationId: true, leadId: true },
     });
     if (!card) return { leadId: null };
+
+    if (replaceMode === 'KEEP_IF_HAS_LEAD' && card.leadId) {
+      return { leadId: card.leadId, skipped: true };
+    }
 
     const membership = await this.prisma.membership.findUnique({
       where: {
@@ -326,6 +343,15 @@ export class AutomationsEngine {
       throw new Error('Usuário alvo não é membro da organização.');
     }
 
+    let removedFromTeam: string | undefined;
+    if (replaceMode === 'REMOVE_FROM_TEAM' && card.leadId && card.leadId !== config.userId) {
+      const previousLeadId = card.leadId;
+      await this.prisma.cardMember.deleteMany({
+        where: { cardId, userId: previousLeadId },
+      });
+      removedFromTeam = previousLeadId;
+    }
+
     await this.prisma.card.update({
       where: { id: cardId },
       data: { leadId: config.userId },
@@ -336,7 +362,7 @@ export class AutomationsEngine {
       create: { cardId, userId: config.userId },
     });
 
-    return { leadId: config.userId };
+    return { leadId: config.userId, ...(removedFromTeam ? { removedFromTeam } : {}) };
   }
 
   /**
