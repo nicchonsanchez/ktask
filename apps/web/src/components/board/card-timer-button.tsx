@@ -98,8 +98,8 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       disabled={startMut.isPending}
       className={
         isOtherCard
-          ? 'group/play inline-flex h-8 items-center gap-0 rounded-full bg-sky-600 pl-1 pr-1 text-[12px] font-semibold text-white shadow-sm transition-all hover:gap-1.5 hover:bg-sky-700 hover:pr-3 hover:shadow disabled:opacity-60'
-          : 'group/play inline-flex h-8 items-center gap-0 rounded-full bg-emerald-600 pl-1 pr-1 text-[12px] font-semibold text-white shadow-sm transition-all hover:gap-1.5 hover:bg-emerald-700 hover:pr-3 hover:shadow disabled:opacity-60'
+          ? 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-sky-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60'
+          : 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-emerald-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60'
       }
       title={
         isOtherCard
@@ -108,7 +108,7 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       }
       aria-label="Iniciar cronômetro"
     >
-      <span className="inline-flex size-6 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/play:bg-white/30">
+      <span className="bg-fg/10 inline-flex size-6 items-center justify-center rounded-full transition-colors group-hover/play:bg-white/25">
         {startMut.isPending ? (
           <Loader2 size={12} className="animate-spin" />
         ) : (
@@ -146,9 +146,9 @@ function RunningButton({
 
   const cardTitle = active.card?.title ?? 'Cronômetro sem card';
 
-  // Quando popoverOpen, pílula sempre aberta. Senão, ícone-only por padrão,
-  // expande só no hover (qualquer viewport).
-  const parentExpand = popoverOpen ? 'gap-1.5 pr-1' : 'gap-0 pr-0 hover:gap-1.5 hover:pr-1';
+  // Quando popoverOpen, pílula sempre aberta. Senão, ícone-only (círculo
+  // 32×32 com pl-1 pr-1), expande só no hover (qualquer viewport).
+  const parentExpand = popoverOpen ? 'gap-1.5 pr-1' : 'gap-0 pr-1 hover:gap-1.5';
   const childShow = popoverOpen ? 'inline-flex' : 'hidden group-hover/running:inline-flex';
   const textShow = popoverOpen ? 'inline' : 'hidden group-hover/running:inline';
 

@@ -137,7 +137,7 @@ export function TimerWidget() {
           type="button"
           onClick={handlePlayClick}
           disabled={pending}
-          className="group/timer inline-flex h-9 items-center gap-0 rounded-full bg-emerald-600 pl-1 pr-1 text-xs font-semibold text-white shadow-sm transition-all hover:gap-2 hover:bg-emerald-700 hover:pr-3 hover:shadow disabled:opacity-60"
+          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all hover:gap-2 hover:bg-emerald-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
@@ -145,7 +145,7 @@ export function TimerWidget() {
           }
           aria-label="Iniciar cronômetro"
         >
-          <span className="inline-flex size-7 items-center justify-center rounded-full bg-white/20 transition-colors group-hover/timer:bg-white/30">
+          <span className="bg-fg/10 inline-flex size-7 items-center justify-center rounded-full transition-colors group-hover/timer:bg-white/25">
             {pending ? (
               <Loader2 size={13} className="animate-spin" />
             ) : (
@@ -209,8 +209,9 @@ function RunningPill({
   const cardTitle = active.card?.title ?? 'Cronômetro sem card';
 
   // Quando forceExpanded (popover aberto), pílula fica sempre aberta.
-  // Senão, ícone-only por padrão, expande só no hover (qualquer viewport).
-  const parentExpand = forceExpanded ? 'gap-2 pr-1' : 'gap-0 pr-0 hover:gap-2 hover:pr-1';
+  // Senão, ícone-only por padrão (círculo perfeito 36×36 com pl-1 pr-1),
+  // expande só no hover (qualquer viewport).
+  const parentExpand = forceExpanded ? 'gap-2 pr-1' : 'gap-0 pr-1 hover:gap-2';
   const childShow = forceExpanded ? 'inline-flex' : 'hidden group-hover/running:inline-flex';
   const textShow = forceExpanded ? 'inline' : 'hidden group-hover/running:inline';
 
