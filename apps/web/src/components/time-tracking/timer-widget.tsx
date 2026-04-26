@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Maximize2, Pause, Play } from 'lucide-react';
 
@@ -14,6 +14,7 @@ import {
   type ActiveTimer,
 } from '@/lib/queries/time-tracking';
 import { ApiError } from '@/lib/api-client';
+import { useAuthStore } from '@/stores/auth-store';
 import { useNotify } from '@/components/ui/dialogs';
 import { useTimerStore } from '@/stores/timer-store';
 import { TimerPopover } from './timer-popover';
@@ -37,9 +38,16 @@ import { TimerPopover } from './timer-popover';
 export function TimerWidget() {
   const queryClient = useQueryClient();
   const params = useSearchParams();
+  const router = useRouter();
   const cardInContext = params.get('card');
   const openConflict = useTimerStore((s) => s.openConflict);
   const notify = useNotify();
+  const me = useAuthStore((s) => s.user);
+
+  function goToTimesheet() {
+    const path = me ? `/indicadores/timesheet?userId=${me.id}` : '/indicadores/timesheet';
+    router.push(path);
+  }
 
   const activeQuery = useQuery({ ...timeTrackingQueries.active() });
   const active = activeQuery.data;
@@ -133,29 +141,40 @@ export function TimerWidget() {
     const pending = startMut.isPending || startFreeMut.isPending;
     return (
       <div ref={anchorRef} className="relative">
-        <button
-          type="button"
-          onClick={handlePlayClick}
-          disabled={pending}
-          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all hover:gap-2 hover:bg-emerald-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60"
+        <div
+          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all hover:gap-2 hover:bg-emerald-600 hover:pr-1 hover:text-white hover:shadow"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
               : 'Iniciar cronômetro (sem card vinculado)'
           }
-          aria-label="Iniciar cronômetro"
         >
-          <span className="bg-fg/10 inline-flex size-7 items-center justify-center rounded-full transition-colors group-hover/timer:bg-white/25">
+          <button
+            type="button"
+            onClick={handlePlayClick}
+            disabled={pending}
+            className="bg-fg/10 inline-flex size-7 items-center justify-center rounded-full transition-colors disabled:opacity-60 group-hover/timer:bg-white/25"
+            aria-label="Iniciar cronômetro"
+          >
             {pending ? (
               <Loader2 size={13} className="animate-spin" />
             ) : (
               <Play size={12} fill="currentColor" />
             )}
-          </span>
+          </button>
           <span className="hidden whitespace-nowrap font-mono tabular-nums group-hover/timer:inline">
             00:00:00
           </span>
-        </button>
+          <button
+            type="button"
+            onClick={goToTimesheet}
+            className="hidden size-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white group-hover/timer:inline-flex"
+            aria-label="Ver meus cronômetros"
+            title="Ver meus cronômetros"
+          >
+            <Maximize2 size={11} />
+          </button>
+        </div>
       </div>
     );
   }

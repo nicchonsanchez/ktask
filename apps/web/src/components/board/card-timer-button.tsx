@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Maximize2, Pause, Play } from 'lucide-react';
 
@@ -12,6 +13,7 @@ import {
   timeTrackingQueries,
   type ActiveTimer,
 } from '@/lib/queries/time-tracking';
+import { useAuthStore } from '@/stores/auth-store';
 import { useNotify } from '@/components/ui/dialogs';
 import { useTimerStore } from '@/stores/timer-store';
 import { TimerPopover } from '@/components/time-tracking/timer-popover';
@@ -33,13 +35,20 @@ import { TimerPopover } from '@/components/time-tracking/timer-popover';
  */
 export function CardTimerButton({ cardId }: { cardId: string }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const notify = useNotify();
   const openConflict = useTimerStore((s) => s.openConflict);
+  const me = useAuthStore((s) => s.user);
 
   const activeQuery = useQuery({ ...timeTrackingQueries.active() });
   const active = activeQuery.data;
   const isThisCard = active?.cardId === cardId;
   const isOtherCard = active && !isThisCard;
+
+  function goToTimesheet() {
+    const path = me ? `/indicadores/timesheet?userId=${me.id}` : '/indicadores/timesheet';
+    router.push(path);
+  }
 
   const startMut = useMutation({
     mutationFn: () => startTimer(cardId),
@@ -92,33 +101,44 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={startMut.isPending}
+    <div
       className={
         isOtherCard
-          ? 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-sky-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60'
-          : 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-emerald-600 hover:pr-3 hover:text-white hover:shadow disabled:opacity-60'
+          ? 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-sky-600 hover:text-white hover:shadow'
+          : 'group/play bg-bg-muted text-fg-muted inline-flex h-8 items-center gap-0 rounded-full pl-1 pr-1 text-[12px] font-semibold transition-all hover:gap-1.5 hover:bg-emerald-600 hover:text-white hover:shadow'
       }
       title={
         isOtherCard
           ? `Cronômetro rodando em outro card (${active.card?.title ?? 'sem card'}). Click pra parar lá e começar aqui.`
           : 'Iniciar cronômetro neste card'
       }
-      aria-label="Iniciar cronômetro"
     >
-      <span className="bg-fg/10 inline-flex size-6 items-center justify-center rounded-full transition-colors group-hover/play:bg-white/25">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={startMut.isPending}
+        className="bg-fg/10 inline-flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-60 group-hover/play:bg-white/25"
+        aria-label="Iniciar cronômetro"
+      >
         {startMut.isPending ? (
           <Loader2 size={12} className="animate-spin" />
         ) : (
           <Play size={11} fill="currentColor" />
         )}
-      </span>
+      </button>
       <span className="hidden whitespace-nowrap font-mono tabular-nums group-hover/play:inline">
         00:00:00
       </span>
-    </button>
+      <button
+        type="button"
+        onClick={goToTimesheet}
+        className="hidden size-6 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white group-hover/play:inline-flex"
+        aria-label="Ver meus cronômetros"
+        title="Ver meus cronômetros"
+      >
+        <Maximize2 size={10} />
+      </button>
+    </div>
   );
 }
 
