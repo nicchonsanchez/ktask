@@ -24,6 +24,7 @@ import { SearchModule } from './modules/search/search.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
 import { MeModule } from './modules/me/me.module';
+import { LabelsModule } from './modules/labels/labels.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { MeModule } from './modules/me/me.module';
     StorageModule,
     TimeTrackingModule,
     MeModule,
+    LabelsModule,
     HealthModule,
   ],
   providers: [
