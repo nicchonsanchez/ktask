@@ -58,6 +58,7 @@ export class AuthController {
       password: body.password,
       userAgent: req.headers['user-agent'] ?? undefined,
       ip: req.ip,
+      rememberMe: body.rememberMe,
     });
 
     res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, cookieOptions(result.refreshExpiresAt));

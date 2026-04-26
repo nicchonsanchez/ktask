@@ -270,14 +270,18 @@ model Invitation {
 }
 
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  userAgent String?
-  ip        String?
-  createdAt DateTime  @default(now())
-  expiresAt DateTime
-  revokedAt DateTime?
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  /// True quando o user marcou "Permanecer logado" no login. Preservado
+  /// nas rotações de refresh — sessão curta (1d) só vira longa (90d) se
+  /// o user re-logar marcando o checkbox.
+  rememberMe Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -109,6 +109,15 @@ function LoginForm() {
             {errors.password && <p className="text-danger text-xs">{errors.password.message}</p>}
           </div>
 
+          <label className="text-fg-muted -mt-1 inline-flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              {...register('rememberMe')}
+              className="accent-primary size-4 cursor-pointer"
+            />
+            <span>Permanecer logado neste dispositivo</span>
+          </label>
+
           {submitError && (
             <div
               role="alert"

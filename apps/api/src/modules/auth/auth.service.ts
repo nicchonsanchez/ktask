@@ -38,6 +38,12 @@ interface LoginParams {
   password: string;
   userAgent?: string;
   ip?: string;
+  /**
+   * Se true (default), refresh token vale JWT_REFRESH_TTL (90d). Se false,
+   * vale JWT_REFRESH_TTL_SHORT (1d) — pra equipamentos compartilhados onde
+   * o usuário desmarcou "Permanecer logado".
+   */
+  rememberMe?: boolean;
 }
 
 /**
@@ -61,7 +67,13 @@ export class AuthService {
     private readonly tokens: TokenService,
   ) {}
 
-  async login({ email, password, userAgent, ip }: LoginParams): Promise<LoginResult> {
+  async login({
+    email,
+    password,
+    userAgent,
+    ip,
+    rememberMe = true,
+  }: LoginParams): Promise<LoginResult> {
     const user = await this.users.findByEmail(email);
 
     // Conta bloqueada — recusa antes de verificar senha. Não vazamos
@@ -123,7 +135,7 @@ export class AuthService {
       await this.users.updatePasswordHash(user.id, newHash);
     }
 
-    return this.issueTokens(user.id, user.email, { userAgent, ip });
+    return this.issueTokens(user.id, user.email, { userAgent, ip, rememberMe });
   }
 
   async refresh(rawRefreshToken: string): Promise<LoginResult> {
@@ -150,6 +162,9 @@ export class AuthService {
     return this.issueTokens(session.userId, session.user.email, {
       userAgent: session.userAgent ?? undefined,
       ip: session.ip ?? undefined,
+      // Preserva escolha do user no login original. Sem isso, todo refresh
+      // reverteria pra TTL longa — burlando "sessão curta".
+      rememberMe: session.rememberMe,
     });
   }
 
@@ -212,7 +227,7 @@ export class AuthService {
   private async issueTokens(
     userId: string,
     email: string,
-    opts: { userAgent?: string; ip?: string },
+    opts: { userAgent?: string; ip?: string; rememberMe?: boolean },
   ): Promise<LoginResult> {
     const payload: JwtAccessPayload = { sub: userId, email };
     // JwtModule.register já define secret + expiresIn nos defaults;
@@ -222,7 +237,9 @@ export class AuthService {
     const refreshToken = this.tokens.generate();
     const tokenHash = this.tokens.hash(refreshToken);
 
-    const expiresAt = new Date(Date.now() + parseDurationMs(env.JWT_REFRESH_TTL));
+    const rememberMe = opts.rememberMe ?? true;
+    const ttlString = rememberMe ? env.JWT_REFRESH_TTL : env.JWT_REFRESH_TTL_SHORT;
+    const expiresAt = new Date(Date.now() + parseDurationMs(ttlString));
 
     await this.prisma.session.create({
       data: {
@@ -230,6 +247,7 @@ export class AuthService {
         tokenHash,
         userAgent: opts.userAgent,
         ip: opts.ip,
+        rememberMe,
         expiresAt,
       },
     });
