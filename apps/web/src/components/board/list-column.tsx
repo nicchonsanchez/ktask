@@ -6,7 +6,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Archive, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react';
+import { Archive, Bot, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
 import {
@@ -135,6 +135,28 @@ export function ListColumn({ list, children }: { list: ListWithCards; children: 
             {list.cards.length}
           </span>
         </div>
+        {/* Robô = automações da coluna. Sempre visível (não é só hover) — ainda
+            placeholder; popup com listagem/criação chega na Fase 2 (ver
+            tarefas-md/23-automacoes-coluna.md). */}
+        <button
+          type="button"
+          disabled
+          aria-label="Automações da coluna (em breve)"
+          title="Automações — em breve (Fase 2)"
+          className="text-fg-muted hover:bg-bg-muted hover:text-primary inline-flex shrink-0 cursor-not-allowed items-center justify-center rounded p-1 opacity-60"
+        >
+          <Bot size={14} />
+        </button>
+        {/* Lápis: atalho direto pra renomear; aparece no hover do header */}
+        <button
+          type="button"
+          onClick={() => setEditingName(true)}
+          aria-label="Renomear coluna"
+          title="Renomear"
+          className="text-fg-muted hover:bg-bg-muted hover:text-fg focus-visible:ring-primary rounded p-1 opacity-0 transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover/header:opacity-100"
+        >
+          <Pencil size={13} />
+        </button>
         <ListMenu
           onRename={() => setEditingName(true)}
           onArchive={async () => {

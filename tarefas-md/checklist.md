@@ -181,19 +181,68 @@ Ver detalhes em `06-roadmap-mvp.md`.
 
 ## Fase 2 — v1 (Automações + WhatsApp)
 
-Ver `09-engine-automacoes.md` para detalhamento.
+Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + catálogo de automações por coluna estilo Ummense).
 
-- [ ] Schema `Automation`, `AutomationRun`
+- [ ] Schema `Automation`, `AutomationRun` (escopo LIST/BOARD/ORG)
 - [ ] Engine core: dispatcher, worker, registry de handlers
 - [ ] Template renderer (Mustache) + resolver de paths
-- [ ] Anti-loop (chainDepth) + rate limit por Org
-- [ ] 10 actions iniciais (seção 12 do doc 09)
-- [ ] 8 triggers iniciais
-- [ ] UI wizard 3 passos para criar automação
-- [ ] Biblioteca de receitas (10 templates)
+- [ ] Anti-loop (chainDepth ≤ 5) + rate limit por Org
+- [ ] UI: ícone de robô fixo no header da coluna + modal "Automações da coluna" com 3 tabs (Detalhes/Automações/Avançado)
+- [ ] UI wizard 3 passos para criar automação (gatilho → ações → revisar)
+- [ ] Biblioteca de receitas (10 templates pré-prontos)
 - [ ] Log de execuções com retentar
 - [ ] Integração Evolution API (CRUD Integration, teste de conexão)
 - [ ] MessageTemplate + WhatsAppMessage
+
+### Catálogo de automações por coluna (18 — ver `23-automacoes-coluna.md`)
+
+**Fluxo (3)**
+
+- [ ] Vincular a um novo fluxo (replica card em outro board)
+- [ ] Desvincular do fluxo atual
+- [ ] Atualizar posição no fluxo (sincroniza estado entre boards)
+
+**Card (4)**
+
+- [ ] Criar card filho (template configurável)
+- [ ] Alterar status do card (Finalizado / Reativado / Privado)
+- [ ] Inserir ou preencher campos personalizados
+- [ ] Salvar versão da descrição (snapshot pra auditoria)
+
+**Tags (2)**
+
+- [ ] Inserir tags
+- [ ] Remover tags
+
+**Tarefas (2)**
+
+- [ ] Inserir tarefas (itens de checklist a partir de template)
+- [ ] Inserir grupo de tarefas (checklist completo de template salvo)
+
+**Equipe (5)**
+
+- [ ] Definir líder do card
+- [ ] Adicionar equipe no card
+- [ ] Publicar no feed do CONECTA → adaptar pra "criar comentário automático"
+- [ ] Enviar WhatsApp (Evolution API)
+- [ ] Configurar disparo de e-mail (SMTP/SES)
+
+**Sinalizar (4)**
+
+- [ ] Cards com marcos para hoje (badge/notificação)
+- [ ] Cards com marcos atrasados
+- [ ] Tempo excedido na coluna (X horas/dias parado)
+- [ ] Tempo sem interação (relógio = última atividade no card)
+
+### Triggers necessários
+
+- [ ] `CARD_ENTERED` (default da maioria)
+- [ ] `CARD_LEFT`
+- [ ] `TIME_IN_LIST` (cron periódico)
+- [ ] `TIME_NO_INTERACTION` (cron)
+- [ ] `DUE_DATE_TODAY` (cron diário)
+- [ ] `DUE_DATE_OVERDUE` (cron diário)
+
 - [ ] Campos personalizados (tipos core: text, number, date, select, multiselect, email, phone, user)
 - [ ] **Cards multi-fluxo** (`CardPresence` M:N) — placeholder visual da aba existe; ver [13-cards-multi-fluxo.md](13-cards-multi-fluxo.md)
 - [x] **Família de cards** (pai/filho com UI completa) — `card-family-tab.tsx` + endpoints de family/parent; ver [17-familia-cards.md](17-familia-cards.md)
