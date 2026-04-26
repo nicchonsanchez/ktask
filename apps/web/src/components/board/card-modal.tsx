@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -117,7 +117,18 @@ function CardModalContent({
   }
 
   const [title, setTitle] = useState(card.title);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setTitle(card.title), [card.title]);
+
+  // Auto-grow do textarea de título: ajusta height pra caber todo o texto
+  // sem scroll. Roda em qualquer mudança do valor (digitar, paste, edição
+  // externa via realtime, mudança de viewport pode disparar reflow).
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title]);
 
   // Optimistic update genérico: sobrescreve campo no cache antes do server
   // confirmar. Em caso de erro, reverte. Linear-style "feels instant".
@@ -214,41 +225,14 @@ function CardModalContent({
           <img src={cover.publicUrl} alt="" className="size-full object-cover" loading="lazy" />
         </div>
       )}
-      {/* Header — inspirado no Ummense mobile: título dominante, código do
-          card como pill abaixo, ícones de ação enxutos à direita. */}
-      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-5 sm:gap-4 sm:px-7 sm:pt-6">
-        <div className="min-w-0 flex-1">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              const v = title.trim();
-              if (v && v !== card.title) titleMut.mutate(v);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-            placeholder="Título do card"
-            className="text-fg w-full bg-transparent text-2xl font-semibold leading-tight tracking-tight focus:outline-none sm:text-[28px]"
-          />
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span
-              className="bg-bg-muted text-fg-muted inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] tracking-wider"
-              title="Código do card"
-            >
-              <Hash size={10} />
-              {cardCode}
-            </span>
-            <span className="text-fg-subtle text-[11px]">· {card.list.name}</span>
-            {isCompleted && (
-              <span className="text-success inline-flex items-center gap-1 text-[11px] font-medium">
-                <Flag size={10} fill="currentColor" />
-                Finalizado
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+      {/* Header — inspirado no Ummense mobile.
+          Mobile (< sm): botões em cima (alinhados à direita) e título embaixo
+            ocupando 100% da largura — pode quebrar em N linhas se for grande.
+          Desktop (sm+): título à esquerda, botões à direita, na mesma linha
+            (título com flex-1 — ainda pode quebrar mas geralmente fica em 1 linha). */}
+      <header className="flex flex-col gap-2 px-5 pb-3 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-7 sm:pt-6">
+        {/* Botões — primeiro no mobile (sm:order-2 manda pra direita no desktop) */}
+        <div className="-mr-1 flex shrink-0 items-center justify-end gap-1 sm:order-2 sm:mr-0 sm:gap-1.5">
           <CardTimerButton cardId={card.id} />
           <DueDatePicker value={card.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
           <CardMenu
@@ -288,6 +272,45 @@ function CardModalContent({
           >
             <X size={16} />
           </button>
+        </div>
+        {/* Título + meta — segundo no mobile, primeiro no desktop (sm:order-1) */}
+        <div className="min-w-0 flex-1 sm:order-1">
+          <textarea
+            ref={titleRef}
+            rows={1}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => {
+              const v = title.trim();
+              if (v && v !== card.title) titleMut.mutate(v);
+            }}
+            onKeyDown={(e) => {
+              // Enter (sem Shift) salva e sai. Shift+Enter mantido livre — mas
+              // título com quebra manual é raro; o auto-grow já cuida do wrap.
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                (e.target as HTMLTextAreaElement).blur();
+              }
+            }}
+            placeholder="Título do card"
+            className="text-fg block w-full resize-none overflow-hidden bg-transparent text-2xl font-semibold leading-tight tracking-tight focus:outline-none sm:text-[28px]"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span
+              className="bg-bg-muted text-fg-muted inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] tracking-wider"
+              title="Código do card"
+            >
+              <Hash size={10} />
+              {cardCode}
+            </span>
+            <span className="text-fg-subtle text-[11px]">· {card.list.name}</span>
+            {isCompleted && (
+              <span className="text-success inline-flex items-center gap-1 text-[11px] font-medium">
+                <Flag size={10} fill="currentColor" />
+                Finalizado
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
