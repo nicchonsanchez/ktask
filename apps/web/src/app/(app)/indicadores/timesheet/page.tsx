@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2, Plus } from 'lucide-react';
 
 import {
@@ -73,9 +73,18 @@ export default function TimesheetPage() {
   };
 
   const summaryQuery = useQuery({ ...timeTrackingQueries.summary(apiFilter) });
-  const timesheetQuery = useQuery({ ...timeTrackingQueries.timesheet(apiFilter) });
   const membersQuery = useQuery({ ...orgMembersQuery });
   const boardsQuery = useQuery({ ...boardsQueries.all() });
+
+  const timesheetQuery = useInfiniteQuery({
+    queryKey: ['time-tracking', 'timesheet-infinite', apiFilter] as const,
+    queryFn: ({ pageParam }) =>
+      timeTrackingQueries.timesheet({ ...apiFilter, cursor: pageParam ?? undefined }).queryFn(),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+  });
+
+  const items = timesheetQuery.data?.pages.flatMap((p) => p.items) ?? [];
 
   async function handleExport() {
     setExporting(true);
@@ -147,7 +156,7 @@ export default function TimesheetPage() {
             <span className="text-fg-muted text-[11px]">
               {timesheetQuery.isLoading
                 ? 'Carregando…'
-                : `${timesheetQuery.data?.items.length ?? 0} entrada${(timesheetQuery.data?.items.length ?? 0) === 1 ? '' : 's'} no período`}
+                : `${items.length} entrada${items.length === 1 ? '' : 's'}${timesheetQuery.hasNextPage ? '+' : ''} no período`}
             </span>
             <button
               type="button"
@@ -166,10 +175,27 @@ export default function TimesheetPage() {
           <div className="flex items-center justify-center py-16">
             <Loader2 size={18} className="text-fg-muted animate-spin" />
           </div>
-        ) : (timesheetQuery.data?.items.length ?? 0) === 0 ? (
+        ) : items.length === 0 ? (
           <EmptyState />
         ) : (
-          <TimesheetTable items={timesheetQuery.data?.items ?? []} />
+          <>
+            <TimesheetTable items={items} />
+            {timesheetQuery.hasNextPage && (
+              <div className="border-border/60 flex justify-center border-t px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => timesheetQuery.fetchNextPage()}
+                  disabled={timesheetQuery.isFetchingNextPage}
+                  className="border-border/70 text-fg hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-60"
+                >
+                  {timesheetQuery.isFetchingNextPage && (
+                    <Loader2 size={12} className="animate-spin" />
+                  )}
+                  Carregar mais
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 
