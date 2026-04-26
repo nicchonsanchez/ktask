@@ -31,12 +31,12 @@ import { Loader2 } from 'lucide-react';
 import {
   boardsQueries,
   completeCard,
-  moveCard,
   moveList,
   sortCardsForBoard,
   type BoardDetail,
   type CardListItem,
 } from '@/lib/queries/boards';
+import { moveCardInFlow } from '@/lib/queries/cards';
 import { CardItem, CardOverlay } from '@/components/board/card-item';
 import { ListColumn, LIST_SORT_PREFIX } from '@/components/board/list-column';
 import { CardModal } from '@/components/board/card-modal';
@@ -284,9 +284,11 @@ export default function BoardPage() {
     }
 
     try {
-      await moveCard(activeId, { toListId, afterCardId });
+      // Multi-fluxo: move por presença no board atual (não no Card.boardId
+      // primário). Permite arrastar cards vinculados em fluxos não-primários
+      // sem afetar a posição em outros fluxos.
+      await moveCardInFlow(activeId, boardId, { toListId, afterCardId });
     } catch (err) {
-      // Rollback em caso de erro
       const msg = err instanceof ApiError ? err.message : 'Erro ao mover card.';
       console.error('[board] move failed:', msg);
       queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
