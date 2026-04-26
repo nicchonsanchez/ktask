@@ -200,6 +200,7 @@ export interface ChecklistItem {
   position: number;
   dueDate: string | null;
   assigneeId: string | null;
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
   doneAt: string | null;
   doneById: string | null;
 }

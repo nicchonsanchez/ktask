@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addChecklistItem,
   cardsQueries,
   createChecklist,
+  orgMembersQuery,
   removeChecklist,
   removeChecklistItem,
   renameChecklist,
@@ -14,9 +15,10 @@ import {
   type Checklist,
   type ChecklistItem,
 } from '@/lib/queries/cards';
-import { Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
+import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
 
 export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
@@ -47,6 +49,8 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
       {card.checklists.map((cl) => (
         <ChecklistSection key={cl.id} checklist={cl} onChange={invalidate} />
       ))}
+      {/* nota: AssigneePicker usa orgMembersQuery diretamente — qualquer membro
+          da Org pode ser atribuído (mesmo critério do LeadPicker do card). */}
 
       {adding ? (
         <form
@@ -293,6 +297,10 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
     mutationFn: () => removeChecklistItem(item.id),
     onSuccess: onChange,
   });
+  const assignMut = useMutation({
+    mutationFn: (userId: string | null) => updateChecklistItem(item.id, { assigneeId: userId }),
+    onSuccess: onChange,
+  });
 
   function saveText() {
     const trimmed = text.trim();
@@ -342,6 +350,13 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
           {item.text}
         </button>
       )}
+
+      <AssigneePicker
+        assignee={item.assignee}
+        onAssign={(userId) => assignMut.mutate(userId)}
+        disabled={assignMut.isPending}
+      />
+
       <button
         type="button"
         onClick={() => removeMut.mutate()}
@@ -353,5 +368,120 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
         <X size={12} />
       </button>
     </li>
+  );
+}
+
+/**
+ * Picker de responsável da tarefa (ChecklistItem). Quando há assignee,
+ * mostra o avatar dele; quando não há, mostra ícone discreto que aparece
+ * só no hover. Click abre popover com membros da Org pra escolher.
+ */
+function AssigneePicker({
+  assignee,
+  onAssign,
+  disabled,
+}: {
+  assignee: ChecklistItem['assignee'];
+  onAssign: (userId: string | null) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const membersQ = useQuery({ ...orgMembersQuery, enabled: open });
+
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className={`inline-flex items-center justify-center rounded-full transition-opacity ${
+          assignee
+            ? 'opacity-100'
+            : 'text-fg-muted hover:text-fg opacity-0 group-hover/item:opacity-100'
+        }`}
+        title={assignee ? `Responsável: ${assignee.name}` : 'Atribuir responsável'}
+        aria-label={assignee ? `Responsável: ${assignee.name}` : 'Atribuir responsável'}
+      >
+        {assignee ? (
+          <UserAvatar
+            name={assignee.name}
+            userId={assignee.id}
+            avatarUrl={assignee.avatarUrl}
+            size="sm"
+          />
+        ) : (
+          <span className="bg-bg-muted hover:bg-bg-emphasis flex size-6 items-center justify-center rounded-full">
+            <UserRoundPlus size={12} />
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute right-0 top-full z-30 mt-1 flex w-56 flex-col overflow-hidden rounded-md border shadow-lg">
+          <div className="border-border/70 px-2 py-1.5">
+            <p className="text-fg text-[12px] font-semibold">Responsável</p>
+            <p className="text-fg-muted text-[10px]">A pessoa será notificada.</p>
+          </div>
+          <div className="max-h-56 overflow-y-auto py-1">
+            {membersQ.isLoading && (
+              <div className="flex items-center justify-center py-2">
+                <Loader2 size={12} className="text-fg-muted animate-spin" />
+              </div>
+            )}
+            {(membersQ.data ?? []).map((m) => {
+              const isCurrent = assignee?.id === m.userId;
+              return (
+                <button
+                  key={m.userId}
+                  type="button"
+                  onClick={() => {
+                    onAssign(isCurrent ? null : m.userId);
+                    setOpen(false);
+                  }}
+                  className="hover:bg-bg-muted flex w-full items-center gap-2 px-2 py-1 text-left text-xs"
+                >
+                  <UserAvatar
+                    name={m.user.name}
+                    userId={m.user.id}
+                    avatarUrl={m.user.avatarUrl}
+                    size="sm"
+                  />
+                  <span className="flex-1 truncate">{m.user.name}</span>
+                  {isCurrent && <span className="text-primary text-[10px]">atual</span>}
+                </button>
+              );
+            })}
+          </div>
+          {assignee && (
+            <button
+              type="button"
+              onClick={() => {
+                onAssign(null);
+                setOpen(false);
+              }}
+              className="border-border/70 text-fg-muted hover:text-danger border-t px-2 py-1.5 text-left text-[11px]"
+            >
+              Remover responsável
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { computeInsertPosition } from '@/common/util/position';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 @Injectable()
 export class ChecklistsService {
@@ -13,7 +14,38 @@ export class ChecklistsService {
     private readonly prisma: PrismaService,
     private readonly access: BoardAccessService,
     private readonly events: EventEmitter2,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Helper: dispara notificação só se o destinatário não for o próprio
+   * autor da ação (evita "você foi atribuído por você mesmo").
+   * Fire-and-forget: erro na notificação não pode quebrar a operação.
+   */
+  private async notifyIfOther(params: {
+    userId: string;
+    actorId: string;
+    organizationId: string;
+    cardId: string;
+    type: 'ASSIGNED' | 'CUSTOM';
+    title: string;
+    body?: string;
+  }) {
+    if (params.userId === params.actorId) return;
+    try {
+      await this.notifications.create({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        entityType: 'Card',
+        entityId: params.cardId,
+      });
+    } catch {
+      // silenciar — notificação não deve bloquear ação principal
+    }
+  }
 
   /** ----------------- Checklists ----------------- */
 
@@ -174,6 +206,7 @@ export class ChecklistsService {
 
     const isToggling = input.isDone !== undefined && input.isDone !== item.isDone;
     const isRenaming = input.text !== undefined && input.text !== item.text;
+    const isReassigning = input.assigneeId !== undefined && input.assigneeId !== item.assigneeId;
 
     const updated = await this.prisma.checklistItem.update({
       where: { id: itemId },
@@ -191,6 +224,58 @@ export class ChecklistsService {
         doneById: isToggling ? (input.isDone ? userId : null) : undefined,
       },
     });
+
+    // Notificações ao responsável (assignee) — sempre que NÃO for o próprio
+    // autor da ação. Cobre 4 casos: atribuído, desatribuído, concluído, editado.
+    if (isReassigning) {
+      if (input.assigneeId) {
+        await this.notifyIfOther({
+          userId: input.assigneeId,
+          actorId: userId,
+          organizationId: tenant.organizationId,
+          cardId: card.id,
+          type: 'ASSIGNED',
+          title: `Tarefa atribuída: ${updated.text}`,
+          body: `Você foi atribuído a uma tarefa no card "${card.title}".`,
+        });
+      }
+      if (item.assigneeId) {
+        await this.notifyIfOther({
+          userId: item.assigneeId,
+          actorId: userId,
+          organizationId: tenant.organizationId,
+          cardId: card.id,
+          type: 'ASSIGNED',
+          title: `Tarefa desatribuída: ${updated.text}`,
+          body: `Você não está mais responsável por essa tarefa no card "${card.title}".`,
+        });
+      }
+    }
+    // Concluída: notifica o responsável atual (se não for o ator)
+    if (isToggling && input.isDone && updated.assigneeId) {
+      await this.notifyIfOther({
+        userId: updated.assigneeId,
+        actorId: userId,
+        organizationId: tenant.organizationId,
+        cardId: card.id,
+        type: 'CUSTOM',
+        title: `Tarefa concluída: ${updated.text}`,
+        body: `Sua tarefa foi marcada como concluída no card "${card.title}".`,
+      });
+    }
+    // Editada (texto): notifica o responsável atual (se não for o ator e
+    // não foi reatribuída no mesmo update — evita 2 notifs simultâneas)
+    if (isRenaming && !isReassigning && updated.assigneeId) {
+      await this.notifyIfOther({
+        userId: updated.assigneeId,
+        actorId: userId,
+        organizationId: tenant.organizationId,
+        cardId: card.id,
+        type: 'CUSTOM',
+        title: `Tarefa editada: ${updated.text}`,
+        body: `Sua tarefa foi atualizada no card "${card.title}".`,
+      });
+    }
 
     if (isToggling) {
       await this.prisma.activity.create({
@@ -233,6 +318,19 @@ export class ChecklistsService {
     await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
 
     await this.prisma.checklistItem.delete({ where: { id: itemId } });
+
+    // Notifica responsável (se houver e não for o autor da ação)
+    if (item.assigneeId) {
+      await this.notifyIfOther({
+        userId: item.assigneeId,
+        actorId: userId,
+        organizationId: tenant.organizationId,
+        cardId: card.id,
+        type: 'CUSTOM',
+        title: `Tarefa excluída: ${item.text}`,
+        body: `Uma tarefa atribuída a você foi excluída do card "${card.title}".`,
+      });
+    }
 
     await this.prisma.activity.create({
       data: {

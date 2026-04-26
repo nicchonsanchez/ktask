@@ -126,7 +126,14 @@ export class CardsService {
         },
         labels: { include: { label: true } },
         checklists: {
-          include: { items: { orderBy: { position: 'asc' } } },
+          include: {
+            items: {
+              orderBy: { position: 'asc' },
+              include: {
+                assignee: { select: { id: true, name: true, avatarUrl: true } },
+              },
+            },
+          },
           orderBy: { position: 'asc' },
         },
         attachments: {
@@ -511,7 +518,14 @@ export class CardsService {
         labels: true,
         members: true,
         checklists: {
-          include: { items: { orderBy: { position: 'asc' } } },
+          include: {
+            items: {
+              orderBy: { position: 'asc' },
+              include: {
+                assignee: { select: { id: true, name: true, avatarUrl: true } },
+              },
+            },
+          },
           orderBy: { position: 'asc' },
         },
         attachments: true,
