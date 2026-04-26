@@ -137,7 +137,7 @@ export function TimerWidget() {
           type="button"
           onClick={handlePlayClick}
           disabled={pending}
-          className="group/timer inline-flex h-9 items-center gap-2 rounded-full bg-emerald-600 pl-1 pr-3 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-2 md:hover:pr-3"
+          className="group/timer inline-flex h-9 items-center gap-0 rounded-full bg-emerald-600 pl-1 pr-1 text-xs font-semibold text-white shadow-sm transition-all hover:gap-2 hover:bg-emerald-700 hover:pr-3 hover:shadow disabled:opacity-60"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
@@ -152,7 +152,7 @@ export function TimerWidget() {
               <Play size={12} fill="currentColor" />
             )}
           </span>
-          <span className="whitespace-nowrap font-mono tabular-nums md:hidden md:group-hover/timer:inline">
+          <span className="hidden whitespace-nowrap font-mono tabular-nums group-hover/timer:inline">
             00:00:00
           </span>
         </button>
@@ -208,15 +208,11 @@ function RunningPill({
 
   const cardTitle = active.card?.title ?? 'Cronômetro sem card';
 
-  // Classes condicionais: quando forceExpanded (popover aberto), parent fica
-  // sempre expandido. Senão, em md+ colapsa e expande no hover.
-  const parentExpand = forceExpanded
-    ? 'gap-2 pr-1'
-    : 'gap-2 pr-1 md:gap-0 md:pr-0 md:hover:gap-2 md:hover:pr-1';
-  const childShow = forceExpanded
-    ? 'inline-flex'
-    : 'inline-flex md:hidden md:group-hover/running:inline-flex';
-  const textShow = forceExpanded ? 'inline' : 'inline md:hidden md:group-hover/running:inline';
+  // Quando forceExpanded (popover aberto), pílula fica sempre aberta.
+  // Senão, ícone-only por padrão, expande só no hover (qualquer viewport).
+  const parentExpand = forceExpanded ? 'gap-2 pr-1' : 'gap-0 pr-0 hover:gap-2 hover:pr-1';
+  const childShow = forceExpanded ? 'inline-flex' : 'hidden group-hover/running:inline-flex';
+  const textShow = forceExpanded ? 'inline' : 'hidden group-hover/running:inline';
 
   return (
     <div

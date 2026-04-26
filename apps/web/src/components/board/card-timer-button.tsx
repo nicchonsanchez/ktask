@@ -98,8 +98,8 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
       disabled={startMut.isPending}
       className={
         isOtherCard
-          ? 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-sky-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-1.5 md:hover:pr-3'
-          : 'group/play inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 pl-1 pr-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-60 md:gap-0 md:pr-1 md:hover:gap-1.5 md:hover:pr-3'
+          ? 'group/play inline-flex h-8 items-center gap-0 rounded-full bg-sky-600 pl-1 pr-1 text-[12px] font-semibold text-white shadow-sm transition-all hover:gap-1.5 hover:bg-sky-700 hover:pr-3 hover:shadow disabled:opacity-60'
+          : 'group/play inline-flex h-8 items-center gap-0 rounded-full bg-emerald-600 pl-1 pr-1 text-[12px] font-semibold text-white shadow-sm transition-all hover:gap-1.5 hover:bg-emerald-700 hover:pr-3 hover:shadow disabled:opacity-60'
       }
       title={
         isOtherCard
@@ -115,7 +115,7 @@ export function CardTimerButton({ cardId }: { cardId: string }) {
           <Play size={11} fill="currentColor" />
         )}
       </span>
-      <span className="whitespace-nowrap font-mono tabular-nums md:hidden md:group-hover/play:inline">
+      <span className="hidden whitespace-nowrap font-mono tabular-nums group-hover/play:inline">
         00:00:00
       </span>
     </button>
@@ -146,14 +146,11 @@ function RunningButton({
 
   const cardTitle = active.card?.title ?? 'Cronômetro sem card';
 
-  // Quando popoverOpen, força expansão. Senão, em md+ colapsa e expande no hover.
-  const parentExpand = popoverOpen
-    ? 'gap-1.5 pr-1'
-    : 'gap-1.5 pr-1 md:gap-0 md:pr-0 md:hover:gap-1.5 md:hover:pr-1';
-  const childShow = popoverOpen
-    ? 'inline-flex'
-    : 'inline-flex md:hidden md:group-hover/running:inline-flex';
-  const textShow = popoverOpen ? 'inline' : 'inline md:hidden md:group-hover/running:inline';
+  // Quando popoverOpen, pílula sempre aberta. Senão, ícone-only por padrão,
+  // expande só no hover (qualquer viewport).
+  const parentExpand = popoverOpen ? 'gap-1.5 pr-1' : 'gap-0 pr-0 hover:gap-1.5 hover:pr-1';
+  const childShow = popoverOpen ? 'inline-flex' : 'hidden group-hover/running:inline-flex';
+  const textShow = popoverOpen ? 'inline' : 'hidden group-hover/running:inline';
 
   return (
     <div className="relative inline-flex">
