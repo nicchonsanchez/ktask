@@ -186,8 +186,8 @@ function CardInner({ card }: { card: CardListItem }) {
       )}
 
       {/* Avatares — última linha, alinhados à direita pra equilíbrio visual.
-          Se houver líder, ele fica destacado: avatar maior + ring violet
-          + gap maior em relação aos outros (que continuam empilhados). */}
+          Se houver líder, ele fica à ESQUERDA dos demais, com mesmo tamanho
+          mas com ring violet pra distinção. Outros membros empilhados à direita. */}
       {hasMembers && (
         <div className="flex items-center justify-end gap-2 pt-0.5">
           {(() => {
@@ -196,6 +196,16 @@ function CardInner({ card }: { card: CardListItem }) {
             const overflow = card.members.length - others.length - (lead ? 1 : 0);
             return (
               <>
+                {lead && (
+                  <UserAvatar
+                    name={lead.user.name}
+                    userId={lead.user.id}
+                    avatarUrl={lead.user.avatarUrl}
+                    size="sm"
+                    title={`${lead.user.name} (líder)`}
+                    className="ring-primary ring-offset-bg-subtle ring-2 ring-offset-1"
+                  />
+                )}
                 {others.length > 0 && (
                   <div className="flex -space-x-1.5">
                     {others.map((m) => (
@@ -214,16 +224,6 @@ function CardInner({ card }: { card: CardListItem }) {
                       </span>
                     )}
                   </div>
-                )}
-                {lead && (
-                  <UserAvatar
-                    name={lead.user.name}
-                    userId={lead.user.id}
-                    avatarUrl={lead.user.avatarUrl}
-                    size="md"
-                    title={`${lead.user.name} (líder)`}
-                    className="ring-primary ring-offset-bg-subtle ring-2 ring-offset-1"
-                  />
                 )}
               </>
             );
