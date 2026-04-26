@@ -681,7 +681,14 @@ function CardMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="border-border bg-bg absolute right-0 top-full z-20 mt-1 flex w-56 flex-col rounded-md border p-1 text-xs shadow-lg">
+          <div
+            className={
+              // Mobile: fixed (evita corte). Desktop: ancorado ao trigger.
+              'border-border bg-bg z-20 flex flex-col rounded-md border p-1 text-xs shadow-lg ' +
+              'fixed inset-x-2 top-[4.5rem]' +
+              'sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1 sm:w-56'
+            }
+          >
             <MenuItem
               label="Duplicar card"
               icon={<Copy size={14} />}

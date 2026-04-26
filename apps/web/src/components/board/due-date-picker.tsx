@@ -159,7 +159,15 @@ export function DatePickerPopover({
   }
 
   return (
-    <div className="border-border bg-bg absolute right-0 top-full z-40 mt-1.5 flex w-[min(18rem,calc(100vw-1rem))] flex-col rounded-md border p-3 shadow-lg">
+    <div
+      className={
+        // Mobile (< sm): fixed na viewport pra evitar corte quando o trigger
+        // esta proximo da borda. Desktop: ancorado ao trigger.
+        'border-border bg-bg z-40 flex flex-col rounded-md border p-3 shadow-lg ' +
+        'fixed inset-x-2 top-[4.5rem]' +
+        'sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-[min(18rem,calc(100vw-1rem))]'
+      }
+    >
       <p className="text-fg-muted mb-2 text-[11px] font-semibold">Data simples</p>
 
       {/* Atalhos */}
