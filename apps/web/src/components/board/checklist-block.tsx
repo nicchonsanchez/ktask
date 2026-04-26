@@ -21,6 +21,7 @@ import { CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'luc
 import { Button } from '@ktask/ui';
 import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
+import { DatePickerPopover } from './due-date-picker';
 
 export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
   const queryClient = useQueryClient();
@@ -477,32 +478,6 @@ function DueDatePicker({
     };
   }, [open]);
 
-  function setToday() {
-    const d = new Date();
-    d.setHours(23, 59, 0, 0);
-    onChange(d.toISOString());
-    setOpen(false);
-  }
-  function setTomorrow() {
-    const d = new Date(Date.now() + 24 * 60 * 60_000);
-    d.setHours(23, 59, 0, 0);
-    onChange(d.toISOString());
-    setOpen(false);
-  }
-  function clear() {
-    onChange(null);
-    setOpen(false);
-  }
-  function setExact(value: string) {
-    if (!value) return;
-    // value vem como YYYY-MM-DD; interpretamos no fuso local com 23:59
-    const [y, m, d] = value.split('-').map(Number);
-    if (!y || !m || !d) return;
-    const dt = new Date(y, m - 1, d, 23, 59, 0, 0);
-    onChange(dt.toISOString());
-    setOpen(false);
-  }
-
   const display = dueDate ? formatDueLabel(dueDate) : null;
 
   return (
@@ -530,37 +505,14 @@ function DueDatePicker({
         )}
       </button>
       {open && (
-        <div className="border-border bg-bg absolute right-0 top-full z-30 mt-1 flex w-56 flex-col overflow-hidden rounded-md border p-2 shadow-lg">
-          <div className="mb-2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={setToday}
-              className="bg-primary text-primary-fg hover:bg-primary-hover flex-1 rounded-md px-2 py-1 text-[11px] font-medium"
-            >
-              Hoje
-            </button>
-            <button
-              type="button"
-              onClick={setTomorrow}
-              className="border-border text-fg hover:bg-bg-muted flex-1 rounded-md border px-2 py-1 text-[11px]"
-            >
-              Amanhã
-            </button>
-            <button
-              type="button"
-              onClick={clear}
-              className="border-border text-fg hover:bg-bg-muted flex-1 rounded-md border px-2 py-1 text-[11px]"
-            >
-              Sem data
-            </button>
-          </div>
-          <input
-            type="date"
-            defaultValue={dueDate ? new Date(dueDate).toISOString().slice(0, 10) : ''}
-            onChange={(e) => setExact(e.target.value)}
-            className="border-border bg-bg w-full rounded-md border px-2 py-1 text-xs"
-          />
-        </div>
+        <DatePickerPopover
+          value={dueDate}
+          onCommit={(iso) => {
+            onChange(iso);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );

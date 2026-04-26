@@ -115,7 +115,7 @@ export function DueDatePicker({
   );
 }
 
-function DatePickerPopover({
+export function DatePickerPopover({
   value,
   onCommit,
   onClose,
