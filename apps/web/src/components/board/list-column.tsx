@@ -18,6 +18,7 @@ import {
 } from '@/lib/queries/boards';
 import { useConfirm } from '@/components/ui/dialogs';
 import { ArchiveListDialog } from './archive-list-dialog';
+import { ColumnAutomationsDialog } from './column-automations-dialog';
 
 /** Prefixo usado nos IDs de colunas no DndContext pra não colidir com cardIds. */
 export const LIST_SORT_PREFIX = 'col:';
@@ -72,6 +73,7 @@ export function ListColumn({
   });
 
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [automationsOpen, setAutomationsOpen] = useState(false);
 
   function saveName() {
     const trimmed = name.trim();
@@ -151,15 +153,16 @@ export function ListColumn({
             {list.cards.length}
           </span>
         </div>
-        {/* Robô = automações da coluna. Sempre visível (não é só hover) — ainda
-            placeholder; popup com listagem/criação chega na Fase 2 (ver
-            tarefas-md/23-automacoes-coluna.md). */}
+        {/* Robô = automações da coluna. Sempre visível (não é só hover).
+            Abre modal com 3 tabs (Detalhes/Automações/Avançado). Engine
+            ainda não está pronta — catálogo das 18 automações fica
+            disabled "em breve" (ver tarefas-md/23-automacoes-coluna.md). */}
         <button
           type="button"
-          disabled
-          aria-label="Automações da coluna (em breve)"
-          title="Automações — em breve (Fase 2)"
-          className="text-fg-muted hover:bg-bg-muted hover:text-primary inline-flex shrink-0 cursor-not-allowed items-center justify-center rounded p-1 opacity-60"
+          onClick={() => setAutomationsOpen(true)}
+          aria-label="Automações da coluna"
+          title="Automações"
+          className="text-fg-muted hover:bg-bg-muted hover:text-primary inline-flex shrink-0 items-center justify-center rounded p-1"
         >
           <Bot size={14} />
         </button>
@@ -267,6 +270,11 @@ export function ListColumn({
         onConfirm={(action, targetListId) =>
           archiveMut.mutate({ cardsAction: action, targetListId })
         }
+      />
+      <ColumnAutomationsDialog
+        list={list}
+        open={automationsOpen}
+        onOpenChange={setAutomationsOpen}
       />
     </div>
   );
