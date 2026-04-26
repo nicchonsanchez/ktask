@@ -63,7 +63,7 @@ export default function BoardPage() {
   const searchNorm = search.trim().toLowerCase();
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
-  const { onlineUserIds } = useRealtimeBoard({
+  const { onlineUserIds, connectionState } = useRealtimeBoard({
     boardId,
     organizationId: boardQuery.data?.organizationId ?? null,
   });
@@ -321,6 +321,18 @@ export default function BoardPage() {
         onFiltersChange={setFilters}
         onlineUserIds={onlineUserIds}
       />
+
+      {connectionState !== 'connected' && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+        >
+          <span aria-hidden className="size-2 animate-pulse rounded-full bg-amber-500" />
+          {connectionState === 'offline'
+            ? 'Você está offline — alterações vão sincronizar quando a conexão voltar.'
+            : 'Reconectando ao servidor...'}
+        </div>
+      )}
 
       <DndContext
         sensors={sensors}
