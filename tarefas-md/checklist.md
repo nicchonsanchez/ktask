@@ -154,7 +154,7 @@ Ver detalhes em `06-roadmap-mvp.md`.
 #### Prefigurados pendentes (UI presente, lógica em outra tarefa)
 
 - [x] Busca por palavra no header do fluxo (filtro client-side por título)
-- [ ] Botão "Filtrar" no header do fluxo (`disabled`) — popover de filtros avançados
+- [x] Botão "Filtrar" no header do fluxo — popover com filtros avançados (entregue)
 
 ### Interação
 
@@ -167,9 +167,9 @@ Ver detalhes em `06-roadmap-mvp.md`.
 
 - [x] Gateway Socket.IO com JWT no handshake (`realtime.gateway.ts`)
 - [x] Canais `board:{id}`, `user:{id}` (auditar cobertura completa numa sessão dedicada)
-- [ ] Presença no quadro (avatares online)
+- [x] Presença no quadro (avatares online com bolinha verde — commit 8984129)
 - [x] Eventos: card.created/moved/updated, list._, comment._, notification.\* (auditar `events.types.ts` + emissões)
-- [ ] Reconexão com re-sync (`GET /boards/{id}?since={ts}`)
+- [x] Reconexão com re-sync (invalidação completa em vez de delta — commit 368df58)
 
 ### Qualidade
 
@@ -249,7 +249,7 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 - [x] **Time tracking** (cronômetro de cards + entradas manuais + histórico) — módulo `time-tracking` + `timer-widget` + popover ver [18-time-tracking.md](18-time-tracking.md)
 - [ ] **Aprovações por cliente** (role REVIEWER + branching) — ver [14-aprovacoes-cliente.md](14-aprovacoes-cliente.md)
 - [ ] SLA por lista + alertas
-- [ ] Templates de quadro/card/checklist
+- [~] Templates de checklist (entregue commit ae2af26); templates de quadro/card pendentes
 - [ ] View Lista (tabela)
 - [ ] API Tokens + endpoints REST documentados (OpenAPI)
 
@@ -291,7 +291,7 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 
 - [ ] **Subdomínio dev online (`dev.ktask.agenciakharis.com.br`)** — ambiente de teste online separado da prod. Envolve: DNS Cloudflare (registro A), Caddyfile na VM Hetzner, docker-compose.prod.yml estendido com containers de dev, banco `ktask_dev` separado, .env.dev, GitHub Actions workflow novo (deploy em push pra branch `dev`). Bate em SSH + Caddyfile prod + secrets — exige user acordado pra acompanhar. Estimativa: 2-3h dedicadas.
 - [ ] **Recuperação de senha por e-mail** — precisa SMTP configurado (Mailpit em dev, SES ou SMTP real em prod). Decidir provedor antes.
-- [ ] **Bloqueio após 10 tentativas (IP + conta)** — middleware de rate-limit no AuthController.
+- [x] **Bloqueio após 10 tentativas (IP + conta)** — IP via Throttle + conta via failedLoginCount/lockedUntil (commits 9294657)
 - [ ] **Decisões pendentes do checklist** (2FA OWNER, política de senha, primeiro OWNER, Analytics, AWS region, Vercel plan, Sentry, WhatsApp Cloud API).
 
 ---
