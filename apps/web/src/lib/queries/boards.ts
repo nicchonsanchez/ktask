@@ -38,7 +38,7 @@ export interface CardListItem {
   coverImageUrl: string | null;
   members: Array<{ user: { id: string; name: string; avatarUrl: string | null } }>;
   labels: Array<{ label: { id: string; name: string; color: string } }>;
-  _count: { comments: number; attachments: number; checklists: number };
+  _count: { comments: number; attachments: number; checklists: number; approvals: number };
 }
 
 export interface ListWithCards {
@@ -83,7 +83,7 @@ export interface CompletedCardItem {
   list: { id: string; name: string; isArchived: boolean };
   completedBy: { id: string; name: string; email: string; avatarUrl: string | null } | null;
   labels: Array<{ label: { id: string; name: string; color: string } }>;
-  _count: { comments: number; attachments: number; checklists: number };
+  _count: { comments: number; attachments: number; checklists: number; approvals: number };
 }
 
 export interface CompletedCardsPage {

@@ -2,7 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Calendar, MessageSquare, CheckSquare, Paperclip } from 'lucide-react';
+import { Calendar, MessageSquare, CheckSquare, Paperclip, ShieldCheck } from 'lucide-react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
@@ -95,8 +95,9 @@ function CardInner({ card }: { card: CardListItem }) {
   const hasCover = Boolean(card.coverImageUrl);
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;
+  const hasPendingApproval = card._count.approvals > 0;
   const hasMembers = card.members.length > 0;
-  const hasMetaRow = due.show || hasCounters;
+  const hasMetaRow = due.show || hasCounters || hasPendingApproval;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -150,6 +151,16 @@ function CardInner({ card }: { card: CardListItem }) {
                   day: '2-digit',
                   month: 'short',
                 })}
+            </span>
+          )}
+
+          {hasPendingApproval && (
+            <span
+              className="bg-warning-subtle text-warning border-warning/40 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium"
+              title="Aprovação pendente"
+            >
+              <ShieldCheck size={11} />
+              Aprovação
             </span>
           )}
 

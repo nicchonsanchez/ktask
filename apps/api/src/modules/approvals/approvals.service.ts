@@ -33,11 +33,12 @@ import { WhatsAppHelper } from './whatsapp.helper';
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
 
 /**
- * Tempo de validade do token público do reviewer. 7 dias bate com o
- * caso de uso típico (cliente recebe link, esquece, lembra dias depois).
- * Após expirar, a página pública responde 410 Gone.
+ * Tempo de validade do token público do reviewer. 14 dias cobre folgas,
+ * férias curtas e clientes que respondem em ritmo "ver no fim de semana".
+ * Após expirar, a página pública responde 410 Gone — quem pediu pode
+ * criar nova aprovação.
  */
-const REVIEWER_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REVIEWER_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 interface SideEffectsShape {
   movedFromListId?: string;

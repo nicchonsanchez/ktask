@@ -70,7 +70,10 @@ export function ArchivedDrawer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-md p-0">
+      <DialogContent
+        hideClose
+        className="flex h-[80vh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-md p-0"
+      >
         <header className="border-border/60 flex shrink-0 items-center justify-between border-b px-5 py-3">
           <div className="flex items-center gap-2">
             <Archive size={16} className="text-fg-muted" />

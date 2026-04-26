@@ -89,7 +89,10 @@ export function ColumnAutomationsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[80vh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-md p-0">
+        <DialogContent
+          hideClose
+          className="flex h-[80vh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-md p-0"
+        >
           <header className="border-border/60 flex shrink-0 items-center justify-between border-b px-5 py-3">
             <div className="flex min-w-0 items-center gap-2">
               <Layers size={16} className="text-fg-muted shrink-0" />
@@ -723,7 +726,10 @@ function CreateAutomationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : handleClose())}>
-      <DialogContent className="flex h-[85vh] w-[calc(100vw-2rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-md p-0">
+      <DialogContent
+        hideClose
+        className="flex h-[85vh] w-[calc(100vw-2rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-md p-0"
+      >
         <header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-5 py-3">
           {step === 'form' && !isEdit ? (
             <button

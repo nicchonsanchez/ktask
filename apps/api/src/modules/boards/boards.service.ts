@@ -201,7 +201,12 @@ export class BoardsService {
                       labels: { include: { label: true } },
                       cover: { select: { id: true, storageKey: true, mimeType: true } },
                       _count: {
-                        select: { comments: true, attachments: true, checklists: true },
+                        select: {
+                          comments: true,
+                          attachments: true,
+                          checklists: true,
+                          approvals: { where: { status: 'PENDING' } },
+                        },
                       },
                     },
                   },
@@ -286,7 +291,14 @@ export class BoardsService {
         card: {
           include: {
             labels: { include: { label: true } },
-            _count: { select: { comments: true, attachments: true, checklists: true } },
+            _count: {
+              select: {
+                comments: true,
+                attachments: true,
+                checklists: true,
+                approvals: { where: { status: 'PENDING' } },
+              },
+            },
           },
         },
       },
