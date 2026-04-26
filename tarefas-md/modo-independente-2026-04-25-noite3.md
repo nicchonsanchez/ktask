@@ -56,3 +56,51 @@ Resposta às 6 perguntas-âncora:
 2026-04-25T21:50 — Etapa 3 (frontend) concluída (commit `a4220ac`). HomePage, TarefasPanel (4 seções com colapsar + barra de progresso + atalho "atualizar todas"), TarefaRow (toggle otimista, formatador de prazo BRT), CardsRecentesCarousel (scroll-x com setas dinâmicas), MiniCalendar (grid 6 semanas + pontos por dia), EventosPanel (placeholder Fase 2). Topbar atualizada na etapa 1. Tipos consistentes entre lib/queries/me.ts e backend.
 
 2026-04-25T21:50 — Próximo: validar deploy. Se subir, etapa 4 (interações de adicionar tarefa inline + filtro do MiniCalendar) e backlog. Pipeline rodando agora.
+
+2026-04-25T22:25 — Backlog em curso. Capa de card entregue (commit `463b78c` — UI no modal apenas; capa no kanban requer relation Prisma extra, fica como follow-up). Busca por palavra no header do board entregue (commit `913ff72` — filtro client-side por title.includes case-insensitive). Bloqueio 10 tentativas no /login entregue (commit `2c42058` — `@Throttle` + APP_GUARD ThrottlerGuard).
+
+2026-04-25T22:25 — Detectei: outros commits no main (`02ec101 perms`, `0c2a27f attachments`, `1738e17 comments` — não fui eu, sessão paralela ou ajustes do user). Histórico OK, fast-forward sem conflito. Lint local passa.
+
+2026-04-25T22:25 — Próximo: Etapa 4 da home — clicar num dia do MiniCalendar filtra a lista de tarefas pela data correspondente. State `selectedDay` na HomePage, prop pra MiniCalendar e TarefasPanel.
+
+2026-04-25T22:35 — Etapa 4 entregue (commit `0dc2f84`). MiniCalendar interativo: clicar num dia destaca + filtra a lista de tarefas; click no mesmo dia desativa.
+
+2026-04-25T22:55 — Labels CRUD entregue: backend (`22318ae` — endpoints GET/POST/PATCH/DELETE) + UI (`bc2a730` — `LabelPicker` com busca, edição inline, paleta de 16 cores, criar nova).
+
+2026-04-25T22:55 — Todos os processos encerrados. Registro de 22:55.
+
+## Relatório resumido da sessão
+
+11 commits entregues nesta janela:
+
+| Sha       | Resumo                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| `2780ce5` | Ativação + plano da home (doc 22)                                                                               |
+| `abd2f60` | Auditoria do checklist + lembretes                                                                              |
+| `8eb4c1a` | Etapa 1 — `/empresa` (home antiga preservada)                                                                   |
+| `0611d95` | Etapa 2 — backend (migration FK + index + CardVisit + módulo `/me`)                                             |
+| `a4220ac` | Etapa 3 — HomePage + 5 componentes (TarefasPanel, TarefaRow, CardsRecentesCarousel, MiniCalendar, EventosPanel) |
+| `8270ce4` | Heartbeat                                                                                                       |
+| `463b78c` | Capa de card no modal                                                                                           |
+| `913ff72` | Busca por palavra no header do board                                                                            |
+| `2c42058` | Rate-limit 10 tentativas em 15min no `/login`                                                                   |
+| `0dc2f84` | Etapa 4 — MiniCalendar interativo (filtra tarefas)                                                              |
+| `22318ae` | Labels CRUD backend                                                                                             |
+| `bc2a730` | Labels CRUD UI (`LabelPicker`)                                                                                  |
+
+## Pendências importantes pra próxima janela
+
+1. **`dev.ktask.agenciakharis.com.br`** — DNS + Caddyfile + GitHub Actions (precisa user acompanhando — bate na denylist por mexer em prod)
+2. **Recuperação de senha por e-mail** — precisa SMTP configurado (decisão pendente: SES, Mailpit, etc.)
+3. **Capa de card no kanban** — requer relation Prisma `Card.cover Attachment?` + migration extra
+4. **Bloqueio por conta no /login** — só por IP foi feito; por-conta exige contador em Redis ou DB
+5. **Adicionar tarefa inline na seção Hoje da home** — UX precisa decidir qual checklist receber a nova tarefa
+6. **"Filtrar" no header do board (popover de filtros avançados)** — placeholder ainda disabled
+7. **Real-time** — gateway/canais já existem, falta `Reconexão com re-sync` e `Presença no quadro`
+
+## Pulos confirmados (decisões pendentes do user)
+
+- Recuperação de senha (SMTP)
+- Real-time completo (sessão própria)
+- Eventos/agenda da home (Fase 2)
+- Implantar dev online (precisa user acordado)

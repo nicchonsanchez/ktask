@@ -129,10 +129,10 @@ Ver detalhes em `06-roadmap-mvp.md`.
 - [x] Descrição JSON (ProseMirror-ready, editor simples no MVP)
 - [x] Atribuir/remover membros
 - [x] Adicionar/remover labels
-- [ ] Labels CRUD (service criado, falta controller de gerenciamento)
+- [x] Labels CRUD — módulo `labels` (controller + service) + `LabelPicker` UI
 - [x] Checklists CRUD (módulo `checklists` + `ChecklistBlock` UI)
 - [x] Anexos com URL pré-assinada S3/MinIO (módulo `attachments` + `storage` com MinIO)
-- [ ] Capa de card (schema tem `coverAttachmentId` mas UI não usa)
+- [x] Capa de card — botão "Definir como capa" no `AttachmentRow` + banner no card-modal (capa no kanban fica como follow-up — requer relation Prisma)
 - [x] Duplicar card (`DuplicateCardDialog` + `duplicateCard` service)
 - [x] Activity log em todas operações (BOARD_CREATED, CARD_MOVED, etc)
 
