@@ -1,4 +1,6 @@
 import { ImageResponse } from 'next/og';
+import { readFile } from 'fs/promises';
+import path from 'path';
 
 /**
  * OG image dinâmica do KTask.
@@ -7,15 +9,22 @@ import { ImageResponse } from 'next/og';
  * Twitter summary_large_image. WhatsApp / LinkedIn / Discord / Slack /
  * Telegram / Facebook usam este preview ao desumbnail um link.
  *
- * Tudo aqui é JSX-flex (subset de CSS suportado por @vercel/og).
- * Reaproveita as cores do design system: violet primário + teal accent.
+ * Reaproveita a identidade visual real do KTask: lockup oficial
+ * (`/brand/lockup.png`) sobre fundo violet escuro da marca, com tagline
+ * em bold + assinatura Kharis no rodapé.
  */
 
 export const alt = 'KTask — Sistema de gestão de tarefas e fluxos da Kharis';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-export default function OpengraphImage() {
+export default async function OpengraphImage() {
+  // Lê o lockup do disco no momento da geração e embute como data URL.
+  // Funciona em Node runtime (default do App Router); evita dependência
+  // de URL absoluta (que pode não estar configurada em todos ambientes).
+  const lockupBuffer = await readFile(path.join(process.cwd(), 'public/brand/lockup.png'));
+  const lockupSrc = `data:image/png;base64,${lockupBuffer.toString('base64')}`;
+
   return new ImageResponse(
     <div
       style={{
@@ -23,100 +32,100 @@ export default function OpengraphImage() {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        padding: '80px',
-        background: 'linear-gradient(135deg, #6D28D9 0%, #4C1D95 60%, #1E1B4B 100%)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '64px 80px',
+        background: '#1E1B4B', // tom violet-950 do design system, casa com o lockup
         color: '#FFFFFF',
         fontFamily: 'sans-serif',
+        position: 'relative',
       }}
     >
-      {/* Top: brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-        <div
-          style={{
-            width: 88,
-            height: 88,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 20,
-            background: '#FFFFFF',
-            color: '#6D28D9',
-            fontSize: 56,
-            fontWeight: 900,
-            letterSpacing: '-0.05em',
-          }}
-        >
-          K
-        </div>
-        <div
-          style={{
-            fontSize: 36,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            opacity: 0.85,
-          }}
-        >
-          KTask
-        </div>
-      </div>
-
-      {/* Middle: tagline */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <div
-          style={{
-            fontSize: 84,
-            fontWeight: 800,
-            letterSpacing: '-0.03em',
-            lineHeight: 1.05,
-            maxWidth: 920,
-          }}
-        >
-          Gestão de tarefas e fluxos
-        </div>
-        <div
-          style={{
-            fontSize: 32,
-            fontWeight: 400,
-            opacity: 0.8,
-            lineHeight: 1.3,
-            maxWidth: 920,
-          }}
-        >
-          Kanban, automações, cronômetro e colaboração em tempo real.
-        </div>
-      </div>
-
-      {/* Bottom: brand stripe */}
+      {/* Acento decorativo: bolha teal grande borrada no canto */}
       <div
         style={{
+          position: 'absolute',
+          top: -160,
+          right: -160,
+          width: 480,
+          height: 480,
+          borderRadius: 999,
+          background: '#2EE8B8',
+          opacity: 0.12,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: -200,
+          left: -100,
+          width: 460,
+          height: 460,
+          borderRadius: 999,
+          background: '#7C3AED',
+          opacity: 0.18,
+        }}
+      />
+
+      {/* Lockup oficial centralizado */}
+      <img
+        src={lockupSrc}
+        alt="KTask"
+        width={760}
+        style={{ marginBottom: 40, objectFit: 'contain' }}
+      />
+
+      {/* Tagline */}
+      <div
+        style={{
+          fontSize: 44,
+          fontWeight: 700,
+          letterSpacing: '-0.02em',
+          lineHeight: 1.15,
+          textAlign: 'center',
+          maxWidth: 980,
+          color: '#FFFFFF',
+        }}
+      >
+        Gestão de tarefas e fluxos operacionais
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 400,
+          opacity: 0.7,
+          textAlign: 'center',
+          marginTop: 18,
+          maxWidth: 920,
+        }}
+      >
+        Kanban, automações, cronômetro e colaboração em tempo real.
+      </div>
+
+      {/* Rodapé com assinatura */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 36,
+          left: 0,
+          right: 0,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
+          justifyContent: 'center',
+          gap: 12,
+          fontSize: 20,
+          opacity: 0.55,
         }}
       >
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            fontSize: 24,
-            opacity: 0.7,
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            background: '#2EE8B8',
           }}
-        >
-          <div
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: 6,
-              background: '#2EE8B8',
-            }}
-          />
-          <span>Kharis · ktask.agenciakharis.com.br</span>
-        </div>
-        <div style={{ fontSize: 22, opacity: 0.55 }}>Sistema interno</div>
+        />
+        <span>Sistema interno · Kharis</span>
       </div>
     </div>,
     { ...size },
