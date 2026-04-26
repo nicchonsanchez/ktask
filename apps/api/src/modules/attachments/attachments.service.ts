@@ -96,20 +96,24 @@ export class AttachmentsService {
     });
     const hydrated = { ...attachment, publicUrl: this.storage.publicUrlFor(attachment.storageKey) };
 
-    await this.prisma.activity.create({
-      data: {
-        organizationId: tenant.organizationId,
-        boardId: card.boardId,
-        cardId,
-        actorId: userId,
-        type: 'ATTACHMENT_ADDED',
-        payload: {
-          attachmentId: attachment.id,
-          fileName: attachment.fileName,
-          commentId: attachment.commentId,
+    // Activity ATTACHMENT_ADDED só pra anexos diretos do card (na seção de anexos).
+    // Anexo vinculado a um comentário NÃO gera entrada na timeline — o COMMENT_ADDED
+    // já está lá representando o evento, e o anexo aparece visualmente no comentário.
+    if (!attachment.commentId) {
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId: card.boardId,
+          cardId,
+          actorId: userId,
+          type: 'ATTACHMENT_ADDED',
+          payload: {
+            attachmentId: attachment.id,
+            fileName: attachment.fileName,
+          },
         },
-      },
-    });
+      });
+    }
 
     this.events.emit(EVENT_NAMES.CARD_UPDATED, {
       boardId: card.boardId,
@@ -147,16 +151,20 @@ export class AttachmentsService {
 
     await this.prisma.attachment.delete({ where: { id: attachmentId } });
 
-    await this.prisma.activity.create({
-      data: {
-        organizationId: tenant.organizationId,
-        boardId: attachment.card.boardId,
-        cardId: attachment.cardId,
-        actorId: userId,
-        type: 'ATTACHMENT_REMOVED',
-        payload: { attachmentId, fileName: attachment.fileName },
-      },
-    });
+    // Mesma logica do create: anexo vinculado a comentario nao polui a timeline
+    // do card com ATTACHMENT_REMOVED. Apenas anexos diretos do card geram activity.
+    if (!attachment.commentId) {
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId: attachment.card.boardId,
+          cardId: attachment.cardId,
+          actorId: userId,
+          type: 'ATTACHMENT_REMOVED',
+          payload: { attachmentId, fileName: attachment.fileName },
+        },
+      });
+    }
 
     this.events.emit(EVENT_NAMES.CARD_UPDATED, {
       boardId: attachment.card.boardId,
