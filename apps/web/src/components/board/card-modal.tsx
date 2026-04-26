@@ -38,6 +38,7 @@ import { TeamPicker } from './team-picker';
 import { ChecklistBlock } from './checklist-block';
 import { AttachmentsBlock } from './attachments-block';
 import { DueDatePicker } from './due-date-picker';
+import { CardTimerButton } from './card-timer-button';
 import { DuplicateCardDialog } from './duplicate-card-dialog';
 import { CreateChildCardDialog } from './create-child-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
@@ -247,7 +248,8 @@ function CardModalContent({
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <CardTimerButton cardId={card.id} />
           <DueDatePicker value={card.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
           <CardMenu
             cardId={card.id}

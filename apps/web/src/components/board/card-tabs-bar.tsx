@@ -25,7 +25,7 @@ export function CardTabsBar({ tab, onChange }: { tab: CardTab; onChange: (t: Car
     <nav
       role="tablist"
       aria-label="Seções do card"
-      className="border-border/60 scrollbar-none flex shrink-0 items-stretch gap-1 overflow-x-auto border-b px-3 sm:px-5"
+      className="border-border/60 scrollbar-none flex shrink-0 items-stretch gap-1 overflow-x-auto overflow-y-hidden border-b px-3 sm:px-5"
     >
       {TABS.map((t) => {
         const active = tab === t.key;

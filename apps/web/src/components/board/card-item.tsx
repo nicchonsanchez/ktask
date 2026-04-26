@@ -174,24 +174,49 @@ function CardInner({ card }: { card: CardListItem }) {
         </div>
       )}
 
-      {/* Avatares — última linha, alinhados à direita pra equilíbrio visual */}
+      {/* Avatares — última linha, alinhados à direita pra equilíbrio visual.
+          Se houver líder, ele fica destacado: avatar maior + ring violet
+          + gap maior em relação aos outros (que continuam empilhados). */}
       {hasMembers && (
-        <div className="flex justify-end -space-x-1.5 pt-0.5">
-          {card.members.slice(0, 4).map((m) => (
-            <UserAvatar
-              key={m.user.id}
-              name={m.user.name}
-              userId={m.user.id}
-              avatarUrl={m.user.avatarUrl}
-              size="sm"
-              stacked
-            />
-          ))}
-          {card.members.length > 4 && (
-            <span className="border-bg bg-bg-muted text-fg-muted inline-flex size-6 shrink-0 select-none items-center justify-center rounded-full border-2 text-[10px] font-semibold">
-              +{card.members.length - 4}
-            </span>
-          )}
+        <div className="flex items-center justify-end gap-2 pt-0.5">
+          {(() => {
+            const lead = card.leadId ? card.members.find((m) => m.user.id === card.leadId) : null;
+            const others = card.members.filter((m) => m.user.id !== lead?.user.id).slice(0, 3);
+            const overflow = card.members.length - others.length - (lead ? 1 : 0);
+            return (
+              <>
+                {others.length > 0 && (
+                  <div className="flex -space-x-1.5">
+                    {others.map((m) => (
+                      <UserAvatar
+                        key={m.user.id}
+                        name={m.user.name}
+                        userId={m.user.id}
+                        avatarUrl={m.user.avatarUrl}
+                        size="sm"
+                        stacked
+                      />
+                    ))}
+                    {overflow > 0 && (
+                      <span className="border-bg bg-bg-muted text-fg-muted inline-flex size-6 shrink-0 select-none items-center justify-center rounded-full border-2 text-[10px] font-semibold">
+                        +{overflow}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {lead && (
+                  <UserAvatar
+                    name={lead.user.name}
+                    userId={lead.user.id}
+                    avatarUrl={lead.user.avatarUrl}
+                    size="md"
+                    title={`${lead.user.name} (líder)`}
+                    className="ring-primary ring-offset-bg-subtle ring-2 ring-offset-1"
+                  />
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

@@ -33,6 +33,7 @@ export interface CardListItem {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  leadId: string | null;
   members: Array<{ user: { id: string; name: string; avatarUrl: string | null } }>;
   labels: Array<{ label: { id: string; name: string; color: string } }>;
   _count: { comments: number; attachments: number; checklists: number };
@@ -161,9 +162,56 @@ export function moveList(listId: string, input: { afterListId: string | null }) 
   return api.patch(`/api/v1/lists/${listId}/move`, input);
 }
 
-export function archiveList(listId: string) {
-  return api.delete(`/api/v1/lists/${listId}`);
+export interface ArchiveListOptions {
+  /**
+   * O que fazer com os cards da coluna ao arquivar:
+   *   - 'archive': arquiva todos junto (some da listagem do board)
+   *   - 'move': move pra outra coluna (`targetListId` obrigatório)
+   * Coluna sem cards: pode mandar omitido.
+   */
+  cardsAction?: 'archive' | 'move';
+  targetListId?: string;
 }
+
+export function archiveList(listId: string, opts: ArchiveListOptions = {}) {
+  return api.delete(`/api/v1/lists/${listId}`, opts);
+}
+
+export function restoreList(listId: string) {
+  return api.post(`/api/v1/lists/${listId}/restore`, {});
+}
+
+export function restoreCard(cardId: string) {
+  return api.post(`/api/v1/cards/${cardId}/restore`, {});
+}
+
+export interface ArchivedCard {
+  id: string;
+  title: string;
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  dueDate: string | null;
+  updatedAt: string;
+  list: { id: string; name: string; isArchived: boolean };
+  labels: Array<{ label: { id: string; name: string; color: string } }>;
+}
+
+export interface ArchivedList {
+  id: string;
+  name: string;
+  position: number;
+  updatedAt: string;
+  _count: { cards: number };
+}
+
+export interface BoardArchivedResponse {
+  lists: ArchivedList[];
+  cards: ArchivedCard[];
+}
+
+export const boardArchivedQuery = (boardId: string) => ({
+  queryKey: ['boards', boardId, 'archived'] as const,
+  queryFn: () => api.get<BoardArchivedResponse>(`/api/v1/lists/archived/${boardId}`),
+});
 
 export function completeCard(cardId: string) {
   return api.post(`/api/v1/cards/${cardId}/complete`, {});
