@@ -3,6 +3,13 @@
 Inspiração: Ummense (prints em `tarefas-md/img/`). Feature da Fase 2 do
 roadmap; complementa o doc [09-engine-automacoes.md](09-engine-automacoes.md).
 
+> **Diretiva de implementação:** quando tiver dúvida sobre o comportamento
+> exato de qualquer uma das 18 automações listadas neste doc (parâmetros,
+> regras de execução, edge cases), **pesquisar primeiro na documentação
+> oficial do Ummense** antes de inferir. A referência é declarada — nosso
+> objetivo é replicar a essência funcional, adaptando o visual ao design
+> do KTask (Lucide + Tailwind violet/teal, sem copiar a UI cyan do Ummense).
+
 ## Escopo
 
 Cada coluna pode ter automações vinculadas a ela. Quando um card entra,
