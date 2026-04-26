@@ -57,13 +57,50 @@ export interface ActivityNode {
   actor: { id: string; name: string; email: string; avatarUrl: string | null } | null;
 }
 
+export interface CardFlow {
+  boardId: string;
+  listId: string;
+  position: number;
+  completedAt: string | null;
+  completedBy: { id: string; name: string; avatarUrl: string | null } | null;
+  addedAt: string;
+  isPrimary: boolean;
+  board: {
+    id: string;
+    name: string;
+    icon: string | null;
+    color: string | null;
+    visibility: 'PRIVATE' | 'ORGANIZATION';
+    isArchived: boolean;
+    members: Array<{
+      role: 'ADMIN' | 'EDITOR' | 'COMMENTER' | 'VIEWER';
+      user: { id: string; name: string; avatarUrl: string | null };
+    }>;
+    lists: Array<{ id: string; name: string; position: number }>;
+  };
+  list: { id: string; name: string };
+}
+
 export const cardsQueries = {
   detail: (cardId: string) => ({
     queryKey: ['cards', cardId] as const,
     queryFn: () => api.get<CardDetail>(`/api/v1/cards/${cardId}`),
     enabled: Boolean(cardId),
   }),
+  flows: (cardId: string) => ({
+    queryKey: ['cards', cardId, 'flows'] as const,
+    queryFn: () => api.get<CardFlow[]>(`/api/v1/cards/${cardId}/flows`),
+    enabled: Boolean(cardId),
+  }),
 };
+
+export function linkCardToFlow(cardId: string, input: { boardId: string; listId?: string }) {
+  return api.post(`/api/v1/cards/${cardId}/flows`, input);
+}
+
+export function unlinkCardFromFlow(cardId: string, boardId: string) {
+  return api.delete(`/api/v1/cards/${cardId}/flows/${boardId}`);
+}
 
 export interface UpdateCardInput {
   title?: string;

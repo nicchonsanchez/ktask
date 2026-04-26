@@ -75,3 +75,9 @@ export const DuplicateCardSchema = z
     path: ['targetListId'],
   });
 export type DuplicateCardRequest = z.infer<typeof DuplicateCardSchema>;
+
+export const LinkFlowSchema = z.object({
+  boardId: z.string().cuid(),
+  listId: z.string().cuid().optional(),
+});
+export type LinkFlowRequest = z.infer<typeof LinkFlowSchema>;

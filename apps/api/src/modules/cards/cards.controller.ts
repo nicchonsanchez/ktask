@@ -19,12 +19,14 @@ import {
   DuplicateCardSchema,
   CreateChildCardSchema,
   SetParentSchema,
+  LinkFlowSchema,
   type CreateCardRequest,
   type UpdateCardRequest,
   type MoveCardRequest,
   type DuplicateCardRequest,
   type CreateChildCardRequest,
   type SetParentRequest,
+  type LinkFlowRequest,
 } from './dto/card.schemas';
 
 @ApiTags('cards')
@@ -216,5 +218,37 @@ export class CardsController {
     @Param('labelId') labelId: string,
   ) {
     return this.cards.removeLabel(user.userId, org, cardId, labelId);
+  }
+
+  @Get(':cardId/flows')
+  @ApiOperation({ summary: 'Lista os fluxos onde o card tem presença ativa' })
+  listFlows(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+  ) {
+    return this.cards.listFlows(user.userId, org, cardId);
+  }
+
+  @Post(':cardId/flows')
+  @ApiOperation({ summary: 'Vincula o card a outro fluxo (cria CardPresence)' })
+  linkFlow(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+    @Body(new ZodValidationPipe(LinkFlowSchema)) body: LinkFlowRequest,
+  ) {
+    return this.cards.linkToFlow(user.userId, org, cardId, body);
+  }
+
+  @Delete(':cardId/flows/:boardId')
+  @ApiOperation({ summary: 'Desvincula o card de um fluxo (soft-delete da CardPresence)' })
+  unlinkFlow(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.cards.unlinkFromFlow(user.userId, org, cardId, boardId);
   }
 }

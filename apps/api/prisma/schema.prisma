@@ -204,6 +204,7 @@ model User {
   tasksCreated           Task[]          @relation("TaskCreator")
   tasksDone              Task[]          @relation("TaskDoneBy")
   automationsCreated     Automation[]    @relation("AutomationCreator")
+  cardPresencesCompleted CardPresence[]  @relation("CardPresenceCompletedBy")
 
   @@index([email])
 }
@@ -301,13 +302,14 @@ model Board {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    User          @relation("BoardCreator", fields: [createdById], references: [id])
-  lists        List[]
-  labels       Label[]
-  members      BoardMember[]
-  cards        Card[]
-  automations  Automation[]
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User           @relation("BoardCreator", fields: [createdById], references: [id])
+  lists          List[]
+  labels         Label[]
+  members        BoardMember[]
+  cards          Card[]
+  automations    Automation[]
+  cardPresences  CardPresence[]
 
   @@index([organizationId, isArchived])
 }
@@ -340,10 +342,11 @@ model List {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  board        Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  cards        Card[]
-  automations  Automation[]
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board         Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards         Card[]
+  automations   Automation[]
+  cardPresences CardPresence[]
 
   @@index([organizationId])
   @@index([boardId, position])
@@ -391,12 +394,42 @@ model Card {
   timeEntries    TimeEntry[]
   visits         CardVisit[]
   automationRuns AutomationRun[]
+  presences      CardPresence[]
 
   @@index([organizationId])
   @@index([boardId, isArchived])
   @@index([boardId, completedAt])
   @@index([listId, position])
   @@index([dueDate])
+}
+
+/// Presença de um card em um fluxo (board). Card pode estar em N fluxos
+/// simultaneamente, cada um com sua coluna atual e status de finalização
+/// independente. A presença "primária" é aquela com boardId == Card.boardId
+/// (durante a transição; ainda não removemos os campos legacy do Card pra
+/// evitar quebrar leituras existentes).
+///
+/// Backfill inicial: 1 presença por card existente, espelhando seus campos.
+/// Plano completo em tarefas-md/13-cards-multi-fluxo.md.
+model CardPresence {
+  cardId        String
+  boardId       String
+  listId        String
+  position      Float
+  completedAt   DateTime?
+  completedById String?
+  addedAt       DateTime  @default(now())
+  removedAt     DateTime? // soft-delete pra "desvincular" mantendo histórico
+
+  card        Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  board       Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  list        List  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  completedBy User? @relation("CardPresenceCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@id([cardId, boardId])
+  @@index([boardId, listId, position])
+  @@index([boardId, completedAt])
+  @@index([boardId, removedAt])
 }
 
 model CardMember {

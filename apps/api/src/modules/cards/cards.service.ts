@@ -87,6 +87,16 @@ export class CardsService {
         skipDuplicates: true,
       });
 
+      // Cria a presença "primária" do card (cards multi-fluxo, iteração 1).
+      await tx.cardPresence.create({
+        data: {
+          cardId: created.id,
+          boardId: list.boardId,
+          listId: input.listId,
+          position,
+        },
+      });
+
       return created;
     });
 
@@ -381,6 +391,18 @@ export class CardsService {
         ...(listChanged ? { enteredListAt: new Date() } : {}),
       },
     });
+
+    // Espelha a primary presence pra manter CardPresence consistente com
+    // os campos legacy do Card. Iteração 2 vai inverter — Card lê de
+    // CardPresence — mas por enquanto Card é a fonte e CardPresence é
+    // espelho. Erro silencioso pra não quebrar move se a presença não
+    // existir (cards anteriores ao backfill devem ter, mas defensivo).
+    await this.prisma.cardPresence
+      .updateMany({
+        where: { cardId, boardId: card.boardId },
+        data: { listId: input.toListId, position },
+      })
+      .catch(() => undefined);
 
     // Só registra activity quando lista mudou (reorder dentro da mesma coluna
     // não interessa pro feed). Inclui nome das listas no payload pra a UI
@@ -1061,6 +1083,14 @@ export class CardsService {
       data: { completedAt: new Date(), completedById: userId },
     });
 
+    // Espelha primary presence (ver comment em move()).
+    await this.prisma.cardPresence
+      .updateMany({
+        where: { cardId, boardId: card.boardId },
+        data: { completedAt: updated.completedAt, completedById: userId },
+      })
+      .catch(() => undefined);
+
     await this.prisma.activity.create({
       data: {
         organizationId: tenant.organizationId,
@@ -1122,6 +1152,14 @@ export class CardsService {
         position,
       },
     });
+
+    // Espelha primary presence (ver comment em move()).
+    await this.prisma.cardPresence
+      .updateMany({
+        where: { cardId, boardId: card.boardId },
+        data: { completedAt: null, completedById: null, listId: targetListId, position },
+      })
+      .catch(() => undefined);
 
     await this.prisma.activity.create({
       data: {
@@ -1254,6 +1292,200 @@ export class CardsService {
         actorId: userId,
         type: 'LABEL_REMOVED',
         payload: { cardId, labelId },
+      },
+    });
+
+    return { ok: true };
+  }
+
+  // -----------------------------------------------------------------
+  // Cards multi-fluxo (iteração 1: aditivo, sem migrar leitura do kanban)
+  // -----------------------------------------------------------------
+
+  /**
+   * Lista todas as presenças ativas do card (uma por fluxo onde o card aparece).
+   * Filtra por acesso: se o user não tem acesso a um dos boards, aquela presença
+   * é omitida — assim a aba "Fluxos" no modal não vaza fluxos restritos.
+   */
+  async listFlows(userId: string, tenant: TenantContext, cardId: string) {
+    const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    // Acesso ao card = acesso a pelo menos 1 board onde ele tem presença.
+    // Como check inicial, basta exigir VIEWER no board primário.
+    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+
+    const presences = await this.prisma.cardPresence.findMany({
+      where: { cardId, removedAt: null },
+      include: {
+        board: {
+          select: {
+            id: true,
+            name: true,
+            icon: true,
+            color: true,
+            visibility: true,
+            isArchived: true,
+            members: {
+              select: {
+                role: true,
+                user: { select: { id: true, name: true, avatarUrl: true } },
+              },
+            },
+            lists: {
+              where: { isArchived: false },
+              orderBy: { position: 'asc' },
+              select: { id: true, name: true, position: true },
+            },
+          },
+        },
+        list: { select: { id: true, name: true } },
+        completedBy: { select: { id: true, name: true, avatarUrl: true } },
+      },
+      orderBy: { addedAt: 'asc' },
+    });
+
+    // Filtra por acesso a cada board. Se o user não tiver, esconde.
+    const result = [];
+    for (const p of presences) {
+      const has = await this.access
+        .assertAccess(userId, p.boardId, tenant, 'VIEWER')
+        .then(() => true)
+        .catch(() => false);
+      if (!has) continue;
+      result.push({
+        boardId: p.boardId,
+        listId: p.listId,
+        position: p.position,
+        completedAt: p.completedAt,
+        completedBy: p.completedBy,
+        addedAt: p.addedAt,
+        isPrimary: p.boardId === card.boardId,
+        board: p.board,
+        list: p.list,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Vincula o card a um novo fluxo (board). Se `listId` for omitido, usa a
+   * primeira lista não-arquivada do board destino. Idempotente: se já existe
+   * presença ativa, devolve ela; se existe mas está soft-deleted (`removedAt`),
+   * "reativa" mantendo a posição original.
+   */
+  async linkToFlow(
+    userId: string,
+    tenant: TenantContext,
+    cardId: string,
+    input: { boardId: string; listId?: string },
+  ) {
+    const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    // Precisa permissão de EDITOR no board origem (pra "saber" o card)
+    // E EDITOR no board destino (pra "incluir" o card lá).
+    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, input.boardId, tenant, 'EDITOR');
+
+    if (input.boardId === card.boardId) {
+      throw new BadRequestException('Card já está neste fluxo.');
+    }
+
+    const board = await this.prisma.board.findUnique({
+      where: { id: input.boardId },
+      select: { id: true, organizationId: true, isArchived: true },
+    });
+    if (!board || board.organizationId !== tenant.organizationId || board.isArchived) {
+      throw new BadRequestException('Fluxo destino inválido.');
+    }
+
+    // Lista alvo: a passada (se válida) ou a primeira do board.
+    let targetListId = input.listId;
+    if (targetListId) {
+      const list = await this.prisma.list.findUnique({ where: { id: targetListId } });
+      if (!list || list.boardId !== input.boardId || list.isArchived) {
+        throw new BadRequestException('Lista destino inválida.');
+      }
+    } else {
+      const first = await this.prisma.list.findFirst({
+        where: { boardId: input.boardId, isArchived: false },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (!first) throw new BadRequestException('Fluxo destino não tem listas ativas.');
+      targetListId = first.id;
+    }
+
+    // Posição: fim da lista
+    const last = await this.prisma.cardPresence.findFirst({
+      where: { boardId: input.boardId, listId: targetListId, removedAt: null },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const position = (last?.position ?? 0) + 1024;
+
+    // Upsert: se já existe (mesmo soft-deleted), reativa.
+    const presence = await this.prisma.cardPresence.upsert({
+      where: { cardId_boardId: { cardId, boardId: input.boardId } },
+      update: {
+        listId: targetListId,
+        position,
+        removedAt: null,
+      },
+      create: {
+        cardId,
+        boardId: input.boardId,
+        listId: targetListId,
+        position,
+      },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: input.boardId,
+        cardId,
+        actorId: userId,
+        type: 'CARD_CREATED', // reusa o tipo existente (vínculo é como entrada nova nesse fluxo)
+        payload: { cardId, listId: targetListId, linkedFromBoardId: card.boardId },
+      },
+    });
+
+    return presence;
+  }
+
+  /**
+   * Desvincula o card de um fluxo. Soft-delete: marca `removedAt` na presença.
+   * Não permite desvincular o fluxo primário (boardId == card.boardId) — pra
+   * "remover do todo", use archive/delete do card.
+   */
+  async unlinkFromFlow(userId: string, tenant: TenantContext, cardId: string, boardId: string) {
+    const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
+
+    if (boardId === card.boardId) {
+      throw new BadRequestException(
+        'Não é possível desvincular o fluxo primário. Use arquivar para remover o card.',
+      );
+    }
+
+    const presence = await this.prisma.cardPresence.findUnique({
+      where: { cardId_boardId: { cardId, boardId } },
+    });
+    if (!presence || presence.removedAt) {
+      throw new NotFoundException('Card não está vinculado a este fluxo.');
+    }
+
+    await this.prisma.cardPresence.update({
+      where: { cardId_boardId: { cardId, boardId } },
+      data: { removedAt: new Date() },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId,
+        cardId,
+        actorId: userId,
+        type: 'CARD_ARCHIVED', // reusa: significa "saiu deste fluxo"
+        payload: { cardId, unlinkedFromBoardId: boardId },
       },
     });
 

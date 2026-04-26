@@ -1,6 +1,48 @@
 # 13 — Cards em múltiplos fluxos (presença M:N com Board)
 
-> **Status**: parkado pra Fase 2 (junto com automações). Este doc registra a decisão arquitetural e o UX de referência pra evitar redescobrir depois.
+> **Status**: iteração 1 entregue (aditivo). Tabela `CardPresence` criada e
+> backfilled, endpoints de listar/vincular/desvincular funcionais, aba
+> "Fluxos" no modal lê do endpoint real e permite vincular o card a outro
+> fluxo. **Iteração 2** (kanban lendo de CardPresence + move/complete por
+> fluxo) e **iteração 3** (remoção dos campos legacy do Card) ficam pra
+> próximas sessões.
+
+## Iteração 1 (entregue)
+
+- [x] `CardPresence` (cardId+boardId composto, listId+position+completedAt
+      por fluxo, soft-delete via `removedAt`)
+- [x] Backfill: 1 presença por card existente espelhando o estado atual
+- [x] `Card.create` cria a presence primária junto
+- [x] `Card.move/complete/uncomplete` espelham na presence primária pra
+      manter consistência (ainda fonte de verdade nos campos legacy)
+- [x] `GET /cards/:id/flows` — lista presenças ativas + dados do board (com
+      filtro de acesso por presença)
+- [x] `POST /cards/:id/flows` — vincula a outro fluxo (cria/reativa
+      `CardPresence`)
+- [x] `DELETE /cards/:id/flows/:boardId` — soft-delete (não permite no
+      primário)
+- [x] Aba "Fluxos" do modal lê o endpoint, mostra todas as presences,
+      permite vincular/desvincular e move só no fluxo primário (legacy)
+
+## Iteração 2 (próxima)
+
+- [ ] `PATCH /cards/:id/flows/:boardId/move` — mover por fluxo
+- [ ] Kanban lê de `CardPresence` (passa a renderizar cards vinculados nos
+      fluxos não-primários)
+- [ ] Move otimista no kanban atualiza `CardPresence` ao invés de `Card.*`
+- [ ] Finalizar card: por padrão finaliza só no fluxo onde a ação rolou,
+      não em todos
+- [ ] Coluna virtual "Finalizado" filtra por presence
+
+## Iteração 3 (cleanup)
+
+- [ ] Remove `Card.boardId/listId/position/completedAt/completedById`
+- [ ] Adiciona `Card.primaryBoardId` pra determinismo de criação
+- [ ] Migration data (campos legacy → CardPresence; já backfilled, só remove)
+
+---
+
+> Doc original (mantido pra contexto histórico):
 
 ## Motivação
 
