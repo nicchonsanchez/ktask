@@ -1,133 +1,47 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Users, Building2, ShieldCheck } from 'lucide-react';
-import type { OrgRole } from '@ktask/contracts';
-import { ORG_ROLE_LABELS } from '@ktask/contracts';
-import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
+import { TarefasPanel } from '@/components/home/tarefas-panel';
+import { CardsRecentesCarousel } from '@/components/home/cards-recentes-carousel';
+import { MiniCalendar } from '@/components/home/mini-calendar';
+import { EventosPanel } from '@/components/home/eventos-panel';
 
-interface CurrentOrg {
-  id: string;
-  name: string;
-  slug: string;
-  logoUrl: string | null;
-  timezone: string;
-  locale: string;
-  plan: 'INTERNAL' | 'FREE' | 'PRO' | 'ENTERPRISE';
-  myRole: OrgRole;
-}
-
-interface Member {
-  id: string;
-  role: OrgRole;
-  createdAt: string;
-  user: { id: string; name: string; email: string; avatarUrl: string | null };
-}
-
+/**
+ * Home pessoal (visão de tarefas + cards recentes + calendário do dia).
+ *
+ * Inspirada no Ummense. Layout:
+ *   - lg+: 2 colunas (esquerda 1fr — Tarefas + Cards recentes;
+ *          direita 320px — MiniCalendar + Eventos)
+ *   - <lg: tudo numa coluna; calendário aparece DEPOIS dos cards
+ *
+ * A view antiga (Org + papel + membros) virou rota `/empresa`.
+ */
 export default function HomePage() {
   const { user } = useAuthStore();
-
-  const orgQuery = useQuery({
-    queryKey: ['org', 'current'],
-    queryFn: () => api.get<CurrentOrg>('/api/v1/organizations/current'),
-    enabled: !!user,
-  });
-
-  const membersQuery = useQuery({
-    queryKey: ['org', 'members'],
-    queryFn: () => api.get<Member[]>('/api/v1/organizations/members'),
-    enabled: !!user,
-  });
+  const firstName = user?.name.split(' ')[0] ?? 'você';
 
   return (
-    <div className="container py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold">
-          Olá, <span className="text-primary">{user?.name.split(' ')[0]}</span>.
+    <div className="container py-6 sm:py-8">
+      <header className="mb-5 sm:mb-6">
+        <h1 className="text-fg text-xl font-semibold tracking-tight sm:text-2xl">
+          Olá, <span className="text-primary">{firstName}</span>.
         </h1>
-        <p className="text-fg-muted mt-1 text-sm">Fase 1 em andamento — auth e organização OK.</p>
-      </div>
+        <p className="text-fg-muted mt-1 text-sm">Suas tarefas, cards recentes e calendário.</p>
+      </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          icon={<Building2 size={18} />}
-          label="Organização atual"
-          value={orgQuery.data?.name ?? (orgQuery.isLoading ? 'Carregando...' : '—')}
-          hint={orgQuery.data ? `@${orgQuery.data.slug}` : undefined}
-        />
-        <StatCard
-          icon={<ShieldCheck size={18} />}
-          label="Seu papel"
-          value={orgQuery.data ? ORG_ROLE_LABELS[orgQuery.data.myRole] : '—'}
-          hint={orgQuery.data?.plan ? `Plano ${orgQuery.data.plan.toLowerCase()}` : undefined}
-        />
-        <StatCard
-          icon={<Users size={18} />}
-          label="Membros"
-          value={membersQuery.data ? String(membersQuery.data.length) : '—'}
-          hint="Ativos nesta organização"
-        />
-      </div>
-
-      <section className="mt-10">
-        <h2 className="text-fg-muted mb-3 text-sm font-semibold uppercase tracking-wide">
-          Membros
-        </h2>
-        <div className="border-border bg-bg-subtle overflow-hidden rounded-lg border">
-          {membersQuery.isLoading ? (
-            <div className="text-fg-muted p-4 text-sm">Carregando...</div>
-          ) : membersQuery.data && membersQuery.data.length > 0 ? (
-            <ul className="divide-border divide-y">
-              {membersQuery.data.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 p-3">
-                  <div className="bg-primary-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-                    {m.user.name
-                      .split(' ')
-                      .map((w) => w[0])
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{m.user.name}</p>
-                    <p className="text-fg-muted truncate text-xs">{m.user.email}</p>
-                  </div>
-                  <span className="bg-bg-muted text-fg-muted rounded-full px-2 py-0.5 text-xs font-medium">
-                    {ORG_ROLE_LABELS[m.role]}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-fg-muted p-4 text-sm">Nenhum membro encontrado.</div>
-          )}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
+        {/* Coluna principal */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <TarefasPanel />
+          <CardsRecentesCarousel />
         </div>
-      </section>
-    </div>
-  );
-}
 
-function StatCard({
-  icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="border-border bg-bg-subtle rounded-lg border p-4">
-      <div className="bg-primary-subtle text-primary mb-3 inline-flex size-8 items-center justify-center rounded-md">
-        {icon}
+        {/* Sidebar */}
+        <aside className="flex flex-col gap-4">
+          <MiniCalendar />
+          <EventosPanel />
+        </aside>
       </div>
-      <p className="text-fg-muted text-xs uppercase tracking-wide">{label}</p>
-      <p className="mt-1 text-lg font-semibold">{value}</p>
-      {hint && <p className="text-fg-subtle mt-0.5 text-xs">{hint}</p>}
     </div>
   );
 }
