@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { env } from './config/env';
@@ -86,6 +87,13 @@ import { MeModule } from './modules/me/me.module';
     TimeTrackingModule,
     MeModule,
     HealthModule,
+  ],
+  providers: [
+    // Guard global do throttler — sem isso, o decorator @Throttle não tem efeito.
+    // Limit padrão é 100 req/60s por IP (config no ThrottlerModule.forRoot acima);
+    // endpoints sensíveis (ex: auth/login) podem aplicar limites mais restritos
+    // via @Throttle({ default: { ttl, limit } }).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

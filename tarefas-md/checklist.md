@@ -104,7 +104,7 @@ Ver detalhes em `06-roadmap-mvp.md`.
 - [x] Refresh token httpOnly + rotação
 - [x] Logout + logout all sessions
 - [ ] Recuperação de senha por e-mail
-- [ ] Bloqueio após 10 tentativas (IP + conta)
+- [x] Bloqueio após 10 tentativas — por IP via `@Throttle` (15min). Por-conta fica como follow-up (precisa contador no Redis ou DB).
 - [x] Guards: JwtAuthGuard global, TenantGuard por controller, BoardAccessService
 - [x] Testes unitários AuthService (12/12)
 - [x] Validado live (login/refresh/logout, /me)
@@ -153,7 +153,7 @@ Ver detalhes em `06-roadmap-mvp.md`.
 
 #### Prefigurados pendentes (UI presente, lógica em outra tarefa)
 
-- [ ] Busca por palavra no header do fluxo (input `disabled`) — ligar quando filtro existir
+- [x] Busca por palavra no header do fluxo (filtro client-side por título)
 - [ ] Botão "Filtrar" no header do fluxo (`disabled`) — popover de filtros avançados
 
 ### Interação

@@ -10,6 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
 import { LoginRequestSchema, type LoginRequest, type User as UserContract } from '@ktask/contracts';
@@ -41,6 +42,11 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  // Bloqueio por IP: 10 tentativas em 15min (900_000 ms). O ThrottlerGuard
+  // global do app continua valendo pros outros endpoints. Usa o mesmo
+  // backend (memória) — pra produção multi-instância considerar trocar
+  // por ThrottlerStorageRedisService.
+  @Throttle({ default: { ttl: 900_000, limit: 10 } })
   @ApiOperation({ summary: 'Autenticar com e-mail e senha' })
   async login(
     @Body(new ZodValidationPipe(LoginRequestSchema)) body: LoginRequest,
