@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import type { Automation, AutomationRun, Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { computeInsertPosition } from '@/common/util/position';
 import { EVENT_NAMES, type CardMovedPayload } from '@/modules/realtime/events.types';
 
 /**
@@ -27,7 +28,10 @@ export class AutomationsEngine {
   private readonly logger = new Logger(AutomationsEngine.name);
   private readonly MAX_CHAIN_DEPTH = 5;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   @OnEvent(EVENT_NAMES.CARD_MOVED, { async: true })
   async onCardMoved(payload: CardMovedPayload) {
@@ -225,15 +229,15 @@ export class AutomationsEngine {
   private async handleRemoveTags(
     automation: Automation,
     cardId: string,
-  ): Promise<{ tagsRemoved: string[] }> {
+  ): Promise<{ tagsRemoved: string[]; deletedCount: number }> {
     const config = automation.actionConfig as { tagIds?: string[] };
     const tagIds = Array.isArray(config.tagIds) ? config.tagIds : [];
-    if (tagIds.length === 0) return { tagsRemoved: [] };
+    if (tagIds.length === 0) return { tagsRemoved: [], deletedCount: 0 };
 
     const result = await this.prisma.cardLabel.deleteMany({
       where: { cardId, labelId: { in: tagIds } },
     });
-    return { tagsRemoved: tagIds, deletedCount: result.count } as never;
+    return { tagsRemoved: tagIds, deletedCount: result.count };
   }
 
   /**
@@ -268,25 +272,26 @@ export class AutomationsEngine {
         data: {
           cardId,
           title,
-          position: (last?.position ?? 0) + 1,
+          position: computeInsertPosition(last?.position ?? null, null),
         },
       });
     }
 
-    // Última posição dos items existentes
+    // Última posição dos items existentes — pra apender com espaçamento
+    // padrão (POSITION_STEP) entre cada novo item.
     const lastItem = await this.prisma.checklistItem.findFirst({
       where: { checklistId: checklist.id },
       orderBy: { position: 'desc' },
       select: { position: true },
     });
-    let basePos = (lastItem?.position ?? 0) + 1;
+    let basePos = computeInsertPosition(lastItem?.position ?? null, null);
 
     await this.prisma.checklistItem.createMany({
-      data: items.map((text) => ({
-        checklistId: checklist!.id,
-        text,
-        position: basePos++,
-      })),
+      data: items.map((text) => {
+        const data = { checklistId: checklist!.id, text, position: basePos };
+        basePos = computeInsertPosition(basePos, null);
+        return data;
+      }),
     });
 
     return { checklistId: checklist.id, itemsAdded: items.length };
@@ -383,7 +388,7 @@ export class AutomationsEngine {
   private async handlePostComment(
     automation: Automation,
     cardId: string,
-  ): Promise<{ commentId: string }> {
+  ): Promise<{ commentId: string; mentionedUserIds: string[] }> {
     const config = automation.actionConfig as { template?: string };
     const template = config.template?.trim();
     if (!template) throw new Error('Template do comentário vazio.');
@@ -409,6 +414,10 @@ export class AutomationsEngine {
       'actor.name': actor?.name ?? 'Automação',
     });
 
+    // Resolve menções @handle no texto renderizado, igual ao CommentsService.
+    // Bate com a parte antes do @ do email do user na Org.
+    const mentionUserIds = await this.resolveMentionsInText(text, card.organizationId);
+
     // Guarda como ProseMirror doc simples (1 paragraph com o texto)
     const doc = {
       type: 'doc',
@@ -420,9 +429,60 @@ export class AutomationsEngine {
         cardId,
         authorId: automation.createdById,
         body: doc as unknown as Prisma.InputJsonValue,
+        mentions: mentionUserIds,
       },
     });
-    return { commentId: comment.id };
+
+    // Cria notificações MENTION pra cada user mencionado (exceto o autor
+    // da automação, que aqui é o "remetente" do comment).
+    if (mentionUserIds.length > 0) {
+      const targets = mentionUserIds.filter((id) => id !== automation.createdById);
+      if (targets.length > 0) {
+        await this.prisma.notification.createMany({
+          data: targets.map((uid) => ({
+            userId: uid,
+            organizationId: card.organizationId,
+            type: 'MENTION' as const,
+            title: `${actor?.name ?? 'Automação'} mencionou você`,
+            body: text.slice(0, 140),
+            entityType: 'card',
+            entityId: cardId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    return { commentId: comment.id, mentionedUserIds: mentionUserIds };
+  }
+
+  /**
+   * Resolução de menções inline no engine — espelha o que CommentsService
+   * faz, mas evita dependência circular entre módulos. Mesma regex e
+   * mesma resolução por parte-local-do-email.
+   */
+  private async resolveMentionsInText(
+    plainText: string,
+    organizationId: string,
+  ): Promise<string[]> {
+    const re = /(?:^|\s)@([a-z0-9][a-z0-9._-]{1,63})(?=\b)/gi;
+    const handles = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(plainText)) !== null) {
+      handles.add(m[1]!.toLowerCase());
+    }
+    if (handles.size === 0) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: { memberships: { some: { organizationId } } },
+      select: { id: true, email: true },
+    });
+    return users
+      .filter((u) => {
+        const localPart = u.email.split('@')[0]?.toLowerCase();
+        return localPart && handles.has(localPart);
+      })
+      .map((u) => u.id);
   }
 
   /**
@@ -440,6 +500,13 @@ export class AutomationsEngine {
     };
     if (!config.status) throw new Error('Status alvo não informado.');
 
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { boardId: true, organizationId: true },
+    });
+    if (!card) throw new Error('Card não encontrado.');
+
+    let activityType: 'CARD_COMPLETED' | 'CARD_UNCOMPLETED' | 'CARD_ARCHIVED';
     switch (config.status) {
       case 'COMPLETED':
         await this.prisma.card.update({
@@ -449,20 +516,42 @@ export class AutomationsEngine {
             completedById: automation.createdById,
           },
         });
+        activityType = 'CARD_COMPLETED';
         break;
       case 'REOPENED':
         await this.prisma.card.update({
           where: { id: cardId },
           data: { completedAt: null, completedById: null },
         });
+        activityType = 'CARD_UNCOMPLETED';
         break;
       case 'ARCHIVED':
         await this.prisma.card.update({
           where: { id: cardId },
           data: { isArchived: true },
         });
+        activityType = 'CARD_ARCHIVED';
         break;
     }
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: activityType,
+        payload: { cardId, automationId: automation.id, status: config.status },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+    });
+
     return { status: config.status };
   }
 
@@ -546,6 +635,29 @@ export class AutomationsEngine {
       });
     }
 
+    await this.prisma.activity.create({
+      data: {
+        organizationId: targetList.organizationId,
+        boardId: targetList.boardId,
+        cardId: child.id,
+        actorId: automation.createdById,
+        type: 'CARD_CREATED',
+        payload: {
+          cardId: child.id,
+          parentCardId: parent.id,
+          automationId: automation.id,
+          via: 'automation',
+        },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_CREATED, {
+      boardId: targetList.boardId,
+      organizationId: targetList.organizationId,
+      actorId: automation.createdById,
+      cardId: child.id,
+    });
+
     return { childId: child.id };
   }
 
@@ -576,17 +688,19 @@ export class AutomationsEngine {
       data: {
         cardId,
         title,
-        position: (last?.position ?? 0) + 1,
+        position: computeInsertPosition(last?.position ?? null, null),
       },
     });
 
-    let basePos = 1;
+    // Items sempre começam do zero (checklist novo); usar espaçamento padrão
+    // pra deixar gaps razoáveis pra inserções manuais futuras.
+    let basePos = computeInsertPosition(null, null);
     await this.prisma.checklistItem.createMany({
-      data: items.map((text) => ({
-        checklistId: checklist.id,
-        text,
-        position: basePos++,
-      })),
+      data: items.map((text) => {
+        const data = { checklistId: checklist.id, text, position: basePos };
+        basePos = computeInsertPosition(basePos, null);
+        return data;
+      }),
     });
 
     return { checklistId: checklist.id, itemsAdded: items.length };
@@ -616,7 +730,7 @@ export class AutomationsEngine {
         orderBy: { position: 'asc' },
         select: { position: true },
       });
-      const newPos = first ? first.position - 1 : 1;
+      const newPos = computeInsertPosition(null, first?.position ?? null);
       await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
       return { position: newPos };
     }
@@ -626,7 +740,7 @@ export class AutomationsEngine {
       orderBy: { position: 'desc' },
       select: { position: true },
     });
-    const newPos = (last?.position ?? 0) + 1;
+    const newPos = computeInsertPosition(last?.position ?? null, null);
     await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
     return { position: newPos };
   }
@@ -638,7 +752,7 @@ export class AutomationsEngine {
  * Usar regex pra substituir cada ocorrência por valor do mapa.
  * Variável não encontrada vira string vazia (não quebra render).
  */
-function renderTemplate(template: string, vars: Record<string, string>): string {
+export function renderTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
     return vars[key] ?? '';
   });
