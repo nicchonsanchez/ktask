@@ -36,8 +36,17 @@ export const UpdateTimeEntrySchema = z
   );
 export type UpdateTimeEntryRequest = z.infer<typeof UpdateTimeEntrySchema>;
 
+/**
+ * Express parseia ?userIds=A como string e ?userIds=A&userIds=B como array.
+ * Pra aceitar ambos, normalizamos pra array sempre.
+ */
+const cuidArrayFromQuery = z
+  .union([z.string().cuid(), z.array(z.string().cuid())])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v]));
+
 export const TimesheetFilterSchema = z.object({
-  userIds: z.array(z.string().cuid()).optional(),
+  userIds: cuidArrayFromQuery,
   cardId: z.string().cuid().optional(),
   boardId: z.string().cuid().optional(),
   source: z.enum(['TIMER', 'MANUAL']).optional(),
