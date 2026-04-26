@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { useAuthStore } from '@/stores/auth-store';
 import { TarefasPanel } from '@/components/home/tarefas-panel';
 import { CardsRecentesCarousel } from '@/components/home/cards-recentes-carousel';
@@ -15,10 +17,19 @@ import { EventosPanel } from '@/components/home/eventos-panel';
  *   - <lg: tudo numa coluna; calendário aparece DEPOIS dos cards
  *
  * A view antiga (Org + papel + membros) virou rota `/empresa`.
+ *
+ * Interação: clicar num dia do MiniCalendar filtra `TarefasPanel` pra
+ * mostrar só as tarefas daquele dia (estado `selectedDay` em formato
+ * ISO yyyy-mm-dd, BRT). Click no mesmo dia desativa o filtro.
  */
 export default function HomePage() {
   const { user } = useAuthStore();
   const firstName = user?.name.split(' ')[0] ?? 'você';
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  function toggleDay(day: string) {
+    setSelectedDay((prev) => (prev === day ? null : day));
+  }
 
   return (
     <div className="container py-6 sm:py-8">
@@ -32,13 +43,13 @@ export default function HomePage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
         {/* Coluna principal */}
         <div className="flex min-w-0 flex-col gap-4">
-          <TarefasPanel />
+          <TarefasPanel selectedDay={selectedDay} onClearFilter={() => setSelectedDay(null)} />
           <CardsRecentesCarousel />
         </div>
 
         {/* Sidebar */}
         <aside className="flex flex-col gap-4">
-          <MiniCalendar />
+          <MiniCalendar selectedDay={selectedDay} onSelectDay={toggleDay} />
           <EventosPanel />
         </aside>
       </div>

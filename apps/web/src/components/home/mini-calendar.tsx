@@ -18,7 +18,13 @@ import { meQueries } from '@/lib/queries/me';
  *   - Hoje destacado (círculo azul preenchido)
  *   - Atalhos "Próximos 7 dias" / "Sem data"
  */
-export function MiniCalendar() {
+export function MiniCalendar({
+  selectedDay,
+  onSelectDay,
+}: {
+  selectedDay?: string | null;
+  onSelectDay?: (day: string) => void;
+}) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -87,17 +93,21 @@ export function MiniCalendar() {
                 : 'bg-primary'
               : 'bg-bg-muted'
             : null;
+          const isSelected = selectedDay === key;
           return (
             <button
               key={key}
               type="button"
               disabled={isOtherMonth}
+              onClick={() => !isOtherMonth && onSelectDay?.(key)}
               className={`relative mx-auto flex size-8 items-center justify-center rounded-full text-[12px] transition-colors ${
-                isToday
-                  ? 'bg-primary text-primary-fg font-semibold'
-                  : isOtherMonth
-                    ? 'text-fg-subtle/50 cursor-default'
-                    : 'text-fg hover:bg-bg-muted'
+                isSelected
+                  ? 'ring-primary ring-offset-bg bg-primary-subtle text-primary font-semibold ring-2 ring-offset-1'
+                  : isToday
+                    ? 'bg-primary text-primary-fg font-semibold'
+                    : isOtherMonth
+                      ? 'text-fg-subtle/50 cursor-default'
+                      : 'text-fg hover:bg-bg-muted cursor-pointer'
               }`}
               title={
                 counts
@@ -106,7 +116,7 @@ export function MiniCalendar() {
               }
             >
               {cell.day}
-              {dotColor && !isToday && (
+              {dotColor && !isToday && !isSelected && (
                 <span
                   aria-hidden
                   className={`absolute bottom-0.5 size-1 rounded-full ${dotColor}`}

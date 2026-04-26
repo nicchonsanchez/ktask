@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Loader2, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 
 import { meQueries, bulkRescheduleToday, type MeTask } from '@/lib/queries/me';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
@@ -18,10 +18,17 @@ import { TarefaRow } from './tarefa-row';
  *   - Seção Hoje com barra de progresso (% concluído)
  *   - Linhas: ver `TarefaRow`
  */
-export function TarefasPanel() {
+export function TarefasPanel({
+  selectedDay,
+  onClearFilter,
+}: {
+  selectedDay?: string | null;
+  onClearFilter?: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const tasksQuery = useQuery({ ...meQueries.tasks() });
   const data = tasksQuery.data;
+  const filteredTasks = selectedDay && data ? filterTasksByDay(data, selectedDay) : null;
 
   return (
     <section className="border-border bg-bg overflow-hidden rounded-lg border">
@@ -58,7 +65,15 @@ export function TarefasPanel() {
             </div>
           )}
 
-          {!tasksQuery.isLoading && data && (
+          {!tasksQuery.isLoading && filteredTasks && (
+            <FilteredDaySection
+              tasks={filteredTasks}
+              day={selectedDay!}
+              onClearFilter={() => onClearFilter?.()}
+            />
+          )}
+
+          {!tasksQuery.isLoading && data && !filteredTasks && (
             <>
               {data.overdue.length > 0 && <OverdueSection tasks={data.overdue} />}
               <TodaySection tasks={data.today} />
@@ -188,4 +203,79 @@ function NoDateSection({ tasks }: { tasks: MeTask[] }) {
       )}
     </div>
   );
+}
+
+/**
+ * Quando há um dia selecionado no MiniCalendar, substitui as 4 seções
+ * normais por uma única seção "Tarefas de DD/MM" com todas as tarefas
+ * cuja dueDate é esse dia (independente do bucket original).
+ */
+function FilteredDaySection({
+  tasks,
+  day,
+  onClearFilter,
+}: {
+  tasks: MeTask[];
+  day: string;
+  onClearFilter: () => void;
+}) {
+  const [y, m, d] = day.split('-').map(Number);
+  const label = new Date(y!, m! - 1, d!).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+  });
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 px-3 pb-1 pt-3 sm:px-4">
+        <p className="text-fg-muted text-[12px] font-medium">Tarefas de {label}</p>
+        <button
+          type="button"
+          onClick={onClearFilter}
+          className="text-fg-muted hover:text-fg inline-flex items-center gap-1 text-[11px] font-medium"
+          aria-label="Limpar filtro do calendário"
+        >
+          <X size={12} />
+          Limpar filtro
+        </button>
+      </div>
+      {tasks.length === 0 ? (
+        <p className="text-fg-subtle px-4 py-6 text-center text-[12px] italic">
+          Nenhuma tarefa atribuída a você nesse dia.
+        </p>
+      ) : (
+        tasks.map((t) => (
+          <TarefaRow key={t.id} task={t} variant={inferVariantForDay(t.dueDate, day)} />
+        ))
+      )}
+    </div>
+  );
+}
+
+/**
+ * Filtra todas as 4 listas pra retornar só as tarefas cuja dueDate cai
+ * no dia selecionado (em fuso BRT — comparação por componentes locais).
+ */
+function filterTasksByDay(
+  data: { overdue: MeTask[]; today: MeTask[]; next7: MeTask[]; noDate: MeTask[] },
+  day: string,
+): MeTask[] {
+  const all = [...data.overdue, ...data.today, ...data.next7, ...data.noDate];
+  return all.filter((t) => {
+    if (!t.dueDate) return false;
+    const dt = new Date(t.dueDate);
+    const localKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    return localKey === day;
+  });
+}
+
+function inferVariantForDay(
+  iso: string | null,
+  day: string,
+): 'overdue' | 'today' | 'next7' | 'noDate' {
+  if (!iso) return 'noDate';
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  if (day < todayKey) return 'overdue';
+  if (day === todayKey) return 'today';
+  return 'next7';
 }
