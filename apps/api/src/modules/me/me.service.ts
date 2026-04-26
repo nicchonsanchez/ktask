@@ -58,17 +58,21 @@ export class MeService {
   }
 
   /**
-   * GET /me/tasks — agrupa as tarefas (ChecklistItems) atribuídas ao
-   * usuário em 4 buckets: overdue, today, next7, noDate.
+   * GET /me/tasks — agrupa as tarefas atribuídas ao usuário em 4 buckets:
+   * overdue, today, next7, noDate.
    *
-   * Cada item enriquecido com card pai (id, title, list.name, board.name).
-   * Cards arquivados ficam de fora.
+   * Mistura DUAS fontes:
+   *   1) ChecklistItems (tarefas dentro de cards) com `assigneeId = userId`
+   *   2) Tasks standalone (sem card) com `assigneeId = userId`
+   *
+   * O retorno é unificado num DTO `MeTaskOut` com `kind: 'checklist' | 'standalone'`
+   * pra o frontend renderizar conforme o tipo. Cards arquivados ficam de fora.
    */
   async getTasks(userId: string, org: TenantContext) {
     const { startOfDayUtc, endOfDayUtc, endOfNext7Utc } = this.brtDayBoundaries();
 
-    // Filtro base: tarefas do user, na org corrente, em cards não arquivados
-    const baseWhere = {
+    // ===== ChecklistItems =====
+    const baseWhereCl = {
       assigneeId: userId,
       isDone: false,
       checklist: {
@@ -80,7 +84,7 @@ export class MeService {
       },
     } as const;
 
-    const include = {
+    const includeCl = {
       checklist: {
         include: {
           card: {
@@ -97,31 +101,105 @@ export class MeService {
       },
     };
 
-    const [overdue, today, next7, noDate] = await Promise.all([
-      this.prisma.checklistItem.findMany({
-        where: { ...baseWhere, dueDate: { lt: startOfDayUtc } },
-        include,
-        orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
-      }),
-      this.prisma.checklistItem.findMany({
-        where: { ...baseWhere, dueDate: { gte: startOfDayUtc, lt: endOfDayUtc } },
-        include,
-        orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
-      }),
-      this.prisma.checklistItem.findMany({
-        where: { ...baseWhere, dueDate: { gte: endOfDayUtc, lt: endOfNext7Utc } },
-        include,
-        orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
-      }),
-      this.prisma.checklistItem.findMany({
-        where: { ...baseWhere, dueDate: null },
-        include,
-        orderBy: { position: 'asc' },
-        take: 50, // sem data pode ser longo; capa
-      }),
-    ]);
+    // ===== Standalone Tasks =====
+    const baseWhereTask = {
+      assigneeId: userId,
+      isDone: false,
+      organizationId: org.organizationId,
+    } as const;
 
-    return { overdue, today, next7, noDate };
+    const [clOverdue, clToday, clNext7, clNoDate, tOverdue, tToday, tNext7, tNoDate] =
+      await Promise.all([
+        this.prisma.checklistItem.findMany({
+          where: { ...baseWhereCl, dueDate: { lt: startOfDayUtc } },
+          include: includeCl,
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.checklistItem.findMany({
+          where: { ...baseWhereCl, dueDate: { gte: startOfDayUtc, lt: endOfDayUtc } },
+          include: includeCl,
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.checklistItem.findMany({
+          where: { ...baseWhereCl, dueDate: { gte: endOfDayUtc, lt: endOfNext7Utc } },
+          include: includeCl,
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.checklistItem.findMany({
+          where: { ...baseWhereCl, dueDate: null },
+          include: includeCl,
+          orderBy: { position: 'asc' },
+          take: 50,
+        }),
+        this.prisma.task.findMany({
+          where: { ...baseWhereTask, dueDate: { lt: startOfDayUtc } },
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.task.findMany({
+          where: { ...baseWhereTask, dueDate: { gte: startOfDayUtc, lt: endOfDayUtc } },
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.task.findMany({
+          where: { ...baseWhereTask, dueDate: { gte: endOfDayUtc, lt: endOfNext7Utc } },
+          orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
+        }),
+        this.prisma.task.findMany({
+          where: { ...baseWhereTask, dueDate: null },
+          orderBy: [{ createdAt: 'desc' }],
+          take: 50,
+        }),
+      ]);
+
+    type ClItem = (typeof clOverdue)[number];
+    type TItem = (typeof tOverdue)[number];
+
+    function mapCl(item: ClItem) {
+      return {
+        kind: 'checklist' as const,
+        id: item.id,
+        text: item.text,
+        isDone: item.isDone,
+        position: item.position,
+        dueDate: item.dueDate,
+        assigneeId: item.assigneeId,
+        doneAt: item.doneAt,
+        doneById: item.doneById,
+        checklistId: item.checklistId,
+        checklist: item.checklist,
+      };
+    }
+
+    function mapTask(item: TItem) {
+      return {
+        kind: 'standalone' as const,
+        id: item.id,
+        text: item.text,
+        isDone: item.isDone,
+        position: item.position,
+        dueDate: item.dueDate,
+        assigneeId: item.assigneeId,
+        doneAt: item.doneAt,
+        doneById: item.doneById,
+      };
+    }
+
+    type MeTaskOut = ReturnType<typeof mapCl> | ReturnType<typeof mapTask>;
+
+    function mergeAndSort(a: MeTaskOut[], b: MeTaskOut[]): MeTaskOut[] {
+      return [...a, ...b].sort((x, y) => {
+        const dx = x.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const dy = y.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        if (dx !== dy) return dx - dy;
+        return x.position - y.position;
+      });
+    }
+
+    return {
+      overdue: mergeAndSort(clOverdue.map(mapCl), tOverdue.map(mapTask)),
+      today: mergeAndSort(clToday.map(mapCl), tToday.map(mapTask)),
+      next7: mergeAndSort(clNext7.map(mapCl), tNext7.map(mapTask)),
+      noDate: mergeAndSort(clNoDate.map(mapCl), tNoDate.map(mapTask)),
+    };
   }
 
   /**
@@ -213,20 +291,32 @@ export class MeService {
     const startUtc = new Date(Date.UTC(y, m, 1, 3, 0, 0, 0));
     const endUtc = new Date(Date.UTC(y, m + 1, 1, 3, 0, 0, 0));
 
-    const items = await this.prisma.checklistItem.findMany({
-      where: {
-        assigneeId: userId,
-        dueDate: { gte: startUtc, lt: endUtc },
-        checklist: {
-          card: {
-            organizationId: org.organizationId,
-            isArchived: false,
-            board: { isArchived: false },
+    const [clItems, tItems] = await Promise.all([
+      this.prisma.checklistItem.findMany({
+        where: {
+          assigneeId: userId,
+          dueDate: { gte: startUtc, lt: endUtc },
+          checklist: {
+            card: {
+              organizationId: org.organizationId,
+              isArchived: false,
+              board: { isArchived: false },
+            },
           },
         },
-      },
-      select: { dueDate: true, isDone: true },
-    });
+        select: { dueDate: true, isDone: true },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          assigneeId: userId,
+          dueDate: { gte: startUtc, lt: endUtc },
+          organizationId: org.organizationId,
+        },
+        select: { dueDate: true, isDone: true },
+      }),
+    ]);
+
+    const items = [...clItems, ...tItems];
 
     // Agrupa por dia (BRT) com contagem total + pendentes
     const byDay = new Map<string, { total: number; pending: number }>();

@@ -159,6 +159,9 @@ model User {
   checklistItemsAssigned ChecklistItem[] @relation("ChecklistItemAssignee")
   checklistItemsDone     ChecklistItem[] @relation("ChecklistItemDoneBy")
   cardVisits             CardVisit[]
+  tasksAssigned          Task[]          @relation("TaskAssignee")
+  tasksCreated           Task[]          @relation("TaskCreator")
+  tasksDone              Task[]          @relation("TaskDoneBy")
 
   @@index([email])
 }
@@ -182,6 +185,7 @@ model Organization {
   labels      Label[]
   activities  Activity[]
   timeEntries TimeEntry[]
+  tasks       Task[]
 
   @@index([slug])
 }
@@ -544,4 +548,32 @@ model CardVisit {
 
   @@id([userId, cardId])
   @@index([userId, visitedAt(sort: Desc)])
+}
+
+// ==================== Tasks ====================
+
+// Tarefas standalone (sem vinculo a card). Aparecem na home pessoal junto
+// com os ChecklistItems, mas sao de nivel da Org. Quem cria atribui pra
+// si por padrao mas pode reatribuir.
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String
+  text           String
+  isDone         Boolean   @default(false)
+  dueDate        DateTime?
+  position       Float     @default(0)
+  assigneeId     String?
+  createdById    String
+  doneAt         DateTime?
+  doneById       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation("TaskCreator", fields: [createdById], references: [id])
+  doneBy       User?        @relation("TaskDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, assigneeId, isDone])
+  @@index([organizationId, dueDate])
 }
