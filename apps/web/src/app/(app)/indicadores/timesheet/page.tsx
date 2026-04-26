@@ -2,17 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, Plus } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Download, Loader2, Plus } from 'lucide-react';
 
 import {
+  formatDuration,
   timeTrackingQueries,
   type TimeEntrySource,
   type TimesheetFilter,
+  type TimesheetItem,
 } from '@/lib/queries/time-tracking';
 import { boardsQueries } from '@/lib/queries/boards';
 import { orgMembersQuery } from '@/lib/queries/cards';
 import { useAuthStore } from '@/stores/auth-store';
+import { useNotify } from '@/components/ui/dialogs';
+import { downloadCsv } from '@/lib/csv';
 import { TimesheetFiltersBar } from '@/components/time-tracking/timesheet-filters-bar';
 import { TimesheetSummaryCards } from '@/components/time-tracking/timesheet-summary-cards';
 import { TimesheetTable } from '@/components/time-tracking/timesheet-table';
@@ -38,7 +42,10 @@ function defaultRange(): { from: string; to: string } {
 
 export default function TimesheetPage() {
   const me = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const notify = useNotify();
   const [manualOpen, setManualOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const initialRange = useMemo(defaultRange, []);
   const [filters, setFilters] = useState<UiFilters>(() => ({
@@ -70,6 +77,47 @@ export default function TimesheetPage() {
   const membersQuery = useQuery({ ...orgMembersQuery });
   const boardsQuery = useQuery({ ...boardsQueries.all() });
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      // Busca tudo do periodo (sem cursor) — limit alto cobre uso interno
+      const data = await queryClient.fetchQuery(
+        timeTrackingQueries.timesheet({ ...apiFilter, limit: 5000, cursor: undefined }),
+      );
+      const items = data.items;
+      if (items.length === 0) {
+        notify.info('Nenhuma entrada no período pra exportar.');
+        return;
+      }
+      downloadCsv(
+        `timesheet_${filters.dateFrom}_${filters.dateTo}.csv`,
+        [
+          'Usuário',
+          'Email',
+          'Card',
+          'Fluxo',
+          'Etiquetas',
+          'Equipe',
+          'Data inicial',
+          'Hora inicial',
+          'Data final',
+          'Hora final',
+          'Duração',
+          'Tipo',
+          'Anotação',
+        ],
+        items.map((item) => itemToRow(item)),
+      );
+      notify.success(
+        `${items.length} entrada${items.length === 1 ? '' : 's'} exportada${items.length === 1 ? '' : 's'}.`,
+      );
+    } catch {
+      notify.error('Falha ao exportar dados.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="container flex flex-col gap-5 py-5">
       <TimesheetFiltersBar
@@ -95,10 +143,22 @@ export default function TimesheetPage() {
               Adicionar
             </button>
           </div>
-          <div className="text-fg-muted text-[11px]">
-            {timesheetQuery.isLoading
-              ? 'Carregando…'
-              : `${timesheetQuery.data?.items.length ?? 0} entrada${(timesheetQuery.data?.items.length ?? 0) === 1 ? '' : 's'} no período`}
+          <div className="flex items-center gap-3">
+            <span className="text-fg-muted text-[11px]">
+              {timesheetQuery.isLoading
+                ? 'Carregando…'
+                : `${timesheetQuery.data?.items.length ?? 0} entrada${(timesheetQuery.data?.items.length ?? 0) === 1 ? '' : 's'} no período`}
+            </span>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting || timesheetQuery.isLoading}
+              className="border-border/70 text-fg hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1 text-[12px] transition-colors disabled:opacity-50"
+              title="Exportar CSV com os filtros aplicados"
+            >
+              {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              Exportar dados
+            </button>
           </div>
         </header>
 
@@ -116,6 +176,38 @@ export default function TimesheetPage() {
       <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
     </div>
   );
+}
+
+function itemToRow(item: TimesheetItem): Array<string | number | null> {
+  const start = new Date(item.startedAt);
+  const end = item.endedAt ? new Date(item.endedAt) : null;
+  return [
+    item.user.name,
+    item.user.email,
+    item.card.title,
+    item.card.board.name,
+    item.card.labels.map((l) => l.label.name).join(', '),
+    item.card.members.map((m) => m.user.name).join(', '),
+    formatDate(start),
+    formatTime(start),
+    end ? formatDate(end) : '',
+    end ? formatTime(end) : '',
+    formatDuration(item.durationSec ?? 0),
+    item.source === 'TIMER' ? 'Cronômetro' : 'Manual',
+    item.note ?? '',
+  ];
+}
+
+function formatDate(d: Date): string {
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function formatTime(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
 }
 
 function EmptyState() {
