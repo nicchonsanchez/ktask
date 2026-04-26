@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Calendar, FileText, Layout } from 'lucide-react';
+import { Calendar, FileText, Layout, ListTodo } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { updateChecklistItem } from '@/lib/queries/cards';
-import { meQueries, type MeTask } from '@/lib/queries/me';
+import { meQueries, updateStandaloneTask, type MeTask } from '@/lib/queries/me';
 import { UserAvatar } from '@/components/user-avatar';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -42,7 +42,13 @@ export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant })
   const { user } = useAuthStore();
 
   const toggleMut = useMutation({
-    mutationFn: () => updateChecklistItem(task.id, { isDone: !task.isDone }),
+    mutationFn: async () => {
+      if (task.kind === 'standalone') {
+        await updateStandaloneTask(task.id, { isDone: !task.isDone });
+      } else {
+        await updateChecklistItem(task.id, { isDone: !task.isDone });
+      }
+    },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: meQueries.tasks().queryKey });
       const prev = queryClient.getQueryData(meQueries.tasks().queryKey);
@@ -67,8 +73,13 @@ export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant })
     },
   });
 
-  const cardHref = `/b/${task.checklist.card.boardId}?card=${task.checklist.card.id}`;
+  const isStandalone = task.kind === 'standalone';
+  const cardHref = isStandalone
+    ? null
+    : `/b/${task.checklist.card.boardId}?card=${task.checklist.card.id}`;
   const dueLabel = formatDueDate(task.dueDate);
+  const cardTitle = isStandalone ? null : task.checklist.card.title;
+  const cardListName = isStandalone ? null : task.checklist.card.list.name;
 
   return (
     <div className="border-border/50 group/row hover:bg-bg-subtle/50 relative flex items-center gap-2 border-b py-2 pl-3 pr-2 transition-colors last:border-b-0 sm:gap-3 sm:pl-4 sm:pr-3">
@@ -91,23 +102,42 @@ export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant })
       </button>
 
       {/* Nome da tarefa (uppercase como no Ummense) */}
-      <Link
-        href={cardHref}
-        className="hover:text-primary min-w-0 flex-1 truncate text-[13px] font-medium uppercase tracking-wide"
-        title={task.text}
-      >
-        {task.text}
-      </Link>
+      {cardHref ? (
+        <Link
+          href={cardHref}
+          className="hover:text-primary min-w-0 flex-1 truncate text-[13px] font-medium uppercase tracking-wide"
+          title={task.text}
+        >
+          {task.text}
+        </Link>
+      ) : (
+        <span
+          className="text-fg min-w-0 flex-1 truncate text-[13px] font-medium uppercase tracking-wide"
+          title={task.text}
+        >
+          {task.text}
+        </span>
+      )}
 
-      {/* Card pai */}
-      <Link
-        href={cardHref}
-        className="text-fg-muted hover:text-fg hidden min-w-0 max-w-[40%] items-center gap-1 truncate text-[12px] sm:flex"
-        title={`${task.checklist.card.title} · ${task.checklist.card.list.name}`}
-      >
-        <Layout size={11} className="shrink-0" />
-        <span className="truncate">{task.checklist.card.title}</span>
-      </Link>
+      {/* Card pai (só pra checklist) ou label "Pessoal" (pra standalone) */}
+      {cardHref && cardTitle ? (
+        <Link
+          href={cardHref}
+          className="text-fg-muted hover:text-fg hidden min-w-0 max-w-[40%] items-center gap-1 truncate text-[12px] sm:flex"
+          title={`${cardTitle} · ${cardListName}`}
+        >
+          <Layout size={11} className="shrink-0" />
+          <span className="truncate">{cardTitle}</span>
+        </Link>
+      ) : (
+        <span
+          className="text-fg-muted hidden shrink-0 items-center gap-1 text-[12px] italic sm:inline-flex"
+          title="Tarefa pessoal (sem card)"
+        >
+          <ListTodo size={11} />
+          <span>Pessoal</span>
+        </span>
+      )}
 
       {/* Prazo */}
       {dueLabel && (
@@ -130,14 +160,16 @@ export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant })
         <UserAvatar name={user.name} userId={user.id} avatarUrl={user.avatarUrl} size="sm" />
       )}
 
-      {/* Seta de expandir */}
-      <Link
-        href={cardHref}
-        className="text-fg-muted hover:text-fg shrink-0 transition-colors"
-        aria-label={`Abrir card ${task.checklist.card.title}`}
-      >
-        <ChevronRight />
-      </Link>
+      {/* Seta de expandir só pra checklist (standalone não tem destino) */}
+      {cardHref && (
+        <Link
+          href={cardHref}
+          className="text-fg-muted hover:text-fg shrink-0 transition-colors"
+          aria-label={`Abrir card ${cardTitle}`}
+        >
+          <ChevronRight />
+        </Link>
+      )}
     </div>
   );
 }

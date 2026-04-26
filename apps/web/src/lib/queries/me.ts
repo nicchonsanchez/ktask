@@ -16,7 +16,7 @@ export interface MeTaskCardSummary {
   board: { id: string; name: string; color: string | null };
 }
 
-export interface MeTask {
+export interface MeTaskBase {
   id: string;
   text: string;
   isDone: boolean;
@@ -25,6 +25,10 @@ export interface MeTask {
   assigneeId: string | null;
   doneAt: string | null;
   doneById: string | null;
+}
+
+export interface MeTaskChecklist extends MeTaskBase {
+  kind: 'checklist';
   checklistId: string;
   checklist: {
     id: string;
@@ -33,6 +37,12 @@ export interface MeTask {
     card: MeTaskCardSummary;
   };
 }
+
+export interface MeTaskStandalone extends MeTaskBase {
+  kind: 'standalone';
+}
+
+export type MeTask = MeTaskChecklist | MeTaskStandalone;
 
 export interface MeTasksResponse {
   overdue: MeTask[];
@@ -91,4 +101,45 @@ export const meQueries = {
 
 export function bulkRescheduleToday(ids: string[]) {
   return api.post<{ updated: number }>('/api/v1/me/tasks/bulk-reschedule-today', { ids });
+}
+
+/* -------------------------- Standalone tasks -------------------------- */
+
+export interface StandaloneTask {
+  id: string;
+  text: string;
+  isDone: boolean;
+  dueDate: string | null;
+  assigneeId: string | null;
+  createdById: string;
+  doneAt: string | null;
+  doneById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignee: { id: string; name: string; email: string; avatarUrl: string | null } | null;
+  createdBy: { id: string; name: string; email: string; avatarUrl: string | null };
+}
+
+export function createStandaloneTask(input: {
+  text: string;
+  dueDate?: string | null;
+  assigneeId?: string | null; // undefined = caller (default), null = sem assignee
+}) {
+  return api.post<StandaloneTask>('/api/v1/tasks', input);
+}
+
+export function updateStandaloneTask(
+  taskId: string,
+  input: {
+    text?: string;
+    dueDate?: string | null;
+    assigneeId?: string | null;
+    isDone?: boolean;
+  },
+) {
+  return api.patch<StandaloneTask>(`/api/v1/tasks/${taskId}`, input);
+}
+
+export function deleteStandaloneTask(taskId: string) {
+  return api.delete<{ ok: true }>(`/api/v1/tasks/${taskId}`);
 }

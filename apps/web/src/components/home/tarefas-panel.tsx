@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 import { meQueries, bulkRescheduleToday, type MeTask } from '@/lib/queries/me';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { TarefaRow } from './tarefa-row';
+import { CreateTaskDialog } from './create-task-dialog';
 
 /**
  * Painel "Tarefas" da home pessoal — card colapsável com 4 seções:
@@ -26,6 +27,7 @@ export function TarefasPanel({
   onClearFilter?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const tasksQuery = useQuery({ ...meQueries.tasks() });
   const data = tasksQuery.data;
   const filteredTasks = selectedDay && data ? filterTasksByDay(data, selectedDay) : null;
@@ -46,15 +48,16 @@ export function TarefasPanel({
           <h2 className="text-fg text-sm font-semibold">Tarefas</h2>
           <button
             type="button"
-            disabled
-            title="Adicionar tarefa rápida (em breve)"
+            onClick={() => setCreateOpen(true)}
+            title="Adicionar tarefa rápida"
             aria-label="Adicionar tarefa"
-            className="bg-primary-subtle text-primary inline-flex size-6 items-center justify-center rounded transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+            className="bg-primary-subtle text-primary hover:bg-primary hover:text-primary-fg inline-flex size-6 items-center justify-center rounded transition-colors"
           >
             <Plus size={13} />
           </button>
         </div>
       </div>
+      <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       {!collapsed && (
         <div className="flex flex-col">
