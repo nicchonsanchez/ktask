@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bot,
-  Check,
   ChevronLeft,
   Eye,
   Flag,
@@ -68,6 +67,7 @@ export function ColumnAutomationsDialog({
 }) {
   const [tab, setTab] = useState<Tab>('automations');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const automationsQuery = useQuery({
     ...automationsQueries.byList(list.id),
@@ -159,7 +159,12 @@ export function ColumnAutomationsDialog({
                 {!automationsQuery.isLoading && automations.length > 0 && (
                   <ul className="divide-border/40 flex flex-col divide-y px-2">
                     {automations.map((auto) => (
-                      <AutomationRow key={auto.id} automation={auto} listId={list.id} />
+                      <AutomationRow
+                        key={auto.id}
+                        automation={auto}
+                        listId={list.id}
+                        onEdit={() => setEditingAutomation(auto)}
+                      />
                     ))}
                   </ul>
                 )}
@@ -199,6 +204,16 @@ export function ColumnAutomationsDialog({
         onOpenChange={setCreateOpen}
         list={list}
         boardId={boardId}
+      />
+
+      <CreateAutomationDialog
+        open={editingAutomation !== null}
+        onOpenChange={(v) => {
+          if (!v) setEditingAutomation(null);
+        }}
+        list={list}
+        boardId={boardId}
+        editing={editingAutomation ?? undefined}
       />
     </>
   );
@@ -277,12 +292,18 @@ function TabBtn({
 
 // ---------------- AutomationRow ----------------
 
-function AutomationRow({ automation, listId }: { automation: Automation; listId: string }) {
+function AutomationRow({
+  automation,
+  listId,
+  onEdit,
+}: {
+  automation: Automation;
+  listId: string;
+  onEdit: () => void;
+}) {
   const queryClient = useQueryClient();
   const notify = useNotify();
   const confirm = useConfirm();
-  const [editing, setEditing] = useState(false);
-  const [draftLabel, setDraftLabel] = useState(automation.label ?? '');
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: automationsQueries.byList(listId).queryKey });
@@ -292,19 +313,6 @@ function AutomationRow({ automation, listId }: { automation: Automation; listId:
     mutationFn: () => updateAutomation(automation.id, { isActive: !automation.isActive }),
     onSuccess: invalidate,
     onError: () => notify.error('Falha ao alterar automação.'),
-  });
-
-  const renameMut = useMutation({
-    mutationFn: () =>
-      updateAutomation(automation.id, {
-        label: draftLabel.trim() ? draftLabel.trim() : null,
-      }),
-    onSuccess: () => {
-      invalidate();
-      setEditing(false);
-      notify.success('Nome da automação atualizado.');
-    },
-    onError: () => notify.error('Falha ao salvar nome.'),
   });
 
   const deleteMut = useMutation({
@@ -326,119 +334,61 @@ function AutomationRow({ automation, listId }: { automation: Automation; listId:
     if (ok) deleteMut.mutate();
   }
 
-  function startEdit() {
-    setDraftLabel(automation.label ?? '');
-    setEditing(true);
-  }
-
-  function cancelEdit() {
-    setEditing(false);
-    setDraftLabel(automation.label ?? '');
-  }
-
   return (
     <li className="hover:bg-bg-subtle/50 flex items-start gap-3 px-3 py-2.5">
       <span className="bg-primary-subtle text-primary mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded">
         {iconFor(automation.actionType)}
       </span>
       <div className="min-w-0 flex-1">
-        {editing ? (
-          <input
-            autoFocus
-            value={draftLabel}
-            onChange={(e) => setDraftLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') renameMut.mutate();
-              if (e.key === 'Escape') cancelEdit();
-            }}
-            placeholder={describeAction(automation.actionType)}
-            maxLength={120}
-            className="border-border bg-bg focus-visible:ring-primary w-full rounded border px-2 py-1 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2"
-          />
-        ) : (
-          <p className="text-fg text-[13px] font-medium leading-snug">
-            {automation.label || describeAction(automation.actionType)}
-          </p>
-        )}
+        <p className="text-fg text-[13px] font-medium leading-snug">
+          {automation.label || describeAction(automation.actionType)}
+        </p>
         <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
           Quando: <strong>{describeTrigger(automation.trigger)}</strong>
         </p>
       </div>
 
-      {editing ? (
-        <>
-          <button
-            type="button"
-            onClick={() => renameMut.mutate()}
-            disabled={renameMut.isPending}
-            className="text-success hover:bg-success-subtle shrink-0 rounded p-1"
-            aria-label="Salvar nome"
-            title="Salvar"
-          >
-            {renameMut.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Check size={12} />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={cancelEdit}
-            disabled={renameMut.isPending}
-            className="text-fg-muted hover:bg-bg-muted shrink-0 rounded p-1"
-            aria-label="Cancelar"
-            title="Cancelar"
-          >
-            <X size={12} />
-          </button>
-        </>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={() => toggleMut.mutate()}
-            disabled={toggleMut.isPending}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              automation.isActive ? 'bg-primary' : 'bg-bg-emphasis'
-            }`}
-            aria-label={automation.isActive ? 'Desativar' : 'Ativar'}
-            title={
-              automation.isActive
-                ? 'Ativa — clique para desativar'
-                : 'Desativada — clique para ativar'
-            }
-          >
-            <span
-              className={`bg-bg inline-block size-4 transform rounded-full shadow-sm transition-transform ${
-                automation.isActive ? 'translate-x-4' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={startEdit}
-            className="text-fg-muted hover:text-primary shrink-0 rounded p-1"
-            aria-label="Editar nome"
-            title="Editar nome (trigger e ação não são editáveis — exclua e recrie pra mudar)"
-          >
-            <Pencil size={12} />
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleteMut.isPending}
-            className="text-fg-muted hover:text-danger shrink-0 rounded p-1"
-            aria-label="Excluir automação"
-            title="Excluir"
-          >
-            {deleteMut.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Trash2 size={12} />
-            )}
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        onClick={() => toggleMut.mutate()}
+        disabled={toggleMut.isPending}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+          automation.isActive ? 'bg-primary' : 'bg-bg-emphasis'
+        }`}
+        aria-label={automation.isActive ? 'Desativar' : 'Ativar'}
+        title={
+          automation.isActive ? 'Ativa — clique para desativar' : 'Desativada — clique para ativar'
+        }
+      >
+        <span
+          className={`bg-bg inline-block size-4 transform rounded-full shadow-sm transition-transform ${
+            automation.isActive ? 'translate-x-4' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="text-fg-muted hover:text-primary shrink-0 rounded p-1"
+        aria-label="Editar automação"
+        title="Editar automação"
+      >
+        <Pencil size={12} />
+      </button>
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={deleteMut.isPending}
+        className="text-fg-muted hover:text-danger shrink-0 rounded p-1"
+        aria-label="Excluir automação"
+        title="Excluir"
+      >
+        {deleteMut.isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Trash2 size={12} />
+        )}
+      </button>
     </li>
   );
 }
@@ -709,30 +659,51 @@ function CreateAutomationDialog({
   onOpenChange,
   list,
   boardId,
+  editing,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   list: ListWithCards;
   boardId: string;
+  editing?: Automation;
 }) {
-  const [step, setStep] = useState<'catalog' | 'form'>('catalog');
-  const [selected, setSelected] = useState<AutomationActionType | null>(null);
+  const isEdit = Boolean(editing);
+  const [step, setStep] = useState<'catalog' | 'form'>(isEdit ? 'form' : 'catalog');
+  const [selected, setSelected] = useState<AutomationActionType | null>(
+    editing?.actionType ?? null,
+  );
+
+  // Quando o dialog abrir em modo edicao, vai direto pro form com a action ja escolhida
+  useEffect(() => {
+    if (open && editing) {
+      setStep('form');
+      setSelected(editing.actionType);
+    }
+  }, [open, editing]);
 
   function reset() {
+    if (isEdit) {
+      handleClose();
+      return;
+    }
     setStep('catalog');
     setSelected(null);
   }
 
   function handleClose() {
     onOpenChange(false);
-    setTimeout(reset, 200);
+    if (!isEdit)
+      setTimeout(() => {
+        setStep('catalog');
+        setSelected(null);
+      }, 200);
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : handleClose())}>
       <DialogContent className="flex h-[85vh] w-[calc(100vw-2rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-md p-0">
         <header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-5 py-3">
-          {step === 'form' ? (
+          {step === 'form' && !isEdit ? (
             <button
               type="button"
               onClick={reset}
@@ -745,7 +716,11 @@ function CreateAutomationDialog({
             <Bot size={16} className="text-fg-muted" />
           )}
           <DialogTitle className="text-fg flex-1 text-sm font-semibold">
-            {step === 'catalog' ? 'Selecione uma automação' : 'Configurar automação'}
+            {step === 'catalog'
+              ? 'Selecione uma automação'
+              : isEdit
+                ? 'Editar automação'
+                : 'Configurar automação'}
           </DialogTitle>
           <button
             type="button"
@@ -757,7 +732,7 @@ function CreateAutomationDialog({
           </button>
         </header>
 
-        {step === 'catalog' && (
+        {step === 'catalog' && !isEdit && (
           <Catalog
             onPick={(action) => {
               setSelected(action);
@@ -771,6 +746,7 @@ function CreateAutomationDialog({
             actionType={selected}
             list={list}
             boardId={boardId}
+            editing={editing}
             onCreated={handleClose}
             onCancel={reset}
           />

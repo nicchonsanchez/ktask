@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
@@ -8,6 +8,8 @@ import type { ListWithCards } from '@/lib/queries/boards';
 import {
   automationsQueries,
   createAutomation,
+  updateAutomation,
+  type Automation,
   type AutomationActionType,
   type AutomationTrigger,
   type CreateAutomationInput,
@@ -30,34 +32,67 @@ export function CreateAutomationForm({
   actionType,
   list,
   boardId,
+  editing,
   onCreated,
   onCancel,
 }: {
   actionType: AutomationActionType;
   list: ListWithCards;
   boardId: string;
+  editing?: Automation;
   onCreated: () => void;
   onCancel: () => void;
 }) {
-  const [trigger, setTrigger] = useState<AutomationTrigger>('CARD_ENTERED');
-  const [minutes, setMinutes] = useState(60);
+  const isEdit = Boolean(editing);
+  const initial = editing ? extractInitial(editing) : null;
+
+  const [trigger, setTrigger] = useState<AutomationTrigger>(initial?.trigger ?? 'CARD_ENTERED');
+  const [minutes, setMinutes] = useState(initial?.minutes ?? 60);
 
   // Action-specific state
-  const [tagIds, setTagIds] = useState<string[]>([]);
-  const [checklistTitle, setChecklistTitle] = useState('Tarefas');
-  const [checklistItemsRaw, setChecklistItemsRaw] = useState('');
-  const [leadUserId, setLeadUserId] = useState('');
-  const [teamUserIds, setTeamUserIds] = useState<string[]>([]);
-  const [commentTemplate, setCommentTemplate] = useState('');
-  const [cardStatus, setCardStatus] = useState<'COMPLETED' | 'REOPENED' | 'ARCHIVED'>('COMPLETED');
-  const [childTitleTemplate, setChildTitleTemplate] = useState('Sub-tarefa de {{card.title}}');
-  const [copyLead, setCopyLead] = useState(false);
-  const [copyTeam, setCopyTeam] = useState(false);
-  const [copyTags, setCopyTags] = useState(false);
-  const [copyDueDate, setCopyDueDate] = useState(false);
-  const [flowPosition, setFlowPosition] = useState<'TOP' | 'BOTTOM'>('TOP');
+  const [tagIds, setTagIds] = useState<string[]>(initial?.tagIds ?? []);
+  const [checklistTitle, setChecklistTitle] = useState(initial?.checklistTitle ?? 'Tarefas');
+  const [checklistItemsRaw, setChecklistItemsRaw] = useState(initial?.checklistItemsRaw ?? '');
+  const [leadUserId, setLeadUserId] = useState(initial?.leadUserId ?? '');
+  const [teamUserIds, setTeamUserIds] = useState<string[]>(initial?.teamUserIds ?? []);
+  const [commentTemplate, setCommentTemplate] = useState(initial?.commentTemplate ?? '');
+  const [cardStatus, setCardStatus] = useState<'COMPLETED' | 'REOPENED' | 'ARCHIVED'>(
+    initial?.cardStatus ?? 'COMPLETED',
+  );
+  const [childTitleTemplate, setChildTitleTemplate] = useState(
+    initial?.childTitleTemplate ?? 'Sub-tarefa de {{card.title}}',
+  );
+  const [copyLead, setCopyLead] = useState(initial?.copyLead ?? false);
+  const [copyTeam, setCopyTeam] = useState(initial?.copyTeam ?? false);
+  const [copyTags, setCopyTags] = useState(initial?.copyTags ?? false);
+  const [copyDueDate, setCopyDueDate] = useState(initial?.copyDueDate ?? false);
+  const [flowPosition, setFlowPosition] = useState<'TOP' | 'BOTTOM'>(
+    initial?.flowPosition ?? 'TOP',
+  );
 
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = useState(initial?.label ?? '');
+
+  // Quando editar uma automação diferente sem desmontar, ressincroniza state.
+  useEffect(() => {
+    if (!editing) return;
+    const next = extractInitial(editing);
+    setTrigger(next.trigger);
+    setMinutes(next.minutes);
+    setTagIds(next.tagIds);
+    setChecklistTitle(next.checklistTitle);
+    setChecklistItemsRaw(next.checklistItemsRaw);
+    setLeadUserId(next.leadUserId);
+    setTeamUserIds(next.teamUserIds);
+    setCommentTemplate(next.commentTemplate);
+    setCardStatus(next.cardStatus);
+    setChildTitleTemplate(next.childTitleTemplate);
+    setCopyLead(next.copyLead);
+    setCopyTeam(next.copyTeam);
+    setCopyTags(next.copyTags);
+    setCopyDueDate(next.copyDueDate);
+    setFlowPosition(next.flowPosition);
+    setLabel(next.label);
+  }, [editing]);
 
   const queryClient = useQueryClient();
   const notify = useNotify();
@@ -88,10 +123,20 @@ export function CreateAutomationForm({
         copyDueDate,
         flowPosition,
       });
+      const triggerConfig =
+        trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {};
+      if (editing) {
+        return updateAutomation(editing.id, {
+          trigger,
+          triggerConfig,
+          actionType,
+          actionConfig,
+          label: label.trim() ? label.trim() : null,
+        });
+      }
       const input: CreateAutomationInput = {
         trigger,
-        triggerConfig:
-          trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {},
+        triggerConfig,
         actionType,
         actionConfig,
         label: label.trim() || undefined,
@@ -100,10 +145,11 @@ export function CreateAutomationForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: automationsQueries.byList(list.id).queryKey });
-      notify.success('Automação criada.');
+      notify.success(isEdit ? 'Automação atualizada.' : 'Automação criada.');
       onCreated();
     },
-    onError: () => notify.error('Falha ao criar automação.'),
+    onError: () =>
+      notify.error(isEdit ? 'Falha ao atualizar automação.' : 'Falha ao criar automação.'),
   });
 
   const canSubmit =
@@ -302,7 +348,7 @@ export function CreateAutomationForm({
           className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-60"
         >
           {createMut.isPending && <Loader2 size={13} className="animate-spin" />}
-          Criar automação
+          {isEdit ? 'Salvar alterações' : 'Criar automação'}
         </button>
       </div>
     </form>
@@ -430,6 +476,64 @@ function validateAction(
     default:
       return false;
   }
+}
+
+interface InitialState {
+  trigger: AutomationTrigger;
+  minutes: number;
+  tagIds: string[];
+  checklistTitle: string;
+  checklistItemsRaw: string;
+  leadUserId: string;
+  teamUserIds: string[];
+  commentTemplate: string;
+  cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+  childTitleTemplate: string;
+  copyLead: boolean;
+  copyTeam: boolean;
+  copyTags: boolean;
+  copyDueDate: boolean;
+  flowPosition: 'TOP' | 'BOTTOM';
+  label: string;
+}
+
+/**
+ * Lê uma Automation existente e extrai os defaults de UI.
+ * Cada actionType olha apenas as chaves que produziu em buildActionConfig —
+ * o resto fica com o default neutro pra evitar "vazamento" entre tipos.
+ */
+function extractInitial(a: Automation): InitialState {
+  const cfg = (a.actionConfig ?? {}) as Record<string, unknown>;
+  const tCfg = (a.triggerConfig ?? {}) as Record<string, unknown>;
+  const minutes = typeof tCfg.minutes === 'number' ? (tCfg.minutes as number) : 60;
+
+  return {
+    trigger: a.trigger,
+    minutes,
+    tagIds: Array.isArray(cfg.tagIds) ? (cfg.tagIds as string[]) : [],
+    checklistTitle:
+      (typeof cfg.checklistTitle === 'string' && (cfg.checklistTitle as string)) ||
+      (typeof cfg.title === 'string' && (cfg.title as string)) ||
+      'Tarefas',
+    checklistItemsRaw: Array.isArray(cfg.items) ? (cfg.items as string[]).join('\n') : '',
+    leadUserId: typeof cfg.userId === 'string' ? (cfg.userId as string) : '',
+    teamUserIds: Array.isArray(cfg.userIds) ? (cfg.userIds as string[]) : [],
+    commentTemplate: typeof cfg.template === 'string' ? (cfg.template as string) : '',
+    cardStatus:
+      cfg.status === 'COMPLETED' || cfg.status === 'REOPENED' || cfg.status === 'ARCHIVED'
+        ? (cfg.status as 'COMPLETED' | 'REOPENED' | 'ARCHIVED')
+        : 'COMPLETED',
+    childTitleTemplate:
+      typeof cfg.titleTemplate === 'string'
+        ? (cfg.titleTemplate as string)
+        : 'Sub-tarefa de {{card.title}}',
+    copyLead: cfg.copyLead === true,
+    copyTeam: cfg.copyTeam === true,
+    copyTags: cfg.copyTags === true,
+    copyDueDate: cfg.copyDueDate === true,
+    flowPosition: cfg.position === 'BOTTOM' ? 'BOTTOM' : 'TOP',
+    label: a.label ?? '',
+  };
 }
 
 // ---------------- Sub-componentes de configuração ----------------
