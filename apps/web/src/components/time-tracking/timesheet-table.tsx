@@ -52,7 +52,7 @@ function Row({ item }: { item: TimesheetItem }) {
   async function handleDelete() {
     const ok = await confirm({
       title: 'Remover esta entrada de tempo?',
-      description: `${item.card.title} · ${formatDuration(item.durationSec ?? 0)}`,
+      description: `${item.card?.title ?? 'Timer livre'} · ${formatDuration(item.durationSec ?? 0)}`,
       confirmLabel: 'Remover',
       danger: true,
     });
@@ -75,17 +75,21 @@ function Row({ item }: { item: TimesheetItem }) {
         </div>
       </Td>
       <Td>
-        <Link
-          href={`/b/${item.card.boardId}?card=${item.cardId}`}
-          className="text-fg hover:text-primary inline-flex max-w-[260px] items-center gap-1 truncate font-medium"
-          title={item.card.title}
-        >
-          {item.card.title}
-        </Link>
+        {item.card ? (
+          <Link
+            href={`/b/${item.card.boardId}?card=${item.cardId}`}
+            className="text-fg hover:text-primary inline-flex max-w-[260px] items-center gap-1 truncate font-medium"
+            title={item.card.title}
+          >
+            {item.card.title}
+          </Link>
+        ) : (
+          <span className="text-fg-subtle italic">Sem card vinculado</span>
+        )}
       </Td>
       <Td>
         <div className="flex max-w-[160px] flex-wrap gap-1">
-          {item.card.labels.length === 0 ? (
+          {!item.card || item.card.labels.length === 0 ? (
             <span className="text-fg-subtle">—</span>
           ) : (
             item.card.labels.map((l) => (
@@ -101,7 +105,7 @@ function Row({ item }: { item: TimesheetItem }) {
         </div>
       </Td>
       <Td>
-        {item.card.members.length === 0 ? (
+        {!item.card || item.card.members.length === 0 ? (
           <span className="text-fg-subtle">—</span>
         ) : (
           <div className="flex -space-x-1.5">
@@ -124,7 +128,11 @@ function Row({ item }: { item: TimesheetItem }) {
         )}
       </Td>
       <Td>
-        <span className="text-fg-muted truncate">{item.card.board.name}</span>
+        {item.card ? (
+          <span className="text-fg-muted truncate">{item.card.board.name}</span>
+        ) : (
+          <span className="text-fg-subtle">—</span>
+        )}
       </Td>
       <Td>
         <span className="font-mono tabular-nums">{formatDateTime(item.startedAt)}</span>

@@ -31,6 +31,7 @@ export interface TimeEntryWithUser extends TimeEntry {
 }
 
 export interface TimesheetItem extends TimeEntryWithUser {
+  // Null quando a entry foi criada como timer livre (sem card vinculado)
   card: {
     id: string;
     title: string;
@@ -38,7 +39,7 @@ export interface TimesheetItem extends TimeEntryWithUser {
     board: { id: string; name: string };
     labels: Array<{ label: { id: string; name: string; color: string } }>;
     members: Array<{ user: { id: string; name: string; avatarUrl: string | null } }>;
-  };
+  } | null;
 }
 
 export interface TimesheetPage {
