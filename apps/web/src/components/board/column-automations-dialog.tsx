@@ -207,9 +207,11 @@ function EngineWarningBanner() {
     <div className="border-warning/40 bg-warning-subtle/40 mx-3 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[11px]">
       <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
       <p className="text-fg-muted leading-snug">
-        <strong className="text-warning">Engine em desenvolvimento.</strong> Você pode criar e
-        salvar automações, mas as ações ainda não disparam quando o gatilho acontece. A engine vai
-        entrar numa próxima sprint (ver <code>tarefas-md/23-automacoes-coluna.md</code>).
+        <strong className="text-warning">Engine parcial.</strong> Triggers{' '}
+        <strong>CARD_ENTERED</strong> e <strong>CARD_LEFT</strong> rodam ao vivo, e a action{' '}
+        <strong>INSERT_TAGS</strong> está implementada. As outras 17 actions ficam SKIPPED (criadas
+        mas não executadas) até os handlers virem prontos — ver{' '}
+        <code>tarefas-md/23-automacoes-coluna.md</code>.
       </p>
     </div>
   );

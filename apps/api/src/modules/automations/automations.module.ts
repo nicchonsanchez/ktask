@@ -5,11 +5,12 @@ import { BoardsModule } from '@/modules/boards/boards.module';
 
 import { AutomationsService } from './automations.service';
 import { AutomationsController } from './automations.controller';
+import { AutomationsEngine } from './automations.engine';
 
 @Module({
   imports: [BoardsModule],
   controllers: [AutomationsController],
-  providers: [AutomationsService, TenantGuard],
-  exports: [AutomationsService],
+  providers: [AutomationsService, AutomationsEngine, TenantGuard],
+  exports: [AutomationsService, AutomationsEngine],
 })
 export class AutomationsModule {}
