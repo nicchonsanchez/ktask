@@ -88,7 +88,7 @@ export function createAutomation(listId: string, input: CreateAutomationInput) {
 
 export function updateAutomation(
   automationId: string,
-  input: Partial<CreateAutomationInput> & { label?: string | null },
+  input: Partial<Omit<CreateAutomationInput, 'label'>> & { label?: string | null },
 ) {
   return api.patch<Automation>(`/api/v1/automations/${automationId}`, input);
 }

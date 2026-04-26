@@ -68,7 +68,6 @@ export default function EmpresaPage() {
           icon={<ShieldCheck size={18} />}
           label="Seu papel"
           value={orgQuery.data ? ORG_ROLE_LABELS[orgQuery.data.myRole] : '—'}
-          hint={orgQuery.data?.plan ? `Plano ${orgQuery.data.plan.toLowerCase()}` : undefined}
         />
         <StatCard
           icon={<Users size={18} />}

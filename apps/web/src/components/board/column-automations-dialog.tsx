@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bot,
+  Check,
   ChevronLeft,
   Eye,
   Flag,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Mail,
   MessageSquare,
+  Pencil,
   Plus,
   Send,
   Tag,
@@ -208,9 +210,9 @@ function EngineWarningBanner() {
       <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
       <p className="text-fg-muted leading-snug">
         <strong className="text-warning">Engine parcial.</strong> Todos os 6 triggers rodam (eventos
-        + temporais via cron). 8 das 18 actions implementadas (Tags add/remove, Inserir tarefas,
-        Líder, Equipe, Comentário, Status, Card filho); as demais 10 ficam SKIPPED até virem prontas
-        — ver <code>tarefas-md/23-automacoes-coluna.md</code>.
+        + temporais via cron). 10 das 18 actions implementadas (Tags add/remove, Inserir tarefas,
+        Inserir grupo, Líder, Equipe, Comentário, Status, Card filho, Reposicionar); as 8 restantes
+        ficam SKIPPED — ver <code>tarefas-md/23-automacoes-coluna.md</code>.
       </p>
     </div>
   );
@@ -279,6 +281,8 @@ function AutomationRow({ automation, listId }: { automation: Automation; listId:
   const queryClient = useQueryClient();
   const notify = useNotify();
   const confirm = useConfirm();
+  const [editing, setEditing] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(automation.label ?? '');
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: automationsQueries.byList(listId).queryKey });
@@ -288,6 +292,19 @@ function AutomationRow({ automation, listId }: { automation: Automation; listId:
     mutationFn: () => updateAutomation(automation.id, { isActive: !automation.isActive }),
     onSuccess: invalidate,
     onError: () => notify.error('Falha ao alterar automação.'),
+  });
+
+  const renameMut = useMutation({
+    mutationFn: () =>
+      updateAutomation(automation.id, {
+        label: draftLabel.trim() ? draftLabel.trim() : null,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setEditing(false);
+      notify.success('Nome da automação atualizado.');
+    },
+    onError: () => notify.error('Falha ao salvar nome.'),
   });
 
   const deleteMut = useMutation({
@@ -309,51 +326,119 @@ function AutomationRow({ automation, listId }: { automation: Automation; listId:
     if (ok) deleteMut.mutate();
   }
 
+  function startEdit() {
+    setDraftLabel(automation.label ?? '');
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setDraftLabel(automation.label ?? '');
+  }
+
   return (
     <li className="hover:bg-bg-subtle/50 flex items-start gap-3 px-3 py-2.5">
       <span className="bg-primary-subtle text-primary mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded">
         {iconFor(automation.actionType)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-fg text-[13px] font-medium leading-snug">
-          {automation.label || describeAction(automation.actionType)}
-        </p>
+        {editing ? (
+          <input
+            autoFocus
+            value={draftLabel}
+            onChange={(e) => setDraftLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') renameMut.mutate();
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            placeholder={describeAction(automation.actionType)}
+            maxLength={120}
+            className="border-border bg-bg focus-visible:ring-primary w-full rounded border px-2 py-1 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2"
+          />
+        ) : (
+          <p className="text-fg text-[13px] font-medium leading-snug">
+            {automation.label || describeAction(automation.actionType)}
+          </p>
+        )}
         <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
           Quando: <strong>{describeTrigger(automation.trigger)}</strong>
         </p>
       </div>
-      <button
-        type="button"
-        onClick={() => toggleMut.mutate()}
-        disabled={toggleMut.isPending}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-          automation.isActive ? 'bg-primary' : 'bg-bg-emphasis'
-        }`}
-        aria-label={automation.isActive ? 'Desativar' : 'Ativar'}
-        title={
-          automation.isActive ? 'Ativa — clique para desativar' : 'Desativada — clique para ativar'
-        }
-      >
-        <span
-          className={`bg-bg inline-block size-4 transform rounded-full shadow-sm transition-transform ${
-            automation.isActive ? 'translate-x-4' : 'translate-x-0.5'
-          }`}
-        />
-      </button>
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={deleteMut.isPending}
-        className="text-fg-muted hover:text-danger shrink-0 rounded p-1"
-        aria-label="Excluir automação"
-        title="Excluir"
-      >
-        {deleteMut.isPending ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : (
-          <Trash2 size={12} />
-        )}
-      </button>
+
+      {editing ? (
+        <>
+          <button
+            type="button"
+            onClick={() => renameMut.mutate()}
+            disabled={renameMut.isPending}
+            className="text-success hover:bg-success-subtle shrink-0 rounded p-1"
+            aria-label="Salvar nome"
+            title="Salvar"
+          >
+            {renameMut.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Check size={12} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={cancelEdit}
+            disabled={renameMut.isPending}
+            className="text-fg-muted hover:bg-bg-muted shrink-0 rounded p-1"
+            aria-label="Cancelar"
+            title="Cancelar"
+          >
+            <X size={12} />
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => toggleMut.mutate()}
+            disabled={toggleMut.isPending}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              automation.isActive ? 'bg-primary' : 'bg-bg-emphasis'
+            }`}
+            aria-label={automation.isActive ? 'Desativar' : 'Ativar'}
+            title={
+              automation.isActive
+                ? 'Ativa — clique para desativar'
+                : 'Desativada — clique para ativar'
+            }
+          >
+            <span
+              className={`bg-bg inline-block size-4 transform rounded-full shadow-sm transition-transform ${
+                automation.isActive ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={startEdit}
+            className="text-fg-muted hover:text-primary shrink-0 rounded p-1"
+            aria-label="Editar nome"
+            title="Editar nome (trigger e ação não são editáveis — exclua e recrie pra mudar)"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleteMut.isPending}
+            className="text-fg-muted hover:text-danger shrink-0 rounded p-1"
+            aria-label="Excluir automação"
+            title="Excluir"
+          >
+            {deleteMut.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Trash2 size={12} />
+            )}
+          </button>
+        </>
+      )}
     </li>
   );
 }
@@ -478,8 +563,8 @@ const CATALOG: CatalogCategory[] = [
         label: 'Inserir grupo de tarefas',
         icon: ListChecks,
         plan: 'PRO',
-        ready: false,
-        description: 'Cria um checklist inteiro a partir de um template salvo.',
+        ready: true,
+        description: 'Cria um novo checklist no card sempre (não reaproveita o existente).',
       },
     ],
   },
@@ -607,11 +692,11 @@ const CATALOG: CatalogCategory[] = [
       },
       {
         key: 'UPDATE_FLOW_POSITION',
-        label: 'Atualizar posição no fluxo',
+        label: 'Reposicionar na coluna',
         icon: GitBranch,
         plan: 'PRO',
-        ready: false,
-        description: 'Move o card vinculado em outro fluxo pra uma coluna específica.',
+        ready: true,
+        description: 'Move o card pro topo ou base da coluna atual.',
       },
     ],
   },
@@ -741,15 +826,6 @@ function Catalog({ onPick }: { onPick: (action: AutomationActionType) => void })
                     {!item.ready && (
                       <span className="text-fg-subtle shrink-0 text-[10px]">em breve</span>
                     )}
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${
-                        item.plan === 'ENTERPRISE'
-                          ? 'bg-warning-subtle text-warning'
-                          : 'bg-success-subtle text-success'
-                      }`}
-                    >
-                      {item.plan}
-                    </span>
                   </button>
                 </li>
               ))}

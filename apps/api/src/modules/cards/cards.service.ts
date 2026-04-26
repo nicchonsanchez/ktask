@@ -69,7 +69,7 @@ export class CardsService {
           listId: input.listId,
           title: input.title,
           description: (input.description ?? undefined) as Prisma.InputJsonValue | undefined,
-          priority: input.priority ?? 'MEDIUM',
+          priority: input.priority ?? 'NONE',
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
           startDate: input.startDate ? new Date(input.startDate) : null,
           position,
