@@ -44,7 +44,7 @@ import { CreateChildCardDialog } from './create-child-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
-import { useConfirm, usePrompt } from '@/components/ui/dialogs';
+import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER } from './priority-config';
 
 export function CardModal({ boardId }: { boardId: string }) {
@@ -96,11 +96,23 @@ function CardModalContent({
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
   const promptDialog = usePrompt();
+  const notify = useNotify();
   const isCompleted = Boolean(card.completedAt);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
     queryClient.invalidateQueries({ queryKey: ['boards', boardId] });
+  }
+
+  // Mensagem amigável a partir de erro de API. 403 vira "sem permissão";
+  // demais usam a mensagem do servidor. Centraliza pra todas as mutations
+  // chamarem em onError junto com rollback.
+  function errorMessage(err: unknown, fallback: string): string {
+    if (err instanceof ApiError) {
+      if (err.status === 403) return 'Você não tem permissão para essa ação neste card.';
+      return err.message || fallback;
+    }
+    return fallback;
   }
 
   const [title, setTitle] = useState(card.title);
@@ -121,31 +133,42 @@ function CardModalContent({
   const titleMut = useMutation({
     mutationFn: (next: string) => updateCard(card.id, { title: next }),
     onMutate: (next) => ({ prev: optimistic('title', next) }),
-    onError: (_e, _v, ctx) => rollback(ctx?.prev),
+    onError: (e, _v, ctx) => {
+      rollback(ctx?.prev);
+      notify.error(errorMessage(e, 'Erro ao salvar título.'));
+    },
     onSuccess: invalidate,
   });
 
   const descMut = useMutation({
     mutationFn: (doc: unknown) => updateCard(card.id, { description: doc }),
+    onError: (e) => notify.error(errorMessage(e, 'Erro ao salvar descrição.')),
     onSuccess: invalidate,
   });
 
   const priorityMut = useMutation({
     mutationFn: (priority: CardDetail['priority']) => updateCard(card.id, { priority }),
     onMutate: (next) => ({ prev: optimistic('priority', next) }),
-    onError: (_e, _v, ctx) => rollback(ctx?.prev),
+    onError: (e, _v, ctx) => {
+      rollback(ctx?.prev);
+      notify.error(errorMessage(e, 'Erro ao alterar prioridade.'));
+    },
     onSuccess: invalidate,
   });
 
   const dueDateMut = useMutation({
     mutationFn: (iso: string | null) => updateCard(card.id, { dueDate: iso }),
     onMutate: (iso) => ({ prev: optimistic('dueDate', iso) }),
-    onError: (_e, _v, ctx) => rollback(ctx?.prev),
+    onError: (e, _v, ctx) => {
+      rollback(ctx?.prev);
+      notify.error(errorMessage(e, 'Erro ao alterar prazo.'));
+    },
     onSuccess: invalidate,
   });
 
   const archiveMut = useMutation({
     mutationFn: () => archiveCard(card.id),
+    onError: (e) => notify.error(errorMessage(e, 'Erro ao arquivar card.')),
     onSuccess: () => {
       invalidate();
       onClose();

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Download,
   FileText,
@@ -29,6 +29,8 @@ import {
 import { ApiError } from '@/lib/api-client';
 import { formatRelativeTime, proseToPlainText } from '@/lib/prose';
 import { activityParts } from '@/lib/activity-format';
+import { renderInlineMentions } from '@/lib/mentions';
+import { orgMembersQuery } from '@/lib/queries/cards';
 import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
 import { useAuthStore } from '@/stores/auth-store';
@@ -342,6 +344,7 @@ function CommentItem({
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const orgMembers = useQuery(orgMembersQuery);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: cardsQueries.detail(cardId).queryKey });
@@ -416,7 +419,9 @@ function CommentItem({
           <>
             {!showPlaceholder && (
               <div className="bg-bg-muted rounded-md px-3 py-2 text-sm">
-                <p className="whitespace-pre-wrap">{plain}</p>
+                <p className="whitespace-pre-wrap">
+                  {renderInlineMentions(plain, orgMembers.data ?? [])}
+                </p>
               </div>
             )}
 

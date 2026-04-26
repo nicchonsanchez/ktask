@@ -149,6 +149,47 @@ export const MentionTextarea = forwardRef<MentionTextareaRef, MentionTextareaPro
         }
       }
 
+      // Atomic Backspace: se o cursor está logo após uma mention "@handle"
+      // (ou "@handle " com espaço), apaga a mention inteira de uma vez
+      // em vez de char por char.
+      if (e.key === 'Backspace' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const el = textareaRef.current;
+        if (el && el.selectionStart === el.selectionEnd) {
+          const caret = el.selectionStart;
+          // Só atua quando NÃO está no meio do autocomplete (query === null).
+          // Durante autocomplete o usuário tá editando o handle parcial; backspace
+          // normal continua funcionando pra encurtar a query.
+          if (query === null) {
+            const before = props.value.slice(0, caret);
+            // Casos suportados:
+            //   "Olá @joao| ..."   → cursor logo após handle
+            //   "Olá @joao |..."   → cursor após espaço inserido pela autocompletação
+            const trailingSpaceRe = /(?:^|\s)@([a-z0-9][a-z0-9._-]{1,63}) $/i;
+            const noSpaceRe = /(?:^|\s)@([a-z0-9][a-z0-9._-]{1,63})$/i;
+            const match = trailingSpaceRe.exec(before) ?? noSpaceRe.exec(before);
+            if (match) {
+              e.preventDefault();
+              const fullMatch = match[0];
+              // Preserva o caractere que precede o @ (espaço ou início de linha)
+              const startsWithSpace = fullMatch.startsWith(' ') || fullMatch.startsWith('\n');
+              const removeStart =
+                before.length - (startsWithSpace ? fullMatch.length - 1 : fullMatch.length);
+              const next = props.value.slice(0, removeStart) + props.value.slice(caret);
+              props.onChange(next);
+              requestAnimationFrame(() => {
+                const e2 = textareaRef.current;
+                if (e2) {
+                  e2.focus();
+                  e2.setSelectionRange(removeStart, removeStart);
+                  setCursor(removeStart);
+                }
+              });
+              return;
+            }
+          }
+        }
+      }
+
       // Submit via Ctrl/Cmd+Enter
       if (props.onSubmit && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
