@@ -242,6 +242,14 @@ export function removeChecklistItem(itemId: string) {
   return api.delete(`/api/v1/checklists/items/${itemId}`);
 }
 
+export function addLabelToCard(cardId: string, labelId: string) {
+  return api.post(`/api/v1/cards/${cardId}/labels`, { labelId });
+}
+
+export function removeLabelFromCard(cardId: string, labelId: string) {
+  return api.delete(`/api/v1/cards/${cardId}/labels/${labelId}`);
+}
+
 export function moveChecklistItem(
   itemId: string,
   input: { afterItemId: string | null; toChecklistId?: string },

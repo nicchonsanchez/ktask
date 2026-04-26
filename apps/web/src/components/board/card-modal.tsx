@@ -14,7 +14,6 @@ import {
   Lock,
   MoreHorizontal,
   Paperclip,
-  Plus,
   Tag,
   Trash2,
   X,
@@ -44,6 +43,7 @@ import { CreateChildCardDialog } from './create-child-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
+import { LabelPicker } from './label-picker';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER } from './priority-config';
 
@@ -388,35 +388,18 @@ function CardModalContent({
                   label="Etiquetas"
                   count={card.labels.length || undefined}
                 >
-                  {card.labels.length === 0 ? (
-                    <EmptyHint
-                      text="Adicione etiquetas pra categorizar este card."
-                      actionLabel="Adicionar etiqueta"
-                      actionDisabled
-                      actionTitle="Em breve — gerenciamento completo de etiquetas"
-                    />
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {card.labels.map((cl) => (
-                        <span
-                          key={cl.labelId}
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
-                          style={{ backgroundColor: cl.label.color }}
-                        >
-                          {cl.label.name}
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        disabled
-                        title="Em breve — adicionar etiqueta"
-                        className="border-border text-fg-muted inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11px] disabled:opacity-60"
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {card.labels.map((cl) => (
+                      <span
+                        key={cl.labelId}
+                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
+                        style={{ backgroundColor: cl.label.color }}
                       >
-                        <Plus size={10} />
-                        Etiqueta
-                      </button>
-                    </div>
-                  )}
+                        {cl.label.name}
+                      </span>
+                    ))}
+                    <LabelPicker card={card} boardId={boardId} />
+                  </div>
                 </Block>
 
                 {/* Tarefas do card */}
@@ -582,38 +565,6 @@ function Kbd({ children }: { children: React.ReactNode }) {
     <kbd className="border-border bg-bg text-fg-muted inline-flex items-center justify-center rounded border px-1 py-0.5 font-mono text-[10px] leading-none">
       {children}
     </kbd>
-  );
-}
-
-function EmptyHint({
-  text,
-  actionLabel,
-  actionDisabled,
-  actionTitle,
-  onAction,
-}: {
-  text: string;
-  actionLabel?: string;
-  actionDisabled?: boolean;
-  actionTitle?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="border-border/70 bg-bg-subtle/50 flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2.5">
-      <p className="text-fg-muted text-[11px] leading-snug">{text}</p>
-      {actionLabel && (
-        <button
-          type="button"
-          onClick={onAction}
-          disabled={actionDisabled}
-          title={actionTitle}
-          className="border-border text-fg-muted hover:border-border-strong hover:text-fg inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Plus size={11} />
-          {actionLabel}
-        </button>
-      )}
-    </div>
   );
 }
 
