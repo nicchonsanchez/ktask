@@ -29,6 +29,7 @@ import { LabelsModule } from './modules/labels/labels.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { PushModule } from './modules/push/push.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { AdminModule } from './modules/admin/admin.module';
     TasksModule,
     AutomationsModule,
     AdminModule,
+    PushModule,
     HealthModule,
   ],
   providers: [

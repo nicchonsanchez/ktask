@@ -205,6 +205,7 @@ model User {
   tasksDone              Task[]          @relation("TaskDoneBy")
   automationsCreated     Automation[]    @relation("AutomationCreator")
   cardPresencesCompleted CardPresence[]  @relation("CardPresenceCompletedBy")
+  pushSubscriptions      PushSubscription[]
 
   @@index([email])
 }
@@ -589,6 +590,29 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+}
+
+/// Web Push subscription (PWA). Cada dispositivo (browser/PWA) que opta
+/// por receber notificações push registra aqui sua subscription. Quando
+/// uma Notification é criada, a engine de push percorre todas as subs do
+/// user e dispara via web-push protocol.
+///
+/// `endpoint` é único globalmente (URL gerada pelo push service do
+/// browser — Mozilla/Google/Apple/etc). Se uma sub virar 410 (Gone) ao
+/// enviar, o registro é removido automaticamente.
+model PushSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  endpoint    String   @unique
+  p256dh      String // chave pública do cliente (base64url)
+  auth        String // segredo de auth (base64url)
+  userAgent   String? // hint sobre o dispositivo
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ==================== Time tracking ====================

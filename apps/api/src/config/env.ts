@@ -59,6 +59,12 @@ const envSchema = z.object({
 
   INTEGRATION_ENCRYPTION_KEY: optionalHexKey(64),
 
+  // Web Push (PWA notifications). Sem essas creds o módulo de push fica
+  // desabilitado e os endpoints respondem 503 explicando.
+  VAPID_PUBLIC_KEY: optionalString(),
+  VAPID_PRIVATE_KEY: optionalString(),
+  VAPID_SUBJECT: z.string().default('mailto:noreply@ktask.local'),
+
   SENTRY_DSN: optionalUrl(),
 });
 

@@ -1,4 +1,20 @@
 import type { NextConfig } from 'next';
+import withSerwistInit from '@serwist/next';
+
+/**
+ * Serwist (sucessor moderno do next-pwa) — gera o service worker que
+ * faz o app virar PWA com push notifications. O SW fica em /sw.js,
+ * registrado automaticamente pelo Serwist no client. Em dev, fica
+ * desabilitado pra não cachear builds parciais; em prod, gera e cacheia
+ * assets do Next.
+ */
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  cacheOnNavigation: true,
+  reloadOnOnline: true,
+  disable: process.env.NODE_ENV === 'development',
+});
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -17,4 +33,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);

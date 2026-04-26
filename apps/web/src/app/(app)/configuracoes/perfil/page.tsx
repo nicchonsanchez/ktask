@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -10,13 +10,26 @@ import {
   type ChangePasswordRequest,
   type UpdateProfileRequest,
 } from '@ktask/contracts';
-import { Camera, Eye, EyeOff, Loader2, Save, Trash2 } from 'lucide-react';
+import {
+  Bell,
+  BellOff,
+  Camera,
+  Eye,
+  EyeOff,
+  Loader2,
+  Save,
+  Smartphone,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 import { Button, Input, Label } from '@ktask/ui';
 import { UserAvatar } from '@/components/user-avatar';
 import { changePassword, updateProfile, uploadAvatar } from '@/lib/queries/profile';
+import { pushQueries, unsubscribePushById } from '@/lib/queries/push';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/lib/api-client';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
@@ -46,6 +59,7 @@ export default function ProfilePage() {
           initial={{ name: user.name }}
           onSuccess={(u) => setUser({ ...user, name: u.name, avatarUrl: u.avatarUrl })}
         />
+        <PushNotificationsSection />
         <PasswordForm />
       </div>
     </div>
@@ -336,4 +350,157 @@ function PasswordField({
       {error && <p className="text-danger text-xs">{error}</p>}
     </div>
   );
+}
+
+/**
+ * Toggle de push notifications + lista dos dispositivos com push ativo.
+ * Cada device é uma row com nome resumido (do User-Agent), data de registro
+ * e botão pra desativar individualmente. Útil quando o user quer revogar
+ * o push de um device antigo (ex: trocou de celular).
+ */
+function PushNotificationsSection() {
+  const push = usePushNotifications();
+  const queryClient = useQueryClient();
+  const subsQuery = useQuery({
+    ...pushQueries.subscriptions(),
+    enabled: push.status === 'subscribed',
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (id: string) => unsubscribePushById(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pushQueries.subscriptions().queryKey });
+    },
+  });
+
+  const subs = subsQuery.data ?? [];
+
+  return (
+    <section className="border-border bg-bg flex flex-col gap-4 rounded-md border p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Bell size={16} className="text-primary" />
+            Notificações no dispositivo
+          </h2>
+          <p className="text-fg-muted mt-1 text-xs leading-relaxed">
+            Receba notificações push (mesmo com o app fechado) quando alguém te atribuir uma tarefa,
+            mencionar você num comentário, ou outras atualizações importantes. Cada dispositivo
+            precisa ser ativado separadamente.
+          </p>
+        </div>
+        <PushToggleButton push={push} />
+      </div>
+
+      {push.error && <p className="text-danger text-xs">{push.error}</p>}
+
+      {push.status === 'unsupported' && (
+        <p className="text-fg-muted bg-bg-muted rounded-md px-3 py-2 text-[11px]">
+          Seu navegador não suporta notificações push. Tente Chrome, Edge, Firefox ou Safari (iOS
+          16.4+) com o app instalado na tela inicial.
+        </p>
+      )}
+      {push.status === 'denied' && (
+        <p className="text-danger bg-danger-subtle rounded-md px-3 py-2 text-[11px]">
+          Você bloqueou notificações deste site. Habilite nas configurações do navegador (cadeado
+          próximo à barra de endereço) e tente novamente.
+        </p>
+      )}
+
+      {push.status === 'subscribed' && subs.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-fg-muted text-[10px] font-semibold uppercase tracking-wide">
+            Dispositivos ativos
+          </p>
+          <ul className="divide-border/50 border-border/60 divide-y rounded-md border">
+            {subs.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Smartphone size={13} className="text-fg-muted shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-fg truncate font-medium">
+                      {summarizeUserAgent(s.userAgent)}
+                    </p>
+                    <p className="text-fg-muted text-[10px]">
+                      Adicionado em {new Date(s.createdAt).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeMut.mutate(s.id)}
+                  disabled={removeMut.isPending}
+                  className="text-fg-muted hover:text-danger rounded p-1"
+                  aria-label="Remover dispositivo"
+                  title="Remover dispositivo"
+                >
+                  <X size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PushToggleButton({ push }: { push: ReturnType<typeof usePushNotifications> }) {
+  if (push.status === 'loading') {
+    return (
+      <span className="text-fg-muted inline-flex items-center gap-1 text-xs">
+        <Loader2 size={12} className="animate-spin" />
+        Carregando…
+      </span>
+    );
+  }
+  if (push.status === 'unsupported') return null;
+  if (push.status === 'subscribed') {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => push.disable()}
+        disabled={push.busy}
+      >
+        {push.busy ? <Loader2 size={12} className="animate-spin" /> : <BellOff size={13} />}
+        Desativar
+      </Button>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      size="sm"
+      onClick={() => push.enable()}
+      disabled={push.busy || push.status === 'denied'}
+    >
+      {push.busy ? <Loader2 size={12} className="animate-spin" /> : <Bell size={13} />}
+      Ativar
+    </Button>
+  );
+}
+
+/**
+ * Resume um User-Agent num nome curto e útil ("Chrome no Windows", "Safari
+ * no iPhone"). Sem libs externas — heurística simples cobre 90% dos casos.
+ */
+function summarizeUserAgent(ua: string | null): string {
+  if (!ua) return 'Dispositivo desconhecido';
+  let browser = 'Navegador';
+  if (/Edg\//i.test(ua)) browser = 'Edge';
+  else if (/Chrome\//i.test(ua) && !/Chromium\//i.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+  else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari';
+  else if (/OPR\/|Opera/i.test(ua)) browser = 'Opera';
+
+  let os = '';
+  if (/Windows NT/i.test(ua)) os = 'Windows';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iOS/i.test(ua)) os = 'iOS';
+  else if (/Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+
+  return os ? `${browser} no ${os}` : browser;
 }
