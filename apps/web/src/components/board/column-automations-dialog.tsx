@@ -474,7 +474,7 @@ const ACTION_LABEL: Partial<Record<AutomationActionType, string>> = {
   SEND_WHATSAPP: 'Enviar WhatsApp',
   LINK_FLOW: 'Vincular a outro fluxo',
   UNLINK_FLOW: 'Desvincular do fluxo',
-  UPDATE_FLOW_POSITION: 'Atualizar posição em outro fluxo',
+  UPDATE_FLOW_POSITION: 'Reposicionar na coluna',
   FLAG_DUE_TODAY: 'Sinalizar marcos para hoje',
   FLAG_OVERDUE: 'Sinalizar marcos atrasados',
 };

@@ -55,6 +55,7 @@ export function CreateAutomationForm({
   const [copyTeam, setCopyTeam] = useState(false);
   const [copyTags, setCopyTags] = useState(false);
   const [copyDueDate, setCopyDueDate] = useState(false);
+  const [flowPosition, setFlowPosition] = useState<'TOP' | 'BOTTOM'>('TOP');
 
   const [label, setLabel] = useState('');
 
@@ -85,6 +86,7 @@ export function CreateAutomationForm({
         copyTeam,
         copyTags,
         copyDueDate,
+        flowPosition,
       });
       const input: CreateAutomationInput = {
         trigger,
@@ -206,13 +208,22 @@ export function CreateAutomationForm({
             />
           )}
 
-          {actionType === 'INSERT_CHECKLIST_ITEMS' && (
+          {(actionType === 'INSERT_CHECKLIST_ITEMS' || actionType === 'INSERT_CHECKLIST_GROUP') && (
             <ChecklistItemsConfig
               checklistTitle={checklistTitle}
               setChecklistTitle={setChecklistTitle}
               itemsRaw={checklistItemsRaw}
               setItemsRaw={setChecklistItemsRaw}
+              hint={
+                actionType === 'INSERT_CHECKLIST_GROUP'
+                  ? 'Cria um novo checklist sempre — útil pra rodadas que se repetem em fases diferentes.'
+                  : 'Reaproveita o checklist existente com este título; senão cria um novo.'
+              }
             />
+          )}
+
+          {actionType === 'UPDATE_FLOW_POSITION' && (
+            <FlowPositionConfig value={flowPosition} onChange={setFlowPosition} />
           )}
 
           {actionType === 'SET_LEAD' && (
@@ -302,11 +313,13 @@ const IMPLEMENTED = new Set<AutomationActionType>([
   'INSERT_TAGS',
   'REMOVE_TAGS',
   'INSERT_CHECKLIST_ITEMS',
+  'INSERT_CHECKLIST_GROUP',
   'SET_LEAD',
   'ADD_TEAM',
   'POST_COMMENT',
   'SET_CARD_STATUS',
   'CREATE_CHILD_CARD',
+  'UPDATE_FLOW_POSITION',
 ]);
 
 const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: boolean }> = [
@@ -334,6 +347,7 @@ interface ConfigState {
   copyTeam: boolean;
   copyTags: boolean;
   copyDueDate: boolean;
+  flowPosition: 'TOP' | 'BOTTOM';
 }
 
 function buildActionConfig(
@@ -352,6 +366,16 @@ function buildActionConfig(
           .map((l) => l.trim())
           .filter(Boolean),
       };
+    case 'INSERT_CHECKLIST_GROUP':
+      return {
+        title: s.checklistTitle.trim() || 'Tarefas',
+        items: s.checklistItems
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean),
+      };
+    case 'UPDATE_FLOW_POSITION':
+      return { position: s.flowPosition };
     case 'SET_LEAD':
       return { userId: s.leadUserId };
     case 'ADD_TEAM':
@@ -389,7 +413,10 @@ function validateAction(
     case 'REMOVE_TAGS':
       return s.tagIds.length > 0;
     case 'INSERT_CHECKLIST_ITEMS':
+    case 'INSERT_CHECKLIST_GROUP':
       return s.checklistItems.split('\n').some((l) => l.trim().length > 0);
+    case 'UPDATE_FLOW_POSITION':
+      return true;
     case 'SET_LEAD':
       return Boolean(s.leadUserId);
     case 'ADD_TEAM':
@@ -461,11 +488,13 @@ function ChecklistItemsConfig({
   setChecklistTitle,
   itemsRaw,
   setItemsRaw,
+  hint,
 }: {
   checklistTitle: string;
   setChecklistTitle: (v: string) => void;
   itemsRaw: string;
   setItemsRaw: (v: string) => void;
+  hint?: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -482,7 +511,7 @@ function ChecklistItemsConfig({
           className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
         />
         <p className="text-fg-subtle mt-0.5 text-[10px]">
-          Se já existir uma lista com esse nome no card, os itens são anexados nela.
+          {hint ?? 'Se já existir uma lista com esse nome no card, os itens são anexados nela.'}
         </p>
       </div>
       <div>
@@ -640,6 +669,43 @@ function CardStatusConfig({
           <input
             type="radio"
             name="card-status"
+            value={opt.value}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="accent-primary"
+          />
+          <span className="text-fg text-[13px]">{opt.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function FlowPositionConfig({
+  value,
+  onChange,
+}: {
+  value: 'TOP' | 'BOTTOM';
+  onChange: (v: 'TOP' | 'BOTTOM') => void;
+}) {
+  const options = [
+    { value: 'TOP' as const, label: 'Subir pro topo da coluna' },
+    { value: 'BOTTOM' as const, label: 'Mandar pra base da coluna' },
+  ];
+  return (
+    <div className="flex flex-col gap-1.5">
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 ${
+            value === opt.value
+              ? 'border-primary bg-primary-subtle/30'
+              : 'border-border/60 hover:border-border-strong'
+          }`}
+        >
+          <input
+            type="radio"
+            name="flow-position"
             value={opt.value}
             checked={value === opt.value}
             onChange={() => onChange(opt.value)}

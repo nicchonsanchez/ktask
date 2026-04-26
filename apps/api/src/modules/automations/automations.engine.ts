@@ -157,16 +157,18 @@ export class AutomationsEngine {
         return this.handleSetCardStatus(automation, cardId);
       case 'CREATE_CHILD_CARD':
         return this.handleCreateChildCard(automation, cardId);
-
-      // Handlers ainda não implementados — Fase D
       case 'INSERT_CHECKLIST_GROUP':
+        return this.handleInsertChecklistGroup(automation, cardId);
+      case 'UPDATE_FLOW_POSITION':
+        return this.handleUpdateFlowPosition(automation, cardId);
+
+      // Handlers ainda não implementados
       case 'FILL_FIELDS':
       case 'SAVE_DESCRIPTION_VERSION':
       case 'SEND_EMAIL':
       case 'SEND_WHATSAPP':
       case 'LINK_FLOW':
       case 'UNLINK_FLOW':
-      case 'UPDATE_FLOW_POSITION':
       case 'FLAG_DUE_TODAY':
       case 'FLAG_OVERDUE':
         await this.prisma.automationRun.updateMany({
@@ -545,6 +547,88 @@ export class AutomationsEngine {
     }
 
     return { childId: child.id };
+  }
+
+  /**
+   * INSERT_CHECKLIST_GROUP — cria um novo checklist no card SEMPRE
+   * (diferente de INSERT_CHECKLIST_ITEMS, que reaproveita checklist com
+   * mesmo título). Útil pra rodadas de tarefas com o mesmo nome em fases
+   * diferentes do fluxo.
+   */
+  private async handleInsertChecklistGroup(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ checklistId: string; itemsAdded: number }> {
+    const config = automation.actionConfig as {
+      title?: string;
+      items?: string[];
+    };
+    const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
+    const title = config.title?.trim() || 'Tarefas';
+
+    const last = await this.prisma.checklist.findFirst({
+      where: { cardId },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const checklist = await this.prisma.checklist.create({
+      data: {
+        cardId,
+        title,
+        position: (last?.position ?? 0) + 1,
+      },
+    });
+
+    let basePos = 1;
+    await this.prisma.checklistItem.createMany({
+      data: items.map((text) => ({
+        checklistId: checklist.id,
+        text,
+        position: basePos++,
+      })),
+    });
+
+    return { checklistId: checklist.id, itemsAdded: items.length };
+  }
+
+  /**
+   * UPDATE_FLOW_POSITION — move o card para o topo (TOP) ou base
+   * (BOTTOM) da coluna em que ele está. MVP intencional: não cruza
+   * boards/listas; só reposiciona dentro da própria list.
+   */
+  private async handleUpdateFlowPosition(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ position: number }> {
+    const config = automation.actionConfig as { position?: 'TOP' | 'BOTTOM' };
+    const where = config.position === 'TOP' ? 'TOP' : 'BOTTOM';
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { listId: true },
+    });
+    if (!card) throw new Error('Card não encontrado.');
+
+    if (where === 'TOP') {
+      const first = await this.prisma.card.findFirst({
+        where: { listId: card.listId, isArchived: false, id: { not: cardId } },
+        orderBy: { position: 'asc' },
+        select: { position: true },
+      });
+      const newPos = first ? first.position - 1 : 1;
+      await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
+      return { position: newPos };
+    }
+
+    const last = await this.prisma.card.findFirst({
+      where: { listId: card.listId, isArchived: false, id: { not: cardId } },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const newPos = (last?.position ?? 0) + 1;
+    await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
+    return { position: newPos };
   }
 }
 
