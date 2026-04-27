@@ -6,7 +6,7 @@ import { Calendar, MessageSquare, CheckSquare, Paperclip, ShieldCheck } from 'lu
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
-import { PRIORITY_LABEL, PRIORITY_COLOR } from './priority-config';
+import { PRIORITY_LABEL, PRIORITY_COLOR, PRIORITY_SHAPE } from './priority-config';
 
 function dueState(iso: string | null): {
   show: boolean;
@@ -91,7 +91,9 @@ function CardInner({ card }: { card: CardListItem }) {
   const hasLabels = card.labels.length > 0;
   const due = dueState(card.dueDate);
   const priorityColor = PRIORITY_COLOR[card.priority];
-  const hasPriorityBar = priorityColor !== null;
+  const priorityShape = PRIORITY_SHAPE[card.priority];
+  const hasPriorityBar = priorityShape === 'stripe' && priorityColor !== null;
+  const hasPriorityDiamond = priorityShape === 'diamond' && priorityColor !== null;
   const hasCover = Boolean(card.coverImageUrl);
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;
@@ -100,7 +102,21 @@ function CardInner({ card }: { card: CardListItem }) {
   const hasMetaRow = due.show || hasCounters || hasPendingApproval;
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="relative flex flex-col gap-2.5">
+      {/* URGENT: losango no canto sup-direito sobreposto ao card.
+          Forma diferente da stripe — sinalizador robusto a daltonismo. */}
+      {hasPriorityDiamond && (
+        <span
+          aria-label="Prioridade: Urgente"
+          title="Urgente"
+          className="absolute -right-1 -top-1 z-10 size-3.5 rotate-45 border-[1.5px] shadow-sm"
+          style={{
+            borderColor: priorityColor as string,
+            backgroundColor: `${priorityColor}33`, // alpha 0.2
+          }}
+        />
+      )}
+
       {/* Topo do card: capa (se houver) + barra de prioridade + stripes das
           labels. Capa sempre acima de tudo; depois prioridade; depois labels. */}
       {(hasCover || hasPriorityBar || hasLabels) && (

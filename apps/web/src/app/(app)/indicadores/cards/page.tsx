@@ -16,9 +16,9 @@ const PRIORITY_LABEL: Record<Priority, string> = {
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   NONE: 'bg-fg-muted/50',
-  LOW: 'bg-blue-400',
-  MEDIUM: 'bg-amber-400',
-  HIGH: 'bg-orange-500',
+  LOW: 'bg-slate-400',
+  MEDIUM: 'bg-yellow-500',
+  HIGH: 'bg-red-500',
   URGENT: 'bg-red-500',
 };
 

@@ -47,7 +47,7 @@ import { CardFamilyTab } from './card-family-tab';
 import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
-import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER } from './priority-config';
+import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER, PRIORITY_SHAPE } from './priority-config';
 
 export function CardModal({ boardId }: { boardId: string }) {
   const router = useRouter();
@@ -381,6 +381,7 @@ function CardModalContent({
                         const active = card.priority === value;
                         const color = PRIORITY_COLOR[value];
                         const label = PRIORITY_LABEL[value];
+                        const shape = PRIORITY_SHAPE[value];
                         return (
                           <button
                             key={value}
@@ -395,11 +396,22 @@ function CardModalContent({
                             aria-pressed={active}
                             title={label}
                           >
-                            <span
-                              aria-hidden
-                              className={`inline-block size-2.5 rounded-full ${color ? '' : 'border-border-strong border'}`}
-                              style={color ? { backgroundColor: color } : undefined}
-                            />
+                            {shape === 'diamond' && color ? (
+                              <span
+                                aria-hidden
+                                className="inline-block size-2.5 rotate-45 border-[1.5px]"
+                                style={{
+                                  borderColor: color,
+                                  backgroundColor: `${color}33`,
+                                }}
+                              />
+                            ) : (
+                              <span
+                                aria-hidden
+                                className={`inline-block size-2.5 rounded-full ${color ? '' : 'border-border-strong border'}`}
+                                style={color ? { backgroundColor: color } : undefined}
+                              />
+                            )}
                             {label}
                           </button>
                         );
