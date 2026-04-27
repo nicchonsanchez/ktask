@@ -251,6 +251,7 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 - [ ] **Contatos externos / CRM lite** (Contact + CardContact + agenda + bloco no card) — ver [19-contatos-externos.md](19-contatos-externos.md)
 - [ ] **Identificador curto do card** (`Card.shortCode` por Org) — ver [24-shortcode-card.md](24-shortcode-card.md)
 - [ ] **Importer Ummense CSV** — admin upload + parser + preview + idempotente; ver [16-importer-ummense.md](16-importer-ummense.md)
+- [ ] **Lia: AI que ouve reunião e cria cards** (~78h v1) — ver [27-lia-meeting-ai.md](27-lia-meeting-ai.md)
 - [-] Privacidade por card (4 níveis estilo Ummense) — parkado, ver [25-privacidade-card.md](25-privacidade-card.md)
 - [-] Última interação social do card — parkado, ver [26-ultima-interacao.md](26-ultima-interacao.md)
 - [ ] SLA por lista + alertas
