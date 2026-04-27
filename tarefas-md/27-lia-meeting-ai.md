@@ -146,14 +146,192 @@ admin pode editar pra todos via `/configuracoes/membros`.
 - Cards criados via `CardsService.create` (já existente).
 - Activity registra: `via=lia-meeting-{meetingId}`.
 
+## Granularidade dos cards (1 vs N)
+
+Problema real: LLMs out-of-the-box tendem a **fragmentar demais** —
+"refazer site Reritiba" vira 5 cards quando deveria ser 1 card com
+checklist. Combate em camadas:
+
+### A. Regras explícitas no system prompt
+
+> **Crie cards SEPARADOS apenas se:**
+>
+> - Têm responsáveis diferentes (skills incompatíveis)
+> - Têm prazos significativamente diferentes
+> - São entregáveis independentes (um pode ser concluído sem o outro)
+> - Vão pra fluxos/boards diferentes
+>
+> **Crie UM card único com checklist quando:**
+>
+> - É o mesmo entregável com etapas
+> - Mesmo responsável e prazo
+> - Tarefas de menos de 30min que compartilham contexto
+> - "Polir/ajustar" um único deliverable
+
+### B. Few-shot examples (3-5 casos validados pela Kharis)
+
+> Exemplo correto:
+> Conversa: "vamos refazer o site do Reritiba — primeiro o cabeçalho,
+> depois rodapé, e por último a página de doações"
+> ✅ 1 card: "Refazer site Reritiba" + checklist [Cabeçalho, Rodapé, Página de doações]
+>
+> Exemplo correto:
+> Conversa: "a Fernanda cria a peça do BF, Dhyo mexe no checkout pra cupom"
+> ✅ 2 cards: "Peça BF" (Fernanda) + "Cupom no checkout" (Dhyo)
+> Razão: skills diferentes, deliverables independentes
+
+### C. Justificar cada split (chain-of-thought no JSON)
+
+```json
+{
+  "cards": [{ "title": "...", "split_reason": "Responsável diferente (Fernanda vs Dhyo)" }]
+}
+```
+
+Obriga o modelo a "pensar antes de fragmentar". Sem `split_reason`
+plausível = sinal pra mesclar. Efeito grande na prática.
+
+### D. Loop de feedback persistente
+
+Quando user reprovar/mesclar cards no preview, isso vira **few-shot
+example dinâmico** salvo na Org. Próxima reunião já chega calibrada.
+
+```prisma
+model OrgLiaPattern {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// Tipo: 'merge' (deveria ser 1 card só) ou 'split' (deveria ter sido N).
+  kind           String
+  exampleInput   String   // trecho do transcript
+  exampleOutput  Json     // estrutura correta de cards
+  createdAt      DateTime @default(now())
+  // entram no prompt da proxima reuniao como few-shot
+}
+```
+
+Em ~5-10 reuniões, Lia aprende o estilo da Org.
+
+### E. Threshold de confiança + pergunta no preview
+
+Se modelo tem dúvida ("isso é 1 ou 2 cards?"), no preview Lia pergunta:
+"Detectei 'refazer site' e 'criar página doações'. Crio 1 card com 2
+itens de checklist OU 2 cards separados?". User responde, Lia aprende.
+
+### F. Toggle "modo conservador"
+
+Checkbox no preview: "Lia, fundir cards relacionados". Default ON na
+1ª semana, depois user desliga conforme confiança.
+
+### Realismo
+
+- 90% de acerto no MVP — viável com A+B+C
+- 95-98% — exige feedback loop (D)
+- 100% — impossível, reuniões ambíguas confundem qualquer um. Por isso
+  preview-then-create é não-negociável.
+
+## Briefing prévio (instrução antes da reunião)
+
+Briefing antes de começar é **a alavanca mais poderosa** pra acertar
+granularidade — calibra Lia direto pro tipo de reunião em vez de deixar
+ela adivinhar.
+
+### Exemplos reais
+
+**Briefing técnico:**
+
+> "Lia, reunião de alinhamento com Dhyovaine sobre arquitetura do novo
+> checkout. Provavelmente 1 card só: 'Definir arquitetura'. Não crie
+> cards de tarefas individuais dele — vou repassar depois."
+
+**Briefing de planejamento:**
+
+> "Lia, reunião de campanha BF com Fernanda e Marcos. Esperamos definir
+> 4-6 ações concretas: peças, copy, segmentação, ads. Cada ação vira
+> um card separado com responsável."
+
+**Briefing de status:**
+
+> "Lia, status semanal Reritiba. NÃO crie cards a menos que apareça
+> demanda NOVA explícita. Conversas sobre andamento de cards
+> existentes viram comentários neles, não cards novos."
+
+**Briefing comercial:**
+
+> "Lia, reunião comercial com prospect. NÃO crie cards. Salva só
+> resumo + próximos passos como nota anexa."
+
+### Por que funciona
+
+1. **Contexto prévio** — modelo entende o tipo de reunião antes da primeira fala
+2. **Granularidade explícita** — "1 card" / "4-6 cards" / "0 cards"
+   é instrução direta, mais forte que qualquer regra heurística
+3. **Filtro de ruído** — saber o tema ajuda a ignorar conversa paralela
+4. **Define output esperado** — "viram cards" / "viram comentários em
+   cards existentes" / "viram apenas notas"
+
+### UI proposto
+
+Painel pré-reunião:
+
+```
+┌─────────────────────────────────────────────┐
+│ Reunião com Lia                             │
+│                                             │
+│ Briefing (opcional, melhora precisão)       │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Lia, esta reunião é sobre...            │ │
+│ │                                         │ │
+│ └─────────────────────────────────────────┘ │
+│                                             │
+│ Template: [ Status semanal       ▾ ]        │
+│                                             │
+│ [ Iniciar reunião ]                         │
+└─────────────────────────────────────────────┘
+```
+
+Ajuste on-the-fly durante a reunião também: qualquer um digita no chat
+"Lia, ajuste: agora vamos focar em design" e ela atualiza o contexto.
+
+### Templates pré-definidos (cadastrados pela Org)
+
+Tabela `MeetingTemplate` por Org. Kharis padrão começa com:
+
+| Nome                     | Comportamento                                                      |
+| ------------------------ | ------------------------------------------------------------------ |
+| Status semanal cliente   | NÃO cria cards salvo demanda nova explícita                        |
+| Planejamento de campanha | 3-7 cards esperados, cada ação separada                            |
+| Alinhamento técnico      | 1-2 cards macro com checklist (não fragmenta)                      |
+| Reunião comercial        | 0 cards. Salva resumo + próximos passos como nota                  |
+| Onboarding cliente       | Cards de setup (1 por área: design, dev, contas) com líder default |
+| Brainstorm               | Cards de "ideia" em board específico, sem prazo nem líder          |
+
+```prisma
+model MeetingTemplate {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  briefing       String  // texto que vai pro system prompt
+  defaultBoardId String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, name])
+}
+```
+
+User seleciona o template no UI; o `briefing` vira prefixo do system
+prompt da Lia, ajustável por reunião.
+
 ## Fluxo de uso ideal
 
 1. Antes da reunião: agendar Lia → user copia link Meet + cola num form
-   `/lia/agendar` → Lia entra como participante "Lia (KTask)"
-2. Durante: Lia escuta, transcreve. Painel ao vivo mostra ações detectadas
+   `/lia/agendar` → escolhe template/preenche briefing → Lia entra
+   como participante "Lia (KTask)"
+2. Durante: Lia escuta, transcreve. Painel ao vivo mostra ações
+   detectadas. User pode dar ajuste de contexto on-the-fly
 3. User pode interagir: "Lia, qual a próxima tarefa pendente?"
-4. Após: Lia gera proposta de cards, mostra preview, user aprova
-5. Cards criados no board escolhido (default configurável)
+4. Após: Lia gera proposta de cards, mostra preview, user aprova/edita
+5. Reprovações/merges viram OrgLiaPattern (few-shot da próxima)
+6. Cards criados no board escolhido (default do template)
 
 ## Permissões / privacidade
 
@@ -169,20 +347,25 @@ admin pode editar pra todos via `/configuracoes/membros`.
 
 ## Estimativas (v1 funcional)
 
-| Etapa                                                         | h   |
-| ------------------------------------------------------------- | --- |
-| Schema (Meeting + UserSkill + SkillCategory) + migration      | 4   |
-| Integração Recall.ai (webhook receiver, account setup)        | 8   |
-| LiaService: prompt + structured output + cards proposal       | 15  |
-| UI: agendar reunião (form + status)                           | 4   |
-| UI: painel ao vivo da reunião (transcript + ações detectadas) | 8   |
-| UI: preview de cards propostos + aprovar/editar/rejeitar      | 8   |
-| UI: configurar skills no perfil + página de membros           | 6   |
-| Atribuição automática por skill match                         | 5   |
-| Conversa text durante reunião ("Lia, quais cards...")         | 10  |
-| Tests + refinement de prompt pt-BR                            | 10  |
+| Etapa                                                                                      | h   |
+| ------------------------------------------------------------------------------------------ | --- |
+| Schema (Meeting + UserSkill + SkillCategory + MeetingTemplate + OrgLiaPattern) + migration | 5   |
+| Integração Recall.ai (webhook receiver, account setup)                                     | 8   |
+| LiaService: prompt + structured output + cards proposal                                    | 15  |
+| Granularidade: regras + few-shot + split_reason + threshold                                | 8   |
+| Briefing + templates: schema + UI form + injecao no prompt                                 | 6   |
+| UI: agendar reunião (form + status + template picker)                                      | 5   |
+| UI: painel ao vivo da reunião (transcript + ações detectadas)                              | 8   |
+| UI: preview de cards propostos + aprovar/editar/rejeitar                                   | 8   |
+| Feedback loop: persistir merges/splits como OrgLiaPattern                                  | 5   |
+| UI: configurar skills no perfil + página de membros                                        | 6   |
+| Atribuição automática por skill match                                                      | 5   |
+| Conversa text durante reunião ("Lia, quais cards...")                                      | 10  |
+| Tests + refinement de prompt pt-BR                                                         | 10  |
 
-**~78h** pra v1. V2 (TTS pra Lia falar via voz) = +15h. V3 (Lia
+**~99h** pra v1 (vs 78h da estimativa anterior — granularidade +
+briefing + templates + feedback loop adicionam ~21h mas dobram a
+qualidade percebida). V2 (TTS pra Lia falar via voz) = +15h. V3 (Lia
 proativamente sugerir durante a reunião) = +20h.
 
 ## Custo operacional estimado
