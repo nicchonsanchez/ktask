@@ -34,6 +34,7 @@ import { ChecklistTemplatesModule } from './modules/checklist-templates/checklis
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
+import { ImporterModule } from './modules/importer/importer.module';
 
 @Module({
   imports: [
@@ -106,6 +107,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
     WhatsAppModule,
     ApprovalsModule,
     ContactsModule,
+    ImporterModule,
     HealthModule,
   ],
   providers: [
