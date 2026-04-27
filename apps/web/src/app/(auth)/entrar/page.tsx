@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -59,14 +60,25 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="bg-bg-subtle border-border w-full max-w-sm rounded-xl border p-6 shadow-sm">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="bg-primary text-primary-fg flex size-9 items-center justify-center rounded-md font-bold">
-            K
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold leading-none">KTask</h1>
-            <p className="text-fg-muted mt-1 text-xs">Gestão de tarefas da Kharis</p>
-          </div>
+        <div className="mb-6 flex flex-col items-start gap-2">
+          <Image
+            src="/brand/lockup-wordmark-dark.png"
+            alt="KTask"
+            width={120}
+            height={34}
+            priority
+            className="block dark:hidden"
+          />
+          <Image
+            src="/brand/lockup-wordmark.png"
+            alt=""
+            width={120}
+            height={34}
+            priority
+            aria-hidden
+            className="hidden dark:block"
+          />
+          <p className="text-fg-muted text-xs">Gestão de tarefas da Kharis</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
