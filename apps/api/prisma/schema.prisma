@@ -276,6 +276,7 @@ model Organization {
   cardApprovals      CardApproval[]
   contacts           Contact[]
   messageTemplates   MessageTemplate[]
+  importMappings     OrgImportMapping[]
 
   @@index([slug])
 }
@@ -1002,4 +1003,37 @@ model AutomationRun {
 
   @@index([automationId, createdAt])
   @@index([cardId])
+}
+
+// ==================== Import mappings ====================
+
+/// Memoria de mapeamentos de importacao por Org. Quando o user mapeia
+/// "Thiago" (vindo do CSV Ummense) -> Thiago Bueno (User do KTask) na
+/// pagina /configuracoes/importar, persistimos aqui pra que o proximo
+/// import com o mesmo nome ja chegue pre-mapeado. UPSERT por
+/// (organizationId, kind, sourceName) — sobrescreve se ja existe.
+///
+/// targetId nullable: null = "Ignorar" persistido (cards sem esse
+/// member/lista; nao perguntar de novo). Pra kind='list', targetId
+/// pode tambem indicar "criar com este nome" via convencao especial?
+/// Nao — pra criar nova lista, NAO persiste o mapping (lista ja existe
+/// depois de criada, virando match exato no proximo import).
+model OrgImportMapping {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// 'user' ou 'list'. String solta em vez de enum pra permitir extensao
+  /// futura ('label', 'contact') sem migration de enum.
+  kind           String
+  /// Nome como veio do CSV, nao normalizado. Match exato no lookup.
+  sourceName     String
+  /// FK pro target (UserId pra kind='user', ListId pra kind='list').
+  /// Null = decisao explicita do user de "Ignorar este nome".
+  targetId       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind, sourceName])
+  @@index([organizationId, kind])
 }
