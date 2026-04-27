@@ -1,0 +1,15 @@
+-- Member admin: suspensao + email pending (anti-sequestro) + activity types
+
+ALTER TABLE "User"
+  ADD COLUMN "suspendedAt"     TIMESTAMP(3),
+  ADD COLUMN "suspendedReason" TEXT,
+  ADD COLUMN "pendingEmail"    TEXT;
+
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_NAME_CHANGED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_EMAIL_CHANGE_REQUESTED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_PHONE_CHANGED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_PASSWORD_RESET_FORCED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_ROLE_CHANGED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_SUSPENDED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_UNSUSPENDED';
+ALTER TYPE "ActivityType" ADD VALUE 'MEMBER_REMOVED';

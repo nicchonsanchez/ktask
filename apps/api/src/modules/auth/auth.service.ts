@@ -121,6 +121,14 @@ export class AuthService {
       throw new ForbiddenException('Conta desativada.');
     }
 
+    if (user.suspendedAt) {
+      throw new ForbiddenException(
+        user.suspendedReason
+          ? `Conta suspensa: ${user.suspendedReason}`
+          : 'Conta suspensa. Entre em contato com o administrador.',
+      );
+    }
+
     // Login bem-sucedido — limpa contadores se houver algum estado pendente
     if (user.failedLoginCount > 0 || user.lockedUntil) {
       await this.prisma.user.update({

@@ -128,6 +128,14 @@ enum ActivityType {
   CONTACT_CREATED
   CONTACT_UPDATED
   CONTACT_DELETED
+  MEMBER_NAME_CHANGED
+  MEMBER_EMAIL_CHANGE_REQUESTED
+  MEMBER_PHONE_CHANGED
+  MEMBER_PASSWORD_RESET_FORCED
+  MEMBER_ROLE_CHANGED
+  MEMBER_SUSPENDED
+  MEMBER_UNSUSPENDED
+  MEMBER_REMOVED
 }
 
 enum AutomationTrigger {
@@ -192,6 +200,15 @@ model User {
   failedLoginCount Int       @default(0)
   lastFailedAt     DateTime?
   lockedUntil      DateTime?
+  /// Suspensao admin: bloqueia login + uso da API mas preserva dados
+  /// (diferente de deletedAt). Login retorna 403 com motivo amigavel.
+  /// Reverter via PATCH /admin/users/:id/suspend (toggle).
+  suspendedAt      DateTime?
+  suspendedReason  String?
+  /// Pendencia de troca de email: novo email aguardando confirmacao via
+  /// link enviado pro proprio user. Quando user clica, sistema move
+  /// pendingEmail -> email e limpa pendingEmail. Anti-sequestro.
+  pendingEmail     String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
@@ -224,6 +241,7 @@ model User {
   approvalsDecided       CardApproval[]         @relation("ApprovalDecider")
   approvalsReverted      CardApproval[]         @relation("ApprovalReverter")
   approvalReviews        CardApprovalReviewer[] @relation("CardApprovalReviewer")
+  messageTemplates       MessageTemplate[]
 
   @@index([email])
 }
@@ -257,6 +275,7 @@ model Organization {
   checklistTemplates ChecklistTemplate[]
   cardApprovals      CardApproval[]
   contacts           Contact[]
+  messageTemplates   MessageTemplate[]
 
   @@index([slug])
 }
@@ -808,6 +827,29 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+}
+
+/// Modelos de mensagem reutilizáveis em campos de template das automações
+/// (WhatsApp, comentário). O conteúdo é texto Mustache com placeholders
+/// `{{card.title}}` etc — resolvidos pela engine quando a automação roda.
+///
+/// Compartilhado por Org (todos os MEMBER+ veem). Edit/delete é do criador
+/// OU OWNER/ADMIN. `type` discrimina onde o modelo aparece no autocomplete
+/// do form (sem cross-pollution entre WhatsApp e comment).
+model MessageTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  body           String
+  type           String // 'whatsapp' | 'comment'
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+
+  @@index([organizationId, type])
 }
 
 /// Web Push subscription (PWA). Cada dispositivo (browser/PWA) que opta

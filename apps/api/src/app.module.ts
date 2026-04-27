@@ -35,6 +35,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ImporterModule } from './modules/importer/importer.module';
+import { MembersAdminModule } from './modules/members-admin/members-admin.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { ImporterModule } from './modules/importer/importer.module';
     ApprovalsModule,
     ContactsModule,
     ImporterModule,
+    MembersAdminModule,
     HealthModule,
   ],
   providers: [

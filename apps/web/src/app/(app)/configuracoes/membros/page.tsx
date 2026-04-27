@@ -1,26 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Copy, MailPlus, Trash2, UserX, Check, Loader2 } from 'lucide-react';
+import { Copy, MailPlus, Trash2, Check, Loader2, Search } from 'lucide-react';
 import { ORG_ROLE_LABELS, OrgRoleSchema, type OrgRole } from '@ktask/contracts';
 
 import { Button, Input, Label } from '@ktask/ui';
 import {
   inviteMember,
   membersQueries,
-  removeMember,
   revokeInvitation,
-  updateMemberRole,
   type InvitationRow,
   type MemberRow,
 } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/lib/api-client';
 import { useConfirm } from '@/components/ui/dialogs';
+import { UserAvatar } from '@/components/user-avatar';
+import { MemberDetailModal } from '@/components/settings/member-detail-modal';
 
 const InviteSchema = z.object({
   email: z.string().email('E-mail inválido.').toLowerCase().trim(),
@@ -35,14 +35,31 @@ export default function MembersPage() {
   const invites = useQuery(membersQueries.pendingInvitations());
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<OrgRole | 'ALL'>('ALL');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['org', 'members'] });
     queryClient.invalidateQueries({ queryKey: ['org', 'invitations'] });
   }
 
+  const filtered = useMemo(() => {
+    const all = members.data ?? [];
+    const q = search.trim().toLowerCase();
+    return all.filter((m) => {
+      if (roleFilter !== 'ALL' && m.role !== roleFilter) return false;
+      if (!q) return true;
+      return (
+        m.user.name.toLowerCase().includes(q) ||
+        m.user.email.toLowerCase().includes(q) ||
+        (m.user.phone ?? '').includes(q)
+      );
+    });
+  }, [members.data, search, roleFilter]);
+
   return (
-    <div className="container max-w-4xl py-10">
+    <div className="container max-w-4xl py-8">
       <h1 className="text-2xl font-semibold">Membros</h1>
       <p className="text-fg-muted mt-1 text-sm">
         Gerencie quem tem acesso à sua organização e quais papéis assumem.
@@ -74,23 +91,64 @@ export default function MembersPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-fg-muted mb-3 text-xs font-semibold uppercase tracking-wide">
-          Membros ativos
-        </h2>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-fg-muted text-xs font-semibold uppercase tracking-wide">
+            Membros ativos {filtered.length > 0 && `(${filtered.length})`}
+          </h2>
+          <div className="flex items-center gap-2">
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as OrgRole | 'ALL')}
+              className="border-border bg-bg h-8 rounded-md border px-2 text-xs"
+            >
+              <option value="ALL">Todos os papéis</option>
+              {(['OWNER', 'ADMIN', 'GESTOR', 'MEMBER', 'GUEST'] as OrgRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {ORG_ROLE_LABELS[r]}
+                </option>
+              ))}
+            </select>
+            <div className="border-border bg-bg flex items-center gap-1.5 rounded-md border px-2 py-1">
+              <Search size={12} className="text-fg-muted" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar..."
+                className="w-44 bg-transparent text-xs focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
         {members.isLoading && <p className="text-fg-muted text-sm">Carregando...</p>}
-        {members.data && members.data.length > 0 && (
-          <ul className="border-border bg-bg-subtle divide-border divide-y rounded-lg border">
-            {members.data.map((m) => (
+        {filtered.length === 0 && !members.isLoading && (
+          <p className="text-fg-muted py-6 text-center text-sm">
+            {search || roleFilter !== 'ALL' ? 'Nenhum membro com esse filtro.' : 'Sem membros.'}
+          </p>
+        )}
+        {filtered.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {filtered.map((m) => (
               <MemberRowItem
                 key={m.id}
                 member={m}
                 isSelf={m.userId === currentUser?.id}
-                onChange={invalidate}
+                onClick={() => setSelectedUserId(m.userId)}
               />
             ))}
           </ul>
         )}
       </section>
+
+      {selectedUserId && (
+        <MemberDetailModal
+          userId={selectedUserId}
+          onClose={() => {
+            setSelectedUserId(null);
+            invalidate();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -251,79 +309,49 @@ function PendingInviteRow({
 function MemberRowItem({
   member,
   isSelf,
-  onChange,
+  onClick,
 }: {
   member: MemberRow;
   isSelf: boolean;
-  onChange: () => void;
+  onClick: () => void;
 }) {
-  const confirm = useConfirm();
-  const roleMut = useMutation({
-    mutationFn: (role: OrgRole) => updateMemberRole(member.userId, role),
-    onSuccess: onChange,
-  });
-
-  const removeMut = useMutation({
-    mutationFn: () => removeMember(member.userId),
-    onSuccess: onChange,
-  });
-
-  const initials = member.user.name
-    .split(' ')
-    .map((n) => n[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const roleColors: Record<OrgRole, string> = {
+    OWNER: 'bg-primary-subtle/60 text-primary',
+    ADMIN: 'bg-warning-subtle text-warning',
+    GESTOR: 'bg-bg-emphasis text-fg',
+    MEMBER: 'bg-bg-muted text-fg-muted',
+    GUEST: 'bg-bg-muted text-fg-subtle',
+  };
 
   return (
-    <li className="flex items-center gap-3 px-4 py-3 text-sm">
-      <div className="bg-primary-subtle text-primary flex size-9 items-center justify-center rounded-full text-xs font-semibold">
-        {initials}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
-          {member.user.name}
-          {isSelf && <span className="text-fg-muted ml-1 text-xs">(você)</span>}
-        </p>
-        <p className="text-fg-muted truncate text-xs">{member.user.email}</p>
-      </div>
-
-      <select
-        value={member.role}
-        onChange={(e) => roleMut.mutate(e.target.value as OrgRole)}
-        disabled={roleMut.isPending || member.role === 'OWNER'}
-        className="border-border bg-bg h-8 rounded-md border px-2 text-xs disabled:opacity-60"
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="border-border bg-bg hover:border-border-strong hover:bg-bg-muted/30 flex w-full items-center gap-3 rounded-md border p-3 text-left text-sm transition-colors"
       >
-        {(['OWNER', 'ADMIN', 'GESTOR', 'MEMBER', 'GUEST'] as OrgRole[]).map((r) => (
-          <option key={r} value={r}>
-            {ORG_ROLE_LABELS[r]}
-          </option>
-        ))}
-      </select>
-
-      {!isSelf && member.role !== 'OWNER' && (
-        <button
-          type="button"
-          onClick={async () => {
-            if (
-              await confirm({
-                title: `Remover ${member.user.name}?`,
-                description:
-                  'O membro perderá acesso à organização e não conseguirá mais entrar. Quem comentou ou trabalhou em cards continua visível no histórico.',
-                confirmLabel: 'Remover',
-                danger: true,
-              })
-            )
-              removeMut.mutate();
-          }}
-          disabled={removeMut.isPending}
-          className="text-fg-muted hover:text-danger inline-flex size-8 items-center justify-center rounded-md"
-          title="Remover"
+        <UserAvatar
+          name={member.user.name}
+          userId={member.userId}
+          avatarUrl={member.user.avatarUrl}
+          size="md"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-fg truncate font-medium">{member.user.name}</span>
+            {isSelf && <span className="text-fg-muted text-[11px]">(você)</span>}
+          </div>
+          <p className="text-fg-muted mt-0.5 flex items-center gap-2 truncate text-[11px]">
+            <span className="truncate">{member.user.email}</span>
+            {member.user.phone && <span className="text-fg-subtle">· {member.user.phone}</span>}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${roleColors[member.role]}`}
         >
-          <UserX size={14} />
-        </button>
-      )}
+          {ORG_ROLE_LABELS[member.role]}
+        </span>
+      </button>
     </li>
   );
 }
