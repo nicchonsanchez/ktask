@@ -11,7 +11,6 @@ import {
   Plus,
   Trash2,
   User as UserIcon,
-  X,
 } from 'lucide-react';
 
 import { ApiError } from '@/lib/api-client';
@@ -22,7 +21,6 @@ import {
   type ContactRow,
   type ContactType,
 } from '@/lib/queries/contacts';
-import { UserAvatar } from '@/components/user-avatar';
 
 /**
  * Bloco "Contatos" do card-modal. Lista contatos vinculados, permite

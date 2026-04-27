@@ -390,9 +390,7 @@ function ContactDetailModal({ id, onClose }: { id: string; onClose: () => void }
               Carregando…
             </div>
           )}
-          {q.data && !editing && (
-            <ContactDetailView contact={q.data} onEdit={() => setEditing(true)} />
-          )}
+          {q.data && !editing && <ContactDetailView contact={q.data} />}
           {q.data && editing && (
             <ContactEditForm
               contact={q.data}
@@ -440,14 +438,12 @@ function ContactDetailModal({ id, onClose }: { id: string; onClose: () => void }
 
 function ContactDetailView({
   contact,
-  onEdit,
 }: {
   contact: NonNullable<ReturnType<typeof contactsQueries.detail>['queryFn']> extends () => Promise<
     infer T
   >
     ? T
     : never;
-  onEdit: () => void;
 }) {
   const Icon = contact.type === 'COMPANY' ? Building2 : UserIcon;
   return (
