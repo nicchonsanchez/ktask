@@ -142,7 +142,7 @@ export function TimerWidget() {
     return (
       <div ref={anchorRef} className="relative">
         <div
-          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all hover:gap-2 hover:bg-emerald-600 hover:pr-1 hover:text-white hover:shadow"
+          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all sm:hover:gap-2 sm:hover:bg-emerald-600 sm:hover:pr-1 sm:hover:text-white sm:hover:shadow"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
@@ -153,7 +153,7 @@ export function TimerWidget() {
             type="button"
             onClick={handlePlayClick}
             disabled={pending}
-            className="bg-fg/10 inline-flex size-7 items-center justify-center rounded-full transition-colors disabled:opacity-60 group-hover/timer:bg-white/25"
+            className="bg-fg/10 inline-flex size-7 items-center justify-center rounded-full transition-colors disabled:opacity-60 sm:group-hover/timer:bg-white/25"
             aria-label="Iniciar cronômetro"
           >
             {pending ? (
@@ -162,13 +162,13 @@ export function TimerWidget() {
               <Play size={12} fill="currentColor" />
             )}
           </button>
-          <span className="hidden whitespace-nowrap font-mono tabular-nums group-hover/timer:inline">
+          <span className="hidden whitespace-nowrap font-mono tabular-nums sm:group-hover/timer:inline">
             00:00:00
           </span>
           <button
             type="button"
             onClick={goToTimesheet}
-            className="hidden size-7 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/20 hover:text-white group-hover/timer:inline-flex"
+            className="hidden size-7 items-center justify-center rounded-full text-white/80 transition-colors sm:hover:bg-white/20 sm:hover:text-white sm:group-hover/timer:inline-flex"
             aria-label="Ver meus cronômetros"
             title="Ver meus cronômetros"
           >
@@ -229,10 +229,11 @@ function RunningPill({
 
   // Quando forceExpanded (popover aberto), pílula fica sempre aberta.
   // Senão, ícone-only por padrão (círculo perfeito 36×36 com pl-1 pr-1),
-  // expande só no hover (qualquer viewport).
-  const parentExpand = forceExpanded ? 'gap-2 pr-1' : 'gap-0 pr-1 hover:gap-2';
-  const childShow = forceExpanded ? 'inline-flex' : 'hidden group-hover/running:inline-flex';
-  const textShow = forceExpanded ? 'inline' : 'hidden group-hover/running:inline';
+  // expande só no hover em DESKTOP. Mobile fica sempre compacto pra não
+  // cobrir o logo do header (touch dispara hover de forma sticky).
+  const parentExpand = forceExpanded ? 'gap-2 pr-1' : 'gap-0 pr-1 sm:hover:gap-2';
+  const childShow = forceExpanded ? 'inline-flex' : 'hidden sm:group-hover/running:inline-flex';
+  const textShow = forceExpanded ? 'inline' : 'hidden sm:group-hover/running:inline';
 
   return (
     <div

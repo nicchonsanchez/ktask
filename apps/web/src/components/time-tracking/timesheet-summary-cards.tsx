@@ -41,7 +41,9 @@ export function TimesheetSummaryCards({
           <p className="text-fg-muted text-[10px] font-semibold uppercase tracking-wider">
             Por usuário
           </p>
-          <p className="text-fg-subtle text-[11px]">{byUser.length} pessoas</p>
+          <p className="text-fg-subtle text-[11px]">
+            {byUser.length} {byUser.length === 1 ? 'pessoa' : 'pessoas'}
+          </p>
         </div>
 
         {byUser.length === 0 ? (
@@ -68,8 +70,12 @@ function UserRow({ entry }: { entry: TimesheetSummary['byUser'][number] }) {
         size="sm"
       />
       <div className="min-w-0 flex-1">
-        <p className="text-fg truncate text-[13px] font-medium">{entry.user.name}</p>
-        <p className="text-fg-muted truncate text-[10px]">{entry.user.email}</p>
+        <p className="text-fg truncate text-[13px] font-medium" title={entry.user.name}>
+          {entry.user.name}
+        </p>
+        <p className="text-fg-muted truncate text-[10px]" title={entry.user.email}>
+          {entry.user.email}
+        </p>
       </div>
       <div className="flex flex-col items-end gap-0.5">
         <span className="text-fg font-mono text-[13px] font-semibold tabular-nums">

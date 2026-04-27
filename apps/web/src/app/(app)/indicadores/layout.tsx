@@ -26,7 +26,7 @@ export default function IndicadoresLayout({ children }: { children: React.ReactN
                   href={tab.href}
                   role="tab"
                   aria-selected={active}
-                  className={`group relative flex items-center px-3 py-2.5 text-[13px] font-medium uppercase tracking-wide transition-colors ${
+                  className={`group relative flex items-center px-2 py-2.5 text-[11px] font-medium uppercase tracking-normal transition-colors sm:px-3 sm:text-[13px] sm:tracking-wide ${
                     active ? 'text-primary' : 'text-fg-muted hover:text-fg'
                   }`}
                 >
