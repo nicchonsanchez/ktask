@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Users, Building2, ShieldCheck } from 'lucide-react';
+import { Users, Building2, ChevronRight, Clock, ShieldCheck } from 'lucide-react';
 import type { OrgRole } from '@ktask/contracts';
 import { ORG_ROLE_LABELS } from '@ktask/contracts';
 import { api } from '@/lib/api-client';
@@ -78,32 +79,47 @@ export default function EmpresaPage() {
       </div>
 
       <section className="mt-10">
-        <h2 className="text-fg-muted mb-3 text-sm font-semibold uppercase tracking-wide">
-          Membros
-        </h2>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-fg-muted text-sm font-semibold uppercase tracking-wide">Membros</h2>
+          <span className="text-fg-subtle text-[11px]">Clique pra ver o timesheet do membro.</span>
+        </div>
         <div className="border-border bg-bg-subtle overflow-hidden rounded-lg border">
           {membersQuery.isLoading ? (
             <div className="text-fg-muted p-4 text-sm">Carregando...</div>
           ) : membersQuery.data && membersQuery.data.length > 0 ? (
             <ul className="divide-border divide-y">
               {membersQuery.data.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 p-3">
-                  <div className="bg-primary-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-                    {m.user.name
-                      .split(' ')
-                      .map((w) => w[0])
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{m.user.name}</p>
-                    <p className="text-fg-muted truncate text-xs">{m.user.email}</p>
-                  </div>
-                  <span className="bg-bg-muted text-fg-muted rounded-full px-2 py-0.5 text-xs font-medium">
-                    {ORG_ROLE_LABELS[m.role]}
-                  </span>
+                <li key={m.id}>
+                  <Link
+                    href={`/indicadores/timesheet?userId=${m.user.id}`}
+                    className="hover:bg-bg-muted/40 group flex items-center gap-3 p-3 transition-colors"
+                    title={`Ver timesheet de ${m.user.name}`}
+                  >
+                    <div className="bg-primary-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+                      {m.user.name
+                        .split(' ')
+                        .map((w) => w[0])
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{m.user.name}</p>
+                      <p className="text-fg-muted truncate text-xs">{m.user.email}</p>
+                    </div>
+                    <span className="bg-bg-muted text-fg-muted rounded-full px-2 py-0.5 text-xs font-medium">
+                      {ORG_ROLE_LABELS[m.role]}
+                    </span>
+                    <Clock
+                      size={13}
+                      className="text-fg-subtle group-hover:text-primary shrink-0 transition-colors"
+                    />
+                    <ChevronRight
+                      size={14}
+                      className="text-fg-subtle group-hover:text-primary shrink-0 transition-colors"
+                    />
+                  </Link>
                 </li>
               ))}
             </ul>

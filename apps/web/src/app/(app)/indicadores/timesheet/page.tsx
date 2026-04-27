@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2, Plus } from 'lucide-react';
 
@@ -47,21 +48,30 @@ export default function TimesheetPage() {
   const [manualOpen, setManualOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // Aceita ?userId=X na URL pra pré-filtrar (vindo da página /empresa
+  // por exemplo). Se setado, sobrescreve o "filtro padrão = me".
+  const urlUserId = useUrlUserId();
+
   const initialRange = useMemo(defaultRange, []);
   const [filters, setFilters] = useState<UiFilters>(() => ({
     source: 'ALL',
     dateFrom: initialRange.from,
     dateTo: initialRange.to,
-    userIds: me ? [me.id] : [],
+    userIds: urlUserId ? [urlUserId] : me ? [me.id] : [],
     boardId: null,
   }));
 
-  // Sincroniza userIds com user logado quando ele carregar (caso me chegue depois)
+  // Sincroniza userIds: 1) prioridade pra ?userId=X da URL,
+  // 2) fallback pro user logado quando ele carregar
   useEffect(() => {
-    if (me && filters.userIds.length === 0) {
+    if (urlUserId && !filters.userIds.includes(urlUserId)) {
+      setFilters((f) => ({ ...f, userIds: [urlUserId] }));
+      return;
+    }
+    if (!urlUserId && me && filters.userIds.length === 0) {
       setFilters((f) => ({ ...f, userIds: [me.id] }));
     }
-  }, [me, filters.userIds.length]);
+  }, [urlUserId, me, filters.userIds]);
 
   const apiFilter: TimesheetFilter = {
     userIds: filters.userIds.length > 0 ? filters.userIds : undefined,
@@ -249,4 +259,13 @@ function EmptyState() {
       </Link>
     </div>
   );
+}
+
+/**
+ * Lê ?userId=X da URL pra pré-filtrar timesheet por um membro específico.
+ * Usado quando o user clica num membro em /empresa.
+ */
+function useUrlUserId(): string | null {
+  const searchParams = useSearchParams();
+  return searchParams.get('userId');
 }
