@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
@@ -18,6 +18,7 @@ import { labelsQueries } from '@/lib/queries/labels';
 import { orgMembersQuery } from '@/lib/queries/cards';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
+import { TemplateVarsBar } from './template-vars-bar';
 
 /**
  * Form de criação de automação. Cada actionType tem seu próprio
@@ -825,21 +826,28 @@ function CommentTemplateConfig({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="flex flex-col gap-2">
       <textarea
+        ref={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={4}
         placeholder="Ex: Card chegou em {{card.list.name}} — atribuído por {{actor.name}}"
         className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
       />
-      <p className="text-fg-subtle text-[10px] leading-relaxed">
-        Variáveis suportadas: <code className="text-fg-muted">{'{{card.title}}'}</code>{' '}
-        <code className="text-fg-muted">{'{{card.list.name}}'}</code>{' '}
-        <code className="text-fg-muted">{'{{card.board.name}}'}</code>{' '}
-        <code className="text-fg-muted">{'{{actor.name}}'}</code>
-      </p>
+      <TemplateVarsBar
+        inputRef={ref}
+        value={value}
+        onChange={onChange}
+        vars={[
+          { token: '{{card.title}}' },
+          { token: '{{card.list.name}}' },
+          { token: '{{card.board.name}}' },
+          { token: '{{actor.name}}' },
+        ]}
+      />
     </div>
   );
 }
@@ -1004,20 +1012,25 @@ function CreateChildConfig({
   copyDueDate: boolean;
   setCopyDueDate: (v: boolean) => void;
 }) {
+  const titleRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-3">
-      <div>
+      <div className="flex flex-col gap-1">
         <label className="text-fg-muted block text-[11px] font-medium">Título do card filho</label>
         <input
+          ref={titleRef}
           type="text"
           value={titleTemplate}
           onChange={(e) => setTitleTemplate(e.target.value)}
           maxLength={500}
           className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
         />
-        <p className="text-fg-subtle mt-0.5 text-[10px]">
-          Variáveis: <code>{'{{card.title}}'}</code> <code>{'{{card.list.name}}'}</code>
-        </p>
+        <TemplateVarsBar
+          inputRef={titleRef}
+          value={titleTemplate}
+          onChange={setTitleTemplate}
+          vars={[{ token: '{{card.title}}' }, { token: '{{card.list.name}}' }]}
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <CheckboxRow label="Copiar líder do card" checked={copyLead} onChange={setCopyLead} />
@@ -1079,6 +1092,7 @@ function SendWhatsAppConfig({
   setTemplate: (v: string) => void;
 }) {
   const membersWithPhone = members.filter((m) => m.user.phone);
+  const templateRef = useRef<HTMLTextAreaElement>(null);
 
   return (
     <div className="flex flex-col gap-3">
@@ -1152,19 +1166,25 @@ function SendWhatsAppConfig({
       <div className="flex flex-col gap-2">
         <label className="text-fg-muted text-[11px] font-medium">Mensagem</label>
         <textarea
+          ref={templateRef}
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
           rows={4}
           placeholder='Ex: Card "{{card.title}}" entrou em {{card.list.name}}'
           className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
         />
-        <p className="text-fg-subtle text-[10px] leading-relaxed">
-          Variáveis: <code className="text-fg-muted">{'{{card.title}}'}</code>{' '}
-          <code className="text-fg-muted">{'{{card.list.name}}'}</code>{' '}
-          <code className="text-fg-muted">{'{{card.board.name}}'}</code>{' '}
-          <code className="text-fg-muted">{'{{card.lead.name}}'}</code>{' '}
-          <code className="text-fg-muted">{'{{actor.name}}'}</code>
-        </p>
+        <TemplateVarsBar
+          inputRef={templateRef}
+          value={template}
+          onChange={setTemplate}
+          vars={[
+            { token: '{{card.title}}' },
+            { token: '{{card.list.name}}' },
+            { token: '{{card.board.name}}' },
+            { token: '{{card.lead.name}}' },
+            { token: '{{actor.name}}' },
+          ]}
+        />
       </div>
     </div>
   );
