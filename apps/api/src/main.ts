@@ -4,7 +4,6 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
@@ -19,12 +18,6 @@ async function bootstrap() {
 
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cookieParser());
-  // Body parser: 10MB pra suportar imports de CSV grandes (Ummense
-  // exporta JSON-array-of-arrays que pode passar de 1MB). Default do
-  // Express e 100KB. Aplicado apenas a JSON/urlencoded — uploads de
-  // arquivo binario continuam usando multer/multipart se vierem.
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
 
   app.enableCors({
     origin: env.CORS_ORIGINS,
