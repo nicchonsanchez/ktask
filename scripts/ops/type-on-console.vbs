@@ -8,8 +8,9 @@
 ' 2. Volta no Windows e da double-click neste .vbs
 ' 3. Aparece dialog com o comando. Clica em "Sim"
 ' 4. Troca pra janela do Console (Alt+Tab, ou clica nela)
-' 5. Aguarda 2s — VBS digita sozinho + Enter no fim
-' 6. Quando terminar, mostra dialog do proximo comando
+' 5. Aguarda 2s — VBS digita o comando (sem Enter no final)
+' 6. VOCE revisa o que foi digitado e aperta Enter no Console
+' 7. Volta no Windows e clica "OK" no dialog "Pronto?" pra ir pro proximo
 
 Option Explicit
 
@@ -34,7 +35,7 @@ For i = 0 To UBound(commands)
         "Comando " & (i + 1) & " de " & total & ":" & vbCrLf & vbCrLf & _
         cmd & vbCrLf & vbCrLf & _
         "Clica SIM e DEPOIS coloca a janela do Console em foco (Alt+Tab)." & vbCrLf & _
-        "VBS espera 2s e digita sozinho. Enter eh enviado no fim.", _
+        "VBS espera 2s e digita sozinho. VOCE revisa e aperta Enter no Console.", _
         4 + 32 + 256, _
         "Pode colar? (" & (i + 1) & "/" & total & ")" _
     )
@@ -78,8 +79,14 @@ For i = 0 To UBound(commands)
         WScript.Sleep 30
     Next
 
-    sh.SendKeys "{ENTER}"
-    WScript.Sleep 500
+    ' NAO manda Enter — user revisa e aperta manualmente no Console.
+    ' Espera o user dar OK aqui antes de mostrar o proximo dialog.
+    MsgBox _
+        "Comando " & (i + 1) & " digitado." & vbCrLf & _
+        "Revise no Console e aperte Enter LA pra executar." & vbCrLf & vbCrLf & _
+        "Quando estiver pronto pro proximo, clique OK aqui.", _
+        64 + 256, _
+        "Pronto? (" & (i + 1) & "/" & total & ")"
 Next
 
 MsgBox "Todos os " & total & " comandos foram digitados." & vbCrLf & _
