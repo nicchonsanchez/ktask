@@ -110,6 +110,7 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-KTask <noreply@agenciakharis.com.br>}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       EVOLUTION_DEFAULT_URL: ${EVOLUTION_DEFAULT_URL:-}

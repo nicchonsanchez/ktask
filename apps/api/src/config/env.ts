@@ -54,6 +54,15 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().default('KTask <noreply@ktask.local>'),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  /**
+   * SSL direto (`true`, porta 465) vs STARTTLS (`false`, porta 587 ou 25).
+   * Mailpit (dev) e a maioria dos servidores corporativos modernos usam
+   * STARTTLS na 587. O servidor Napoleon da Kharis (mail.agenciakharis.com.br)
+   * aceita 465+SSL ou 587+STARTTLS — em prod usamos 465+secure=true.
+   */
+  SMTP_SECURE: z
+    .preprocess((v) => (v === 'true' || v === true ? true : false), z.boolean())
+    .default(false),
   SMTP_USER: optionalString(),
   SMTP_PASS: optionalString(),
 
