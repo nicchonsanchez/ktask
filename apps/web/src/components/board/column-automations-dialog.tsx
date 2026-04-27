@@ -611,8 +611,8 @@ const CATALOG: CatalogCategory[] = [
         key: 'SEND_WHATSAPP',
         label: 'Enviar WhatsApp',
         icon: Send,
-        plan: 'ENTERPRISE',
-        ready: false,
+        plan: 'PRO',
+        ready: true,
         description: 'Dispara mensagem WhatsApp via Evolution API.',
       },
       {

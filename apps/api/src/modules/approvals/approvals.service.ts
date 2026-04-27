@@ -22,7 +22,7 @@ import type {
   DecideApprovalRequest,
   UndoApprovalRequest,
 } from './dto/approvals.schemas';
-import { WhatsAppHelper } from './whatsapp.helper';
+import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
 /**
  * Janela em ms onde o decisor pode desfazer a decisão. 5 minutos é

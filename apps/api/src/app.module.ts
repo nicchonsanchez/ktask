@@ -32,6 +32,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { PushModule } from './modules/push/push.module';
 import { ChecklistTemplatesModule } from './modules/checklist-templates/checklist-templates.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
     AdminModule,
     PushModule,
     ChecklistTemplatesModule,
+    WhatsAppModule,
     ApprovalsModule,
     HealthModule,
   ],

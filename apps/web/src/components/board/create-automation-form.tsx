@@ -72,6 +72,16 @@ export function CreateAutomationForm({
   const [flowPosition, setFlowPosition] = useState<'TOP' | 'BOTTOM'>(
     initial?.flowPosition ?? 'TOP',
   );
+  // SEND_WHATSAPP: 3 modos de destinatário (lead do card / member da org / phone literal)
+  const [waRecipientMode, setWaRecipientMode] = useState<'CARD_LEAD' | 'USER' | 'PHONE'>(
+    initial?.waRecipientMode ?? 'CARD_LEAD',
+  );
+  const [waUserId, setWaUserId] = useState(initial?.waUserId ?? '');
+  const [waPhone, setWaPhone] = useState(initial?.waPhone ?? '');
+  const [waTemplate, setWaTemplate] = useState(
+    initial?.waTemplate ??
+      'Olá! O card "{{card.title}}" entrou em "{{card.list.name}}". Pode dar uma olhada?',
+  );
 
   const [label, setLabel] = useState(initial?.label ?? '');
 
@@ -95,6 +105,10 @@ export function CreateAutomationForm({
     setCopyTags(next.copyTags);
     setCopyDueDate(next.copyDueDate);
     setFlowPosition(next.flowPosition);
+    setWaRecipientMode(next.waRecipientMode);
+    setWaUserId(next.waUserId);
+    setWaPhone(next.waPhone);
+    setWaTemplate(next.waTemplate);
     setLabel(next.label);
   }, [editing]);
 
@@ -107,7 +121,8 @@ export function CreateAutomationForm({
   });
   const membersQ = useQuery({
     ...orgMembersQuery,
-    enabled: actionType === 'SET_LEAD' || actionType === 'ADD_TEAM',
+    enabled:
+      actionType === 'SET_LEAD' || actionType === 'ADD_TEAM' || actionType === 'SEND_WHATSAPP',
   });
 
   const createMut = useMutation({
@@ -127,6 +142,10 @@ export function CreateAutomationForm({
         copyTags,
         copyDueDate,
         flowPosition,
+        waRecipientMode,
+        waUserId,
+        waPhone,
+        waTemplate,
       });
       const triggerConfig =
         trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {};
@@ -166,6 +185,10 @@ export function CreateAutomationForm({
       teamUserIds,
       commentTemplate,
       childTitleTemplate,
+      waRecipientMode,
+      waUserId,
+      waPhone,
+      waTemplate,
     });
 
   return (
@@ -321,6 +344,21 @@ export function CreateAutomationForm({
             />
           )}
 
+          {actionType === 'SEND_WHATSAPP' && (
+            <SendWhatsAppConfig
+              members={membersQ.data ?? []}
+              membersLoading={membersQ.isLoading}
+              recipientMode={waRecipientMode}
+              setRecipientMode={setWaRecipientMode}
+              userId={waUserId}
+              setUserId={setWaUserId}
+              phone={waPhone}
+              setPhone={setWaPhone}
+              template={waTemplate}
+              setTemplate={setWaTemplate}
+            />
+          )}
+
           {!IMPLEMENTED.has(actionType) && (
             <p className="text-fg-muted text-[12px]">
               Configuração específica desta ação ainda não foi implementada.
@@ -374,6 +412,7 @@ const IMPLEMENTED = new Set<AutomationActionType>([
   'SET_CARD_STATUS',
   'CREATE_CHILD_CARD',
   'UPDATE_FLOW_POSITION',
+  'SEND_WHATSAPP',
 ]);
 
 const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: boolean }> = [
@@ -405,6 +444,10 @@ interface ConfigState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
+  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+  waUserId: string;
+  waPhone: string;
+  waTemplate: string;
 }
 
 function buildActionConfig(
@@ -449,6 +492,13 @@ function buildActionConfig(
         copyTags: s.copyTags,
         copyDueDate: s.copyDueDate,
       };
+    case 'SEND_WHATSAPP':
+      return {
+        template: s.waTemplate.trim(),
+        ...(s.waRecipientMode === 'CARD_LEAD' ? { useCardLead: true } : {}),
+        ...(s.waRecipientMode === 'USER' ? { userId: s.waUserId } : {}),
+        ...(s.waRecipientMode === 'PHONE' ? { phone: s.waPhone.replace(/\D/g, '') } : {}),
+      };
     default:
       return {};
   }
@@ -463,6 +513,10 @@ function validateAction(
     teamUserIds: string[];
     commentTemplate: string;
     childTitleTemplate: string;
+    waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+    waUserId: string;
+    waPhone: string;
+    waTemplate: string;
   },
 ): boolean {
   switch (actionType) {
@@ -484,6 +538,12 @@ function validateAction(
       return true; // sempre tem default 'COMPLETED'
     case 'CREATE_CHILD_CARD':
       return s.childTitleTemplate.trim().length > 0;
+    case 'SEND_WHATSAPP':
+      if (s.waTemplate.trim().length === 0) return false;
+      if (s.waRecipientMode === 'CARD_LEAD') return true;
+      if (s.waRecipientMode === 'USER') return Boolean(s.waUserId);
+      if (s.waRecipientMode === 'PHONE') return /^\d{10,15}$/.test(s.waPhone.replace(/\D/g, ''));
+      return false;
     default:
       return false;
   }
@@ -506,6 +566,10 @@ interface InitialState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
+  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+  waUserId: string;
+  waPhone: string;
+  waTemplate: string;
   label: string;
 }
 
@@ -548,6 +612,23 @@ function extractInitial(a: Automation): InitialState {
     copyTags: cfg.copyTags === true,
     copyDueDate: cfg.copyDueDate === true,
     flowPosition: cfg.position === 'BOTTOM' ? 'BOTTOM' : 'TOP',
+    waRecipientMode:
+      a.actionType === 'SEND_WHATSAPP'
+        ? cfg.useCardLead === true
+          ? 'CARD_LEAD'
+          : typeof cfg.userId === 'string' && cfg.userId
+            ? 'USER'
+            : 'PHONE'
+        : 'CARD_LEAD',
+    waUserId:
+      a.actionType === 'SEND_WHATSAPP' && typeof cfg.userId === 'string'
+        ? (cfg.userId as string)
+        : '',
+    waPhone: typeof cfg.phone === 'string' ? (cfg.phone as string) : '',
+    waTemplate:
+      a.actionType === 'SEND_WHATSAPP' && typeof cfg.template === 'string'
+        ? (cfg.template as string)
+        : '',
     label: a.label ?? '',
   };
 }
@@ -971,5 +1052,142 @@ function CheckboxRow({
       />
       <span className="text-fg">{label}</span>
     </label>
+  );
+}
+
+function SendWhatsAppConfig({
+  members,
+  membersLoading,
+  recipientMode,
+  setRecipientMode,
+  userId,
+  setUserId,
+  phone,
+  setPhone,
+  template,
+  setTemplate,
+}: {
+  members: Array<{ userId: string; user: { id: string; name: string; phone: string | null } }>;
+  membersLoading: boolean;
+  recipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+  setRecipientMode: (v: 'CARD_LEAD' | 'USER' | 'PHONE') => void;
+  userId: string;
+  setUserId: (v: string) => void;
+  phone: string;
+  setPhone: (v: string) => void;
+  template: string;
+  setTemplate: (v: string) => void;
+}) {
+  const membersWithPhone = members.filter((m) => m.user.phone);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-fg-muted text-[11px] font-medium">Destinatário</label>
+        <div className="flex flex-wrap gap-1">
+          <ModeBtn
+            active={recipientMode === 'CARD_LEAD'}
+            onClick={() => setRecipientMode('CARD_LEAD')}
+          >
+            Líder do card
+          </ModeBtn>
+          <ModeBtn active={recipientMode === 'USER'} onClick={() => setRecipientMode('USER')}>
+            Membro fixo
+          </ModeBtn>
+          <ModeBtn active={recipientMode === 'PHONE'} onClick={() => setRecipientMode('PHONE')}>
+            Número avulso
+          </ModeBtn>
+        </div>
+      </div>
+
+      {recipientMode === 'CARD_LEAD' && (
+        <p className="text-fg-subtle bg-bg-muted/40 rounded px-2 py-1.5 text-[11px] leading-relaxed">
+          Usa o telefone do líder do card no momento que a automação rodar. Se o líder não tiver
+          telefone cadastrado no perfil, a automação registra a tentativa mas não envia.
+        </p>
+      )}
+
+      {recipientMode === 'USER' && (
+        <div className="flex flex-col gap-1">
+          <label className="text-fg-muted text-[11px] font-medium">
+            Membro (precisa ter WhatsApp no perfil)
+          </label>
+          <select
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          >
+            <option value="">Selecione um membro</option>
+            {membersLoading && <option disabled>Carregando…</option>}
+            {membersWithPhone.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.user.name} ({m.user.phone})
+              </option>
+            ))}
+          </select>
+          {!membersLoading && membersWithPhone.length === 0 && (
+            <p className="text-fg-subtle text-[11px]">
+              Nenhum membro tem WhatsApp cadastrado. Peça pra preencherem em /configuracoes/perfil.
+            </p>
+          )}
+        </div>
+      )}
+
+      {recipientMode === 'PHONE' && (
+        <div className="flex flex-col gap-1">
+          <label className="text-fg-muted text-[11px] font-medium">
+            Telefone (E.164 sem &quot;+&quot;)
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+            placeholder="5531999999999"
+            className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <label className="text-fg-muted text-[11px] font-medium">Mensagem</label>
+        <textarea
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+          rows={4}
+          placeholder='Ex: Card "{{card.title}}" entrou em {{card.list.name}}'
+          className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+        />
+        <p className="text-fg-subtle text-[10px] leading-relaxed">
+          Variáveis: <code className="text-fg-muted">{'{{card.title}}'}</code>{' '}
+          <code className="text-fg-muted">{'{{card.list.name}}'}</code>{' '}
+          <code className="text-fg-muted">{'{{card.board.name}}'}</code>{' '}
+          <code className="text-fg-muted">{'{{card.lead.name}}'}</code>{' '}
+          <code className="text-fg-muted">{'{{actor.name}}'}</code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ModeBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+        active ? 'bg-primary text-primary-fg' : 'bg-bg-muted text-fg-muted hover:bg-bg-emphasis'
+      }`}
+    >
+      {children}
+    </button>
   );
 }

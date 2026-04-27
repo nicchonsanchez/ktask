@@ -233,7 +233,14 @@ export function unassignMember(cardId: string, userId: string) {
 export interface OrgMember {
   userId: string;
   role: 'OWNER' | 'ADMIN' | 'GESTOR' | 'MEMBER' | 'GUEST';
-  user: { id: string; name: string; email: string; avatarUrl: string | null };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+    phone: string | null;
+    notifyApprovalsOnWhatsApp?: boolean;
+  };
 }
 
 export const orgMembersQuery = {

@@ -5,6 +5,7 @@ import type { Automation, AutomationRun, AutomationTrigger, Prisma } from '@pris
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
 import { EVENT_NAMES, type CardMovedPayload } from '@/modules/realtime/events.types';
+import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
 /**
  * Event emitido por ApprovalsService quando uma aprovação é decidida.
@@ -48,6 +49,7 @@ export class AutomationsEngine {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    private readonly whatsapp: WhatsAppHelper,
   ) {}
 
   @OnEvent(EVENT_NAMES.CARD_MOVED, { async: true })
@@ -229,12 +231,13 @@ export class AutomationsEngine {
         return this.handleInsertChecklistGroup(automation, cardId);
       case 'UPDATE_FLOW_POSITION':
         return this.handleUpdateFlowPosition(automation, cardId);
+      case 'SEND_WHATSAPP':
+        return this.handleSendWhatsApp(automation, cardId);
 
       // Handlers ainda não implementados
       case 'FILL_FIELDS':
       case 'SAVE_DESCRIPTION_VERSION':
       case 'SEND_EMAIL':
-      case 'SEND_WHATSAPP':
       case 'LINK_FLOW':
       case 'UNLINK_FLOW':
       case 'FLAG_DUE_TODAY':
@@ -833,6 +836,85 @@ export class AutomationsEngine {
     const newPos = computeInsertPosition(last?.position ?? null, null);
     await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
     return { position: newPos };
+  }
+
+  /**
+   * SEND_WHATSAPP — envia mensagem via Evolution API. Destinatario resolvido
+   * por prioridade:
+   *   1. `phone` literal (E.164 sem '+')
+   *   2. `userId` -> phone do user (so se opt-in `notifyApprovalsOnWhatsApp`
+   *      OU se a action explicitamente nao restringe — aqui sempre envia,
+   *      a opt-in controla so o caso de aprovacoes; pra automacao manual
+   *      o usuario que configurou ja escolheu o destinatario)
+   *   3. `useCardLead = true` -> phone do lead do card
+   *
+   * Template usa Mustache simples com vars do card. Falha gracioso: run
+   * fica SUCCESS com `delivered: false` pra debug, em vez de FAILED, pra
+   * nao bloquear cadeias de automacao.
+   */
+  private async handleSendWhatsApp(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ delivered: boolean; phone: string | null; reason?: string }> {
+    const config = automation.actionConfig as {
+      template?: string;
+      phone?: string;
+      userId?: string;
+      useCardLead?: boolean;
+    };
+    const template = config.template?.trim();
+    if (!template) {
+      return { delivered: false, phone: null, reason: 'Template vazio' };
+    }
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        list: { select: { name: true } },
+        board: { select: { name: true } },
+        lead: { select: { id: true, name: true, phone: true } },
+      },
+    });
+    if (!card) {
+      return { delivered: false, phone: null, reason: 'Card nao encontrado' };
+    }
+
+    let phone: string | null = null;
+    if (config.phone && /^\d{10,15}$/.test(config.phone)) {
+      phone = config.phone;
+    } else if (config.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: config.userId },
+        select: { phone: true },
+      });
+      phone = user?.phone ?? null;
+    } else if (config.useCardLead) {
+      phone = card.lead?.phone ?? null;
+    }
+
+    if (!phone) {
+      return { delivered: false, phone: null, reason: 'Destinatario sem telefone' };
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: automation.createdById },
+      select: { name: true },
+    });
+
+    const text = renderTemplate(template, {
+      'card.title': card.title,
+      'card.list.name': card.list.name,
+      'card.board.name': card.board.name,
+      'card.lead.name': card.lead?.name ?? '',
+      'actor.name': actor?.name ?? 'Automação',
+    });
+
+    const ok = await this.whatsapp.sendText(phone, text);
+    return {
+      delivered: ok,
+      phone,
+      ...(ok ? {} : { reason: 'Evolution rejeitou ou desabilitada' }),
+    };
   }
 }
 

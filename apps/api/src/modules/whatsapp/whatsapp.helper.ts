@@ -6,12 +6,12 @@ import { env } from '@/config/env';
  * Helper minimalista pra mandar mensagem de texto via Evolution API.
  *
  * Usa as creds default da Org (em dev/MVP). Em produção a mesma engine
- * pode evoluir pra ler config por Org (Integration.config criptografada),
- * mas por enquanto basta pro caso de uso de aprovações.
+ * pode evoluir pra ler config por Org (Integration.config criptografada).
  *
- * Falhas são logadas mas NÃO propagadas — notificação WhatsApp é "best
- * effort": se a Evolution estiver fora, a aprovação ainda funciona via
- * inbox interno + push.
+ * Falhas são logadas mas NÃO propagadas — envio WhatsApp é "best effort":
+ * se a Evolution estiver fora, o caller continua funcionando (aprovacao
+ * ainda funciona via inbox interno + push; automacao ainda registra run
+ * SUCCESS com flag de delivery=false).
  */
 @Injectable()
 export class WhatsAppHelper {
