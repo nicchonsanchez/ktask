@@ -310,21 +310,37 @@ export class CardsService {
         });
       }
     } else {
-      // Detecta campos que mudaram. Em vez de "atualizou o card" genérico,
-      // o payload lista quais campos foram tocados pra o front renderizar
-      // mensagem específica ("alterou a descrição", "mudou o prazo", etc).
+      // Detecta campos que mudaram + valores from/to. Front renderiza
+      // mensagens específicas tipo "alterou o título de A para B", "alterou
+      // o prazo de 30/04 para 15/05". `fields` segue populado pra retro-
+      // compat com activities antigas. Descrição não vai pro `changes`
+      // (Tiptap JSON é grande; só sinaliza no `fields`).
       const changed: string[] = [];
-      if (input.title !== undefined && input.title !== card.title) changed.push('title');
-      if (input.description !== undefined) changed.push('description');
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+      if (input.title !== undefined && input.title !== card.title) {
+        changed.push('title');
+        changes.title = { from: card.title, to: input.title };
+      }
+      if (input.description !== undefined) {
+        changed.push('description');
+      }
       if (input.priority !== undefined && input.priority !== card.priority) {
         changed.push('priority');
+        changes.priority = { from: card.priority, to: input.priority };
       }
       const newDue = input.dueDate ? new Date(input.dueDate).toISOString() : null;
       const oldDue = card.dueDate ? card.dueDate.toISOString() : null;
-      if (input.dueDate !== undefined && newDue !== oldDue) changed.push('dueDate');
+      if (input.dueDate !== undefined && newDue !== oldDue) {
+        changed.push('dueDate');
+        changes.dueDate = { from: oldDue, to: newDue };
+      }
       const newStart = input.startDate ? new Date(input.startDate).toISOString() : null;
       const oldStart = card.startDate ? card.startDate.toISOString() : null;
-      if (input.startDate !== undefined && newStart !== oldStart) changed.push('startDate');
+      if (input.startDate !== undefined && newStart !== oldStart) {
+        changed.push('startDate');
+        changes.startDate = { from: oldStart, to: newStart };
+      }
       if (
         input.completedAt !== undefined &&
         Boolean(input.completedAt) !== Boolean(card.completedAt)
@@ -334,6 +350,7 @@ export class CardsService {
       }
       if (input.estimateMinutes !== undefined && input.estimateMinutes !== card.estimateMinutes) {
         changed.push('estimateMinutes');
+        changes.estimateMinutes = { from: card.estimateMinutes, to: input.estimateMinutes };
       }
 
       if (changed.length > 0) {
@@ -343,7 +360,7 @@ export class CardsService {
           cardId,
           actorId: userId,
           type: 'CARD_UPDATED',
-          payload: { cardId, fields: changed },
+          payload: { cardId, fields: changed, changes },
           coalesceWindowSec: 60,
           mergeFields: true,
         });
@@ -373,7 +390,11 @@ export class CardsService {
     cardId: string;
     actorId: string;
     type: 'CARD_UPDATED';
-    payload: { cardId: string; fields: string[] };
+    payload: {
+      cardId: string;
+      fields: string[];
+      changes?: Record<string, { from: unknown; to: unknown }>;
+    };
     coalesceWindowSec: number;
     mergeFields: boolean;
   }) {
@@ -390,13 +411,35 @@ export class CardsService {
     });
 
     if (recent && input.mergeFields) {
-      const prev = (recent.payload ?? {}) as { fields?: string[] };
+      const prev = (recent.payload ?? {}) as {
+        fields?: string[];
+        changes?: Record<string, { from: unknown; to: unknown }>;
+      };
       const prevFields = Array.isArray(prev.fields) ? prev.fields : [];
       const merged = Array.from(new Set([...prevFields, ...input.payload.fields]));
+
+      // Coalesce de changes: mantém `from` ORIGINAL (primeira mudança da janela)
+      // e atualiza `to` pra última. Ex: title A→B coalescido com B→C vira A→C.
+      const prevChanges = prev.changes ?? {};
+      const mergedChanges: Record<string, { from: unknown; to: unknown }> = { ...prevChanges };
+      for (const [field, change] of Object.entries(input.payload.changes ?? {})) {
+        const existing = mergedChanges[field];
+        if (existing) {
+          mergedChanges[field] = { from: existing.from, to: change.to };
+        } else {
+          mergedChanges[field] = change;
+        }
+      }
+
       await this.prisma.activity.update({
         where: { id: recent.id },
         data: {
-          payload: { ...prev, ...input.payload, fields: merged } as Prisma.InputJsonValue,
+          payload: {
+            ...prev,
+            ...input.payload,
+            fields: merged,
+            changes: mergedChanges,
+          } as Prisma.InputJsonValue,
           createdAt: new Date(), // bump pro topo do feed
         },
       });

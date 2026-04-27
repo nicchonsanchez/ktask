@@ -9,6 +9,91 @@ const FIELD_LABELS: Record<string, string> = {
   estimateMinutes: 'a estimativa',
 };
 
+const PRIORITY_LABELS: Record<string, string> = {
+  NONE: 'sem prioridade',
+  LOW: 'baixa',
+  MEDIUM: 'média',
+  HIGH: 'alta',
+  URGENT: 'urgente',
+};
+
+function fmtDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function fmtMinutes(min: number | null | undefined): string | null {
+  if (min === null || min === undefined) return null;
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h${m}min`;
+}
+
+function truncate(s: string, max = 60): string {
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+/**
+ * Renderiza uma mudança de field específica como sequência de ActivityPart
+ * — formato "{verb} {label} de {from} para {to}". Quando from ou to é null
+ * (definição/remoção), troca pra "definiu" ou "removeu".
+ */
+function changePart(field: string, change: { from: unknown; to: unknown }): ActivityPart[] | null {
+  const label = FIELD_LABELS[field];
+  if (!label) return null;
+
+  if (field === 'title') {
+    const from = typeof change.from === 'string' ? truncate(change.from) : null;
+    const to = typeof change.to === 'string' ? truncate(change.to) : null;
+    if (!to) return null;
+    if (!from) return ['definiu ', label, ' como "', { bold: to }, '"'];
+    return ['alterou ', label, ' de "', { bold: from }, '" para "', { bold: to }, '"'];
+  }
+
+  if (field === 'priority') {
+    const from = typeof change.from === 'string' ? PRIORITY_LABELS[change.from] : null;
+    const to = typeof change.to === 'string' ? PRIORITY_LABELS[change.to] : null;
+    if (!to) return null;
+    if (!from || from === to) return ['definiu ', label, ' como ', { bold: to }];
+    return ['alterou ', label, ' de ', { bold: from }, ' para ', { bold: to }];
+  }
+
+  if (field === 'dueDate' || field === 'startDate') {
+    const from = fmtDate(typeof change.from === 'string' ? change.from : null);
+    const to = fmtDate(typeof change.to === 'string' ? change.to : null);
+    if (!from && to) return ['definiu ', label, ' para ', { bold: to }];
+    if (from && !to) return ['removeu ', label, ' (era ', { bold: from }, ')'];
+    if (from && to) return ['alterou ', label, ' de ', { bold: from }, ' para ', { bold: to }];
+    return null;
+  }
+
+  if (field === 'estimateMinutes') {
+    const from = fmtMinutes(typeof change.from === 'number' ? change.from : null);
+    const to = fmtMinutes(typeof change.to === 'number' ? change.to : null);
+    if (!from && to) return ['definiu ', label, ' como ', { bold: to }];
+    if (from && !to) return ['removeu ', label];
+    if (from && to) return ['alterou ', label, ' de ', { bold: from }, ' para ', { bold: to }];
+    return null;
+  }
+
+  return null;
+}
+
+function joinParts(blocks: ActivityPart[][]): ActivityPart[] {
+  if (blocks.length === 1) return blocks[0]!;
+  if (blocks.length === 2) return [...blocks[0]!, '; ', ...blocks[1]!];
+  // 3+: separa com '; ' entre todos pra leitura clara
+  const out: ActivityPart[] = [];
+  blocks.forEach((b, i) => {
+    if (i > 0) out.push('; ');
+    out.push(...b);
+  });
+  return out;
+}
+
 const SIMPLE_LABELS: Record<string, string> = {
   CARD_CREATED: 'criou o card',
   CARD_ARCHIVED: 'arquivou o card',
@@ -69,7 +154,34 @@ export function activityParts(a: ActivityNode): ActivityPart[] {
     case 'CARD_UPDATED': {
       const fields = Array.isArray(p.fields) ? (p.fields as string[]) : [];
       if (fields.length === 0) return ['atualizou o card'];
-      return ['alterou ', ...listFields(fields)];
+
+      // Quando há `changes` no payload (activity nova), renderiza com from/to
+      // específicos pra cada field. Senão cai no fallback genérico (activities
+      // antigas + descrição que não tem from/to).
+      const changes =
+        p.changes && typeof p.changes === 'object'
+          ? (p.changes as Record<string, { from: unknown; to: unknown }>)
+          : {};
+
+      const detailedBlocks: ActivityPart[][] = [];
+      const genericFields: string[] = [];
+      for (const field of fields) {
+        const change = changes[field];
+        const part = change ? changePart(field, change) : null;
+        if (part) {
+          detailedBlocks.push(part);
+        } else {
+          genericFields.push(field);
+        }
+      }
+
+      // Append "alterou X" pros fields sem from/to (ex: descrição)
+      if (genericFields.length > 0) {
+        detailedBlocks.push(['alterou ', ...listFields(genericFields)]);
+      }
+
+      if (detailedBlocks.length === 0) return ['alterou ', ...listFields(fields)];
+      return joinParts(detailedBlocks);
     }
 
     case 'CARD_MOVED': {
