@@ -59,17 +59,22 @@ export function TemplateVarsBar({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-fg-subtle text-[10px] font-medium">{label}:</span>
-      {vars.map((v) => (
-        <button
-          key={v.token}
-          type="button"
-          onClick={() => insert(v.token)}
-          className="border-border/70 bg-bg-subtle/50 text-fg-muted hover:border-primary/50 hover:bg-primary-subtle/40 hover:text-primary inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors"
-          title={`Inserir ${v.token} no cursor`}
-        >
-          {v.label ?? v.token}
-        </button>
-      ))}
+      {vars.map((v) => {
+        const hasLabel = Boolean(v.label);
+        return (
+          <button
+            key={v.token}
+            type="button"
+            onClick={() => insert(v.token)}
+            className={`border-border/70 bg-bg-subtle/50 text-fg-muted hover:border-primary/50 hover:bg-primary-subtle/40 hover:text-primary inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
+              hasLabel ? '' : 'font-mono'
+            }`}
+            title={`Inserir ${v.token} no cursor`}
+          >
+            {v.label ?? v.token}
+          </button>
+        );
+      })}
     </div>
   );
 }

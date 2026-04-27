@@ -19,6 +19,27 @@ import { orgMembersQuery } from '@/lib/queries/cards';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
 import { TemplateVarsBar } from './template-vars-bar';
+import { VarTextarea, type TemplateVar } from './var-textarea';
+
+const COMMENT_VARS: TemplateVar[] = [
+  { token: '{{card.title}}', label: 'Título do card' },
+  { token: '{{card.list.name}}', label: 'Coluna' },
+  { token: '{{card.board.name}}', label: 'Fluxo' },
+  { token: '{{actor.name}}', label: 'Quem disparou' },
+];
+
+const CHILD_TITLE_VARS: TemplateVar[] = [
+  { token: '{{card.title}}', label: 'Título do card pai' },
+  { token: '{{card.list.name}}', label: 'Coluna' },
+];
+
+const WHATSAPP_VARS: TemplateVar[] = [
+  { token: '{{card.title}}', label: 'Título do card' },
+  { token: '{{card.list.name}}', label: 'Coluna' },
+  { token: '{{card.board.name}}', label: 'Fluxo' },
+  { token: '{{card.lead.name}}', label: 'Líder do card' },
+  { token: '{{actor.name}}', label: 'Quem disparou' },
+];
 
 /**
  * Form de criação de automação. Cada actionType tem seu próprio
@@ -829,24 +850,19 @@ function CommentTemplateConfig({
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="flex flex-col gap-2">
-      <textarea
+      <VarTextarea
         ref={ref}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
+        vars={COMMENT_VARS}
         rows={4}
-        placeholder="Ex: Card chegou em {{card.list.name}} — atribuído por {{actor.name}}"
-        className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+        placeholder="Digite / para inserir uma variável. Ex: Card chegou em /coluna"
       />
       <TemplateVarsBar
         inputRef={ref}
         value={value}
         onChange={onChange}
-        vars={[
-          { token: '{{card.title}}' },
-          { token: '{{card.list.name}}' },
-          { token: '{{card.board.name}}' },
-          { token: '{{actor.name}}' },
-        ]}
+        vars={COMMENT_VARS.map((v) => ({ token: v.token, label: v.label }))}
       />
     </div>
   );
@@ -1017,19 +1033,20 @@ function CreateChildConfig({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <label className="text-fg-muted block text-[11px] font-medium">Título do card filho</label>
-        <input
+        <VarTextarea
           ref={titleRef}
-          type="text"
+          singleLine
           value={titleTemplate}
-          onChange={(e) => setTitleTemplate(e.target.value)}
+          onChange={setTitleTemplate}
+          vars={CHILD_TITLE_VARS}
           maxLength={500}
-          className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
+          placeholder="Digite / para inserir variáveis"
         />
         <TemplateVarsBar
           inputRef={titleRef}
           value={titleTemplate}
           onChange={setTitleTemplate}
-          vars={[{ token: '{{card.title}}' }, { token: '{{card.list.name}}' }]}
+          vars={CHILD_TITLE_VARS.map((v) => ({ token: v.token, label: v.label }))}
         />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -1165,25 +1182,19 @@ function SendWhatsAppConfig({
 
       <div className="flex flex-col gap-2">
         <label className="text-fg-muted text-[11px] font-medium">Mensagem</label>
-        <textarea
+        <VarTextarea
           ref={templateRef}
           value={template}
-          onChange={(e) => setTemplate(e.target.value)}
+          onChange={setTemplate}
+          vars={WHATSAPP_VARS}
           rows={4}
-          placeholder='Ex: Card "{{card.title}}" entrou em {{card.list.name}}'
-          className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          placeholder='Digite / para inserir uma variável. Ex: O card "/título" entrou em /coluna'
         />
         <TemplateVarsBar
           inputRef={templateRef}
           value={template}
           onChange={setTemplate}
-          vars={[
-            { token: '{{card.title}}' },
-            { token: '{{card.list.name}}' },
-            { token: '{{card.board.name}}' },
-            { token: '{{card.lead.name}}' },
-            { token: '{{actor.name}}' },
-          ]}
+          vars={WHATSAPP_VARS.map((v) => ({ token: v.token, label: v.label }))}
         />
       </div>
     </div>
