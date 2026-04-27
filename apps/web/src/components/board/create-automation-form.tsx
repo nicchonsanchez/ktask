@@ -39,6 +39,16 @@ const WHATSAPP_VARS: TemplateVar[] = [
   { token: '{{card.board.name}}', label: 'Fluxo' },
   { token: '{{card.lead.name}}', label: 'Líder do card' },
   { token: '{{actor.name}}', label: 'Quem disparou' },
+  {
+    token: '{{recipient.name}}',
+    label: 'Nome do contato',
+    hint: 'Quem vai receber a mensagem',
+  },
+  {
+    token: '{{recipient.firstName}}',
+    label: 'Primeiro nome do contato',
+    hint: 'Útil pra saudação informal',
+  },
 ];
 
 /**

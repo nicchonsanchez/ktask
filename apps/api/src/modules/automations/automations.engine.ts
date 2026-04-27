@@ -888,16 +888,20 @@ export class AutomationsEngine {
     }
 
     let phone: string | null = null;
+    let recipientName: string | null = null;
     if (config.phone && /^\d{10,15}$/.test(config.phone)) {
       phone = config.phone;
+      // Numero avulso nao tem nome cadastrado — vars de recipient ficam vazias
     } else if (config.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: config.userId },
-        select: { phone: true },
+        select: { phone: true, name: true },
       });
       phone = user?.phone ?? null;
+      recipientName = user?.name ?? null;
     } else if (config.useCardLead) {
       phone = card.lead?.phone ?? null;
+      recipientName = card.lead?.name ?? null;
     }
 
     if (!phone) {
@@ -909,12 +913,16 @@ export class AutomationsEngine {
       select: { name: true },
     });
 
+    const firstName = recipientName ? (recipientName.split(' ')[0] ?? '') : '';
+
     const text = renderTemplate(template, {
       'card.title': card.title,
       'card.list.name': card.list.name,
       'card.board.name': card.board.name,
       'card.lead.name': card.lead?.name ?? '',
       'actor.name': actor?.name ?? 'Automação',
+      'recipient.name': recipientName ?? '',
+      'recipient.firstName': firstName,
     });
 
     const ok = await this.whatsapp.sendText(phone, text);
