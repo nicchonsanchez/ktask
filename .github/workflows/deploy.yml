@@ -160,6 +160,26 @@ jobs:
             "IMAGE_TAG=$IMAGE_TAG GHCR_TOKEN=$GHCR_TOKEN GHCR_USER=$GHCR_USER bash -s" <<'REMOTE'
           set -euo pipefail
           cd /opt/ktask
+
+          # Trap pra dumpar logs em qualquer falha (compose up, pull, healthcheck timeout).
+          # Sem isso, falhas na fase do `compose up` (ex: dependency unhealthy) eram
+          # opacas — tinhamos de SSH manual pra ver o que crashou.
+          dump_logs_on_error() {
+            local code=$?
+            if [ $code -ne 0 ]; then
+              echo "--- DEPLOY FALHOU (exit=$code), logs dos containers: ---"
+              echo "===== ktask-api logs ====="
+              docker logs ktask-api --tail 100 2>&1 || true
+              echo "===== ktask-web logs ====="
+              docker logs ktask-web --tail 100 2>&1 || true
+              echo "===== docker ps ====="
+              docker ps -a --filter "name=ktask-" || true
+              docker logout ghcr.io 2>/dev/null || true
+            fi
+            return $code
+          }
+          trap dump_logs_on_error EXIT
+
           echo "--- docker login ghcr.io (token efemero) ---"
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
@@ -179,15 +199,13 @@ jobs:
             if [ "$api_status" = "healthy" ] && [ "$web_status" = "healthy" ]; then
               echo "--- deploy ok ---"
               docker logout ghcr.io || true
+              trap - EXIT
               exit 0
             fi
             sleep 5
           done
 
-          echo "--- timeout, logs recentes ---"
-          docker logs ktask-api --tail 80 || true
-          docker logs ktask-web --tail 80 || true
-          docker logout ghcr.io || true
+          echo "--- timeout aguardando healthcheck ---"
           exit 1
           REMOTE
 
