@@ -20,7 +20,9 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#0a0a0b',
     theme_color: '#6D28D9',
     lang: 'pt-BR',
-    orientation: 'any',
+    // Sem `orientation`: o PWA respeita o lock de rotacao do sistema do
+    // device. `'any'` aqui forcava o app a girar mesmo quando o user
+    // travava no celular — a omissao deixa o navegador decidir.
     categories: ['productivity', 'business'],
     icons: [
       {
