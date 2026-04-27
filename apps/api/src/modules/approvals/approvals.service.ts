@@ -270,17 +270,21 @@ export class ApprovalsService {
         });
         reviewerName = u?.name ?? '';
       }
+      const reviewerFirstName = reviewerName.split(/\s+/)[0] ?? '';
 
-      // Renderiza variáveis na mensagem do user (se preencheu)
-      const renderedMessage = body.message
-        ? renderTemplate(body.message, {
-            'card.title': card.title,
-            'card.list.name': cardContext?.list.name ?? '',
-            'card.board.name': cardContext?.board.name ?? '',
-            'requester.name': requesterName,
-            'reviewer.name': reviewerName,
-          })
-        : undefined;
+      // Vars compartilhadas pra render Mustache (mensagem custom + default)
+      const vars: Record<string, string> = {
+        'card.title': card.title,
+        'card.list.name': cardContext?.list.name ?? '',
+        'card.board.name': cardContext?.board.name ?? '',
+        'requester.name': requesterName,
+        'reviewer.name': reviewerName,
+        'reviewer.firstName': reviewerFirstName,
+        link,
+      };
+
+      // Mensagem custom do user (renderizada) ou default
+      const renderedMessage = body.message ? renderTemplate(body.message, vars) : undefined;
 
       // Reviewer interno: notification in-app + push
       if (reviewer.userId) {
@@ -307,10 +311,8 @@ export class ApprovalsService {
         const phone = await this.resolvePhoneForNotification(reviewer);
         if (phone) {
           const text = this.composeWhatsAppMessage({
-            requesterName,
-            cardTitle: card.title,
-            message: renderedMessage,
-            link,
+            customMessage: renderedMessage,
+            vars,
           });
           const ok = await this.whatsapp.sendText(phone, text);
           if (ok) {
@@ -342,16 +344,45 @@ export class ApprovalsService {
     return null;
   }
 
+  /**
+   * Compoe mensagem WhatsApp pro reviewer.
+   *
+   * Sem `customMessage`: usa template padrao com saudacao personalizada
+   * pelo primeiro nome do reviewer (fallback "Olá!" se phone-only sem
+   * nome). Inclui quem pediu + titulo do card em destaque + link.
+   *
+   * Com `customMessage`: a mensagem do user ja foi renderizada com Mustache
+   * pelo caller. Aqui so embrulhamos com saudacao + link no fim, evitando
+   * que o user precise lembrar de incluir o link manualmente.
+   */
   private composeWhatsAppMessage(p: {
-    requesterName: string;
-    cardTitle: string;
-    message?: string;
-    link: string;
+    customMessage?: string;
+    vars: Record<string, string>;
   }): string {
-    const lines = [`Olá! ${p.requesterName} pediu sua aprovação na tarefa:`, `*${p.cardTitle}*`];
-    if (p.message) lines.push('', p.message);
-    lines.push('', 'Acesse o link abaixo pra aprovar ou reprovar:', p.link);
-    return lines.join('\n');
+    const firstName = p.vars['reviewer.firstName'] ?? '';
+    const requesterName = p.vars['requester.name'] ?? 'Alguém';
+    const cardTitle = p.vars['card.title'] ?? '';
+    const link = p.vars['link'] ?? '';
+
+    const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!';
+
+    if (p.customMessage) {
+      // User escreveu mensagem custom — usamos como corpo principal,
+      // adicionando saudacao no topo e link no fim pra garantir o essencial
+      return [greeting, '', p.customMessage, '', link].join('\n');
+    }
+
+    // Template padrao
+    return [
+      greeting,
+      '',
+      `${requesterName} pediu sua aprovação:`,
+      '',
+      `*${cardTitle}*`,
+      '',
+      'Acesse o link para aprovar ou reprovar:',
+      link,
+    ].join('\n');
   }
 
   // ============================================================

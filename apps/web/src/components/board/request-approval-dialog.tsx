@@ -187,12 +187,16 @@ export function RequestApprovalDialog({
                 { token: '{{card.list.name}}', label: 'Coluna' },
                 { token: '{{card.board.name}}', label: 'Fluxo' },
                 { token: '{{requester.name}}', label: 'Quem pediu' },
-                { token: '{{reviewer.name}}', label: 'Revisor' },
+                { token: '{{reviewer.firstName}}', label: 'Primeiro nome do revisor' },
+                { token: '{{reviewer.name}}', label: 'Nome completo do revisor' },
+                { token: '{{link}}', label: 'Link de aprovação' },
               ]}
             />
             <p className="text-fg-subtle text-[10px] leading-relaxed">
-              Variáveis são substituídas no momento do envio. Cada revisor recebe a mensagem com seu
-              próprio nome em <code className="text-fg-muted">{'{{reviewer.name}}'}</code>.
+              Se deixar vazio, usa template padrão com saudação personalizada. Cada revisor recebe a
+              mensagem com seu próprio nome em{' '}
+              <code className="text-fg-muted">{'{{reviewer.firstName}}'}</code>. O link de aprovação
+              sempre é adicionado no fim — não precisa colocar manualmente.
             </p>
           </div>
 
