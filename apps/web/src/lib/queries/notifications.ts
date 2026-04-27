@@ -9,6 +9,8 @@ export interface NotificationItem {
   entityId: string | null;
   isRead: boolean;
   createdAt: string;
+  // URL pre-resolvida pelo backend (ex: /b/{boardId}?card={cardId}&n={notifId})
+  url: string;
 }
 
 export const notificationsQueries = {

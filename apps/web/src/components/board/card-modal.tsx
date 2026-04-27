@@ -86,7 +86,7 @@ export function CardModal({ boardId }: { boardId: string }) {
   );
 }
 
-function CardModalContent({
+export function CardModalContent({
   card,
   boardId,
   onClose,
@@ -551,7 +551,7 @@ function Block({
  * Skeleton com layout fiel ao modal real (header, sidebar de abas, 2 colunas
  * de conteúdo). Reduz percepção de espera vs spinner genérico.
  */
-function CardModalSkeleton() {
+export function CardModalSkeleton() {
   return (
     <div className="flex h-full animate-pulse flex-col">
       {/* Header */}

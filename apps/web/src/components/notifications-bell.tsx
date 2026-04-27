@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, MessageSquare, AtSign, Calendar, AlertTriangle } from 'lucide-react';
 
@@ -30,6 +31,7 @@ const ICONS: Record<
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   useRealtimeNotifications();
 
@@ -102,6 +104,8 @@ export function NotificationsBell() {
                       type="button"
                       onClick={() => {
                         if (!n.isRead) readMut.mutate(n.id);
+                        if (n.url) router.push(n.url);
+                        setOpen(false);
                       }}
                       className="hover:bg-bg-muted flex w-full gap-3 px-3 py-2.5 text-left transition-colors"
                     >

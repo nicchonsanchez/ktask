@@ -8,6 +8,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { StorageService } from '@/modules/storage/storage.service';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 interface CreateCardInput {
   listId: string;
@@ -42,6 +43,7 @@ export class CardsService {
     private readonly access: BoardAccessService,
     private readonly events: EventEmitter2,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(userId: string, tenant: TenantContext, input: CreateCardInput) {
@@ -260,6 +262,23 @@ export class CardsService {
           } as unknown as Prisma.InputJsonValue,
         },
       });
+
+      // Notifica o novo lider (se nao for ele mesmo se atribuindo)
+      if (input.leadId && input.leadId !== userId) {
+        const actor = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true },
+        });
+        await this.notifications.create({
+          userId: input.leadId,
+          organizationId: tenant.organizationId,
+          type: 'ASSIGNED',
+          title: `${actor?.name ?? 'Alguém'} definiu você como líder do card`,
+          body: card.title,
+          entityType: 'card',
+          entityId: cardId,
+        });
+      }
     } else {
       // Detecta campos que mudaram. Em vez de "atualizou o card" genérico,
       // o payload lista quais campos foram tocados pra o front renderizar
@@ -1213,6 +1232,23 @@ export class CardsService {
         payload: { cardId, memberId: memberUserId },
       },
     });
+
+    // Notifica o user adicionado a equipe (se nao for ele se auto-adicionando)
+    if (memberUserId !== userId) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      await this.notifications.create({
+        userId: memberUserId,
+        organizationId: tenant.organizationId,
+        type: 'ASSIGNED',
+        title: `${actor?.name ?? 'Alguém'} adicionou você ao card`,
+        body: card.title,
+        entityType: 'card',
+        entityId: cardId,
+      });
+    }
 
     return { ok: true };
   }

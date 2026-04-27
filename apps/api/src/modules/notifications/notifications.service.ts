@@ -25,15 +25,26 @@ export class NotificationsService {
   ) {}
 
   /**
-   * Resolve uma URL razoável pra clique na push notification, baseada no
-   * entityType/Id quando não há URL explícita. Card → /b/{boardId}?card=X
-   * é o ideal mas exige lookup; aqui usamos `/?n={notifId}` como fallback,
-   * pra um redirect handler client-side decidir o destino.
+   * Resolve URL pra clique na notif (sino e push). Card → /b/{boardId}?card=X
+   * faz lookup do boardId pra que o front (que ja tem CardModal montado em
+   * /b/[boardId]) abra o modal direto. Se o card foi deletado entre criar a
+   * notif e clicar, fallback pra home com /n={id}.
    */
-  private deriveUrl(params: CreateNotificationParams, notificationId: string): string {
+  private async deriveUrl(
+    params: CreateNotificationParams,
+    notificationId: string,
+  ): Promise<string> {
     if (params.url) return params.url;
-    if (params.entityType === 'Card' && params.entityId) {
-      return `/?card=${params.entityId}&n=${notificationId}`;
+    const isCard =
+      (params.entityType === 'card' || params.entityType === 'Card') && params.entityId;
+    if (isCard) {
+      const card = await this.prisma.card.findUnique({
+        where: { id: params.entityId },
+        select: { boardId: true },
+      });
+      if (card) {
+        return `/b/${card.boardId}?card=${params.entityId}&n=${notificationId}`;
+      }
     }
     return `/?n=${notificationId}`;
   }
@@ -41,13 +52,14 @@ export class NotificationsService {
   async create(params: CreateNotificationParams) {
     const { url: _omit, ...dbData } = params;
     const created = await this.prisma.notification.create({ data: dbData });
+    const url = await this.deriveUrl(params, created.id);
 
     // Dispara push em background — fire-and-forget, sem bloquear a resposta.
     this.push
       .sendToUser(params.userId, {
         title: params.title,
         body: params.body,
-        url: this.deriveUrl(params, created.id),
+        url,
         tag:
           params.entityType && params.entityId
             ? `${params.entityType}:${params.entityId}`
@@ -60,7 +72,7 @@ export class NotificationsService {
         );
       });
 
-    return created;
+    return { ...created, url };
   }
 
   async createMany(items: CreateNotificationParams[]) {
@@ -71,14 +83,20 @@ export class NotificationsService {
       skipDuplicates: true,
     });
 
-    // Push em batch (1 por user — mas createMany não retorna IDs, então vamos
-    // mandar genérico sem notificationId). Fire-and-forget também.
-    items.forEach((it) => {
+    // Resolve url pra cada item em paralelo (faz lookups quando necessario)
+    const urls = await Promise.all(
+      items.map((it) => this.deriveUrl(it, '').then((u) => (it.url ? it.url : u))),
+    );
+
+    // Push em batch (fire-and-forget). createMany não retorna IDs, entao a URL
+    // de fallback nao consegue passar `&n=...` mas o redirect ainda funciona pelo
+    // boardId/cardId.
+    items.forEach((it, i) => {
       this.push
         .sendToUser(it.userId, {
           title: it.title,
           body: it.body,
-          url: it.url ?? '/',
+          url: urls[i] ?? '/',
           tag: it.entityType && it.entityId ? `${it.entityType}:${it.entityId}` : undefined,
         })
         .catch(() => undefined);
@@ -87,14 +105,38 @@ export class NotificationsService {
     return result;
   }
 
-  list(userId: string, opts: { onlyUnread?: boolean; take?: number } = {}) {
-    return this.prisma.notification.findMany({
+  async list(userId: string, opts: { onlyUnread?: boolean; take?: number } = {}) {
+    const items = await this.prisma.notification.findMany({
       where: {
         userId,
         ...(opts.onlyUnread ? { isRead: false } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: opts.take ?? 50,
+    });
+
+    // Resolve cardId → boardId em batch pra evitar N+1
+    const cardIds = items
+      .filter((n) => (n.entityType === 'card' || n.entityType === 'Card') && n.entityId)
+      .map((n) => n.entityId as string);
+    const cardMap = cardIds.length
+      ? new Map(
+          (
+            await this.prisma.card.findMany({
+              where: { id: { in: cardIds } },
+              select: { id: true, boardId: true },
+            })
+          ).map((c) => [c.id, c.boardId]),
+        )
+      : new Map<string, string>();
+
+    return items.map((n) => {
+      const boardId =
+        (n.entityType === 'card' || n.entityType === 'Card') && n.entityId
+          ? cardMap.get(n.entityId)
+          : undefined;
+      const url = boardId ? `/b/${boardId}?card=${n.entityId}&n=${n.id}` : `/?n=${n.id}`;
+      return { ...n, url };
     });
   }
 
