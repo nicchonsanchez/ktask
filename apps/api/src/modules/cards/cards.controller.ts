@@ -51,6 +51,14 @@ export class CardsController {
     return this.cards.create(user.userId, org, body);
   }
 
+  @Get('by-code/:code')
+  @ApiOperation({
+    summary: 'Resolve shortCode (#412) -> { id, boardId } pra redirect',
+  })
+  byCode(@CurrentOrg() org: TenantContext, @Param('code') code: string) {
+    return this.cards.findByShortCode(org, code.replace(/^#/, ''));
+  }
+
   @Get(':cardId')
   @ApiOperation({ summary: 'Detalhe do card (com comentários, labels, etc)' })
   async getOne(

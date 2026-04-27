@@ -153,8 +153,15 @@ function CardInner({ card }: { card: CardListItem }) {
         </div>
       )}
 
-      {/* Título — destaque máximo */}
-      <p className="text-fg line-clamp-3 text-sm font-medium leading-snug">{card.title}</p>
+      {/* Título — destaque máximo. shortCode aparece como prefixo discreto. */}
+      <p className="text-fg line-clamp-3 text-sm font-medium leading-snug">
+        {card.shortCode && (
+          <span className="text-fg-subtle mr-1.5 font-mono text-[11px] font-normal tracking-wider">
+            #{card.shortCode}
+          </span>
+        )}
+        {card.title}
+      </p>
 
       {/* Meta row (prazo + contadores) — discreta, só aparece se há algo */}
       {hasMetaRow && (

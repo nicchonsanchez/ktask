@@ -247,7 +247,12 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 - [ ] **Cards multi-fluxo** (`CardPresence` M:N) — placeholder visual da aba existe; ver [13-cards-multi-fluxo.md](13-cards-multi-fluxo.md)
 - [x] **Família de cards** (pai/filho com UI completa) — `card-family-tab.tsx` + endpoints de family/parent; ver [17-familia-cards.md](17-familia-cards.md)
 - [x] **Time tracking** (cronômetro de cards + entradas manuais + histórico) — módulo `time-tracking` + `timer-widget` + popover ver [18-time-tracking.md](18-time-tracking.md)
-- [ ] **Aprovações por cliente** (role REVIEWER + branching) — ver [14-aprovacoes-cliente.md](14-aprovacoes-cliente.md)
+- [x] **Aprovações por cliente** (role REVIEWER + branching) — entregue 2026-04-26 (commits 383f7ac + 2668dcd + c900dd9); ver [14-aprovacoes-cliente.md](14-aprovacoes-cliente.md)
+- [ ] **Contatos externos / CRM lite** (Contact + CardContact + agenda + bloco no card) — ver [19-contatos-externos.md](19-contatos-externos.md)
+- [ ] **Identificador curto do card** (`Card.shortCode` por Org) — ver [24-shortcode-card.md](24-shortcode-card.md)
+- [ ] **Importer Ummense CSV** — admin upload + parser + preview + idempotente; ver [16-importer-ummense.md](16-importer-ummense.md)
+- [-] Privacidade por card (4 níveis estilo Ummense) — parkado, ver [25-privacidade-card.md](25-privacidade-card.md)
+- [-] Última interação social do card — parkado, ver [26-ultima-interacao.md](26-ultima-interacao.md)
 - [ ] SLA por lista + alertas
 - [~] Templates de checklist (entregue commit ae2af26); templates de quadro/card pendentes
 - [ ] View Lista (tabela)
@@ -263,7 +268,6 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 - [ ] Relatórios de time tracking
 - [ ] Dry-run de automação
 - [ ] Trigger `SCHEDULED` (cron)
-- [ ] Importação CSV
 
 ---
 

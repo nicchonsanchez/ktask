@@ -24,6 +24,8 @@ export interface BoardListItem {
 
 export interface CardListItem {
   id: string;
+  /** Identificador curto ("#412"). Null em cards antigos antes do backfill. */
+  shortCode: string | null;
   title: string;
   position: number;
   priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';

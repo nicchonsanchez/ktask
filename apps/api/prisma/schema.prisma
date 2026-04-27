@@ -231,6 +231,11 @@ model Organization {
   timezone  String    @default("America/Sao_Paulo")
   locale    String    @default("pt-BR")
   plan      OrgPlan   @default(INTERNAL)
+  /// Counter sequencial pra gerar Card.shortCode na criacao. Incrementa
+  /// atomicamente via UPDATE Postgres dentro da mesma transacao da
+  /// criacao do card (evita race). Importadores (ex: CSV Ummense) podem
+  /// gravar shortCodes literais (ex: "20250409000751") sem mexer aqui.
+  cardSequence Int    @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -379,6 +384,11 @@ model List {
 model Card {
   id                String    @id @default(cuid())
   organizationId    String // denormalizado: acelera filtros e futura RLS
+  /// Identificador curto humano-legivel ("#412"), unico POR Org.
+  /// Gerado sequencial via Organization.cardSequence pra cards novos;
+  /// importadores podem gravar valores arbitrarios (ex: "20250409000751"
+  /// preservando ID do Ummense). Indexado pra resolver lookups #N -> id.
+  shortCode         String?
   boardId           String
   listId            String
   title             String
@@ -419,6 +429,7 @@ model Card {
   presences      CardPresence[]
   approvals      CardApproval[]
 
+  @@unique([organizationId, shortCode])
   @@index([organizationId])
   @@index([boardId, isArchived])
   @@index([boardId, completedAt])

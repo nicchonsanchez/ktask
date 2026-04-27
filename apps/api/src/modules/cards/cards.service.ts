@@ -64,9 +64,20 @@ export class CardsService {
     });
 
     const card = await this.prisma.$transaction(async (tx) => {
+      // Increment atomico do counter da Org pra gerar shortCode unico.
+      // UPDATE...RETURNING e atomico em Postgres, sem race entre criacoes
+      // concorrentes na mesma Org.
+      const orgUpdated = await tx.organization.update({
+        where: { id: tenant.organizationId },
+        data: { cardSequence: { increment: 1 } },
+        select: { cardSequence: true },
+      });
+      const shortCode = String(orgUpdated.cardSequence);
+
       const created = await tx.card.create({
         data: {
           organizationId: tenant.organizationId,
+          shortCode,
           boardId: list.boardId,
           listId: input.listId,
           title: input.title,
@@ -122,6 +133,25 @@ export class CardsService {
       title: card.title,
     });
 
+    return card;
+  }
+
+  /**
+   * Resolve um shortCode ("#412" ou "412") em { id, boardId } pra redirect.
+   * Retorna 404 se nao existir na Org. Nao checa BoardAccess aqui — o
+   * endpoint detalhe (`getOne` chamado depois com o id) ja faz isso.
+   */
+  async findByShortCode(
+    tenant: TenantContext,
+    code: string,
+  ): Promise<{ id: string; boardId: string }> {
+    const card = await this.prisma.card.findUnique({
+      where: {
+        organizationId_shortCode: { organizationId: tenant.organizationId, shortCode: code },
+      },
+      select: { id: true, boardId: true },
+    });
+    if (!card) throw new NotFoundException(`Card #${code} não encontrado.`);
     return card;
   }
 

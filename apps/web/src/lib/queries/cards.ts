@@ -3,6 +3,8 @@ import type { CardListItem } from './boards';
 
 export interface CardDetail {
   id: string;
+  /** Identificador curto humano-legivel ("#412"), unico por Org. Pode ser null pra cards antigos antes do backfill. */
+  shortCode: string | null;
   boardId: string;
   listId: string;
   title: string;

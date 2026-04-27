@@ -213,7 +213,9 @@ export function CardModalContent({
     },
   });
 
-  const cardCode = card.id.slice(-8).toUpperCase();
+  // Prefere shortCode (#412); fallback nos ultimos 8 chars do cuid pra
+  // cards antigos que ainda nao foram backfilled.
+  const cardCode = card.shortCode ? `#${card.shortCode}` : card.id.slice(-8).toUpperCase();
   const cover = card.coverAttachmentId
     ? card.attachments.find((a) => a.id === card.coverAttachmentId && a.publicUrl)
     : undefined;

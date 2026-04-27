@@ -700,9 +700,17 @@ export class AutomationsEngine {
       select: { position: true },
     });
 
+    // Increment atomico do counter da Org pra gerar shortCode do filho
+    const orgUpdated = await this.prisma.organization.update({
+      where: { id: targetList.organizationId },
+      data: { cardSequence: { increment: 1 } },
+      select: { cardSequence: true },
+    });
+
     const child = await this.prisma.card.create({
       data: {
         organizationId: targetList.organizationId,
+        shortCode: String(orgUpdated.cardSequence),
         boardId: targetList.boardId,
         listId: targetListId,
         title,
