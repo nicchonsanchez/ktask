@@ -33,6 +33,7 @@ import { PushModule } from './modules/push/push.module';
 import { ChecklistTemplatesModule } from './modules/checklist-templates/checklist-templates.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     ChecklistTemplatesModule,
     WhatsAppModule,
     ApprovalsModule,
+    ContactsModule,
     HealthModule,
   ],
   providers: [

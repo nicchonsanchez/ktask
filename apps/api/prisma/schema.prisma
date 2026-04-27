@@ -123,6 +123,11 @@ enum ActivityType {
   MEMBER_JOINED_BOARD
   MEMBER_LEFT_BOARD
   BOARD_VIEWED_IMPLICIT
+  CARD_CONTACT_LINKED
+  CARD_CONTACT_UNLINKED
+  CONTACT_CREATED
+  CONTACT_UPDATED
+  CONTACT_DELETED
 }
 
 enum AutomationTrigger {
@@ -251,6 +256,7 @@ model Organization {
   automations        Automation[]
   checklistTemplates ChecklistTemplate[]
   cardApprovals      CardApproval[]
+  contacts           Contact[]
 
   @@index([slug])
 }
@@ -428,6 +434,7 @@ model Card {
   automationRuns AutomationRun[]
   presences      CardPresence[]
   approvals      CardApproval[]
+  contacts       CardContact[]
 
   @@unique([organizationId, shortCode])
   @@index([organizationId])
@@ -567,6 +574,62 @@ model CardApprovalReviewer {
   @@index([approvalId])
   @@index([userId])
   @@index([accessToken])
+}
+
+// ==================== Contacts (CRM lite) ====================
+
+enum ContactType {
+  PERSON
+  COMPANY
+}
+
+/// Contato externo da Org (cliente, fornecedor, parceiro). Vinculado N:N
+/// a cards via CardContact. Pessoas podem ter parent=Empresa pra
+/// hierarquia B2B; empresas tem parentId=null sempre.
+///
+/// Cross-reference com User: se email ou phone bate com algum User da Org,
+/// o frontend exibe link "ver como membro". Match feito on-demand, nao
+/// guardamos FK pra deixar entidades independentes.
+model Contact {
+  id             String      @id @default(cuid())
+  organizationId String
+  type           ContactType
+  name           String
+  email          String?
+  phone          String? // formato livre; armazena como digitado
+  document       String? // CPF/CNPJ
+  note           String? // observacoes internas
+  /// Hierarquia: pessoa (PERSON) pode estar vinculada a uma empresa (COMPANY).
+  /// Empresas sempre tem parentId=null (validado no service).
+  parentId       String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  /// Soft-delete: cards historicos ainda referenciam mesmo apos remover
+  /// da agenda principal. Filtrar `deletedAt: null` no listing.
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       Contact?      @relation("ContactPerson", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Contact[]     @relation("ContactPerson")
+  cards        CardContact[]
+
+  @@index([organizationId, type])
+  @@index([organizationId, name])
+  @@index([organizationId, email])
+  @@index([organizationId, phone])
+  @@index([parentId])
+}
+
+model CardContact {
+  cardId    String
+  contactId String
+  createdAt DateTime @default(now())
+
+  card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, contactId])
+  @@index([contactId])
 }
 
 // ==================== Labels ====================

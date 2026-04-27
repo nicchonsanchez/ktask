@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
   ChevronsUp,
+  Contact as ContactIcon,
   Copy,
   ExternalLink,
   Flag,
@@ -46,6 +47,7 @@ import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
 import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
+import { ContactsBlock } from './contacts-block';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER, PRIORITY_SHAPE } from './priority-config';
 
@@ -440,6 +442,11 @@ export function CardModalContent({
                     ))}
                     <LabelPicker card={card} boardId={boardId} />
                   </div>
+                </Block>
+
+                {/* Contatos vinculados */}
+                <Block icon={<ContactIcon size={14} />} label="Contatos">
+                  <ContactsBlock cardId={card.id} />
                 </Block>
 
                 {/* Aprovações por cliente */}

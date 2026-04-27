@@ -18,6 +18,7 @@ const NAV = [
   { href: '/quadros', label: 'Quadros' },
   { href: '/aprovacoes', label: 'Aprovações' },
   { href: '/indicadores', label: 'Indicadores' },
+  { href: '/contatos', label: 'Contatos' },
   { href: '/empresa', label: 'Empresa' },
   { href: '/configuracoes/membros', label: 'Membros' },
 ];
