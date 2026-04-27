@@ -249,8 +249,38 @@ export class ApprovalsService {
     });
     const requesterName = requester?.name ?? 'Alguém';
 
+    // Carrega contexto extra (board/list) pra renderizar Mustache na mensagem
+    const cardContext = await this.prisma.card.findUnique({
+      where: { id: card.id },
+      select: {
+        list: { select: { name: true } },
+        board: { select: { name: true } },
+      },
+    });
+
     for (const reviewer of approval.reviewers) {
       const link = `${env.APP_URL}/aprovar/${reviewer.accessToken}`;
+
+      // Resolve nome do reviewer (user.name ou externalName) pra Mustache
+      let reviewerName = reviewer.externalName ?? '';
+      if (reviewer.userId && !reviewerName) {
+        const u = await this.prisma.user.findUnique({
+          where: { id: reviewer.userId },
+          select: { name: true },
+        });
+        reviewerName = u?.name ?? '';
+      }
+
+      // Renderiza variáveis na mensagem do user (se preencheu)
+      const renderedMessage = body.message
+        ? renderTemplate(body.message, {
+            'card.title': card.title,
+            'card.list.name': cardContext?.list.name ?? '',
+            'card.board.name': cardContext?.board.name ?? '',
+            'requester.name': requesterName,
+            'reviewer.name': reviewerName,
+          })
+        : undefined;
 
       // Reviewer interno: notification in-app + push
       if (reviewer.userId) {
@@ -279,7 +309,7 @@ export class ApprovalsService {
           const text = this.composeWhatsAppMessage({
             requesterName,
             cardTitle: card.title,
-            message: body.message,
+            message: renderedMessage,
             link,
           });
           const ok = await this.whatsapp.sendText(phone, text);
@@ -764,4 +794,12 @@ export class ApprovalsService {
       approval: reviewer.approval,
     };
   }
+}
+
+/**
+ * Mustache simples (sem dependencia externa). Replica `renderTemplate`
+ * da automations.engine pra evitar import cross-module.
+ */
+function renderTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => vars[key] ?? '');
 }

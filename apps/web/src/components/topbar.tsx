@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, Menu, User as UserIcon, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationsBell } from '@/components/notifications-bell';
 import { SearchTrigger } from '@/components/search-host';
@@ -27,16 +27,41 @@ export function Topbar() {
   const { user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   async function handleLogout() {
     await logout();
     router.replace('/entrar');
   }
 
+  // Fecha drawer ao mudar de rota
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Lock scroll do body enquanto drawer aberto
+  useEffect(() => {
+    if (!mobileOpen) return;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   return (
     <header className="border-border bg-bg sticky top-0 z-30 border-b">
       <div className="container flex h-[52px] items-center justify-between gap-2 sm:gap-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
+          {/* Hamburger (so mobile) */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="text-fg-muted hover:bg-bg-muted hover:text-fg -ml-1 inline-flex size-9 items-center justify-center rounded-md sm:hidden"
+            aria-label="Abrir menu"
+          >
+            <Menu size={20} />
+          </button>
+
           <Link
             href="/"
             className="group flex shrink-0 items-center transition-opacity hover:opacity-85"
@@ -95,29 +120,75 @@ export function Topbar() {
           {user && <UserMenu onLogout={handleLogout} />}
         </div>
       </div>
-      {/* Nav mobile (abaixo do header) */}
-      <nav className="border-border/60 -mb-px flex items-stretch border-t sm:hidden">
-        {NAV.map((item) => {
-          const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group relative flex flex-1 items-center justify-center py-2 text-xs transition-colors ${
-                active ? 'text-primary' : 'text-fg-muted hover:text-fg'
-              }`}
-            >
-              {item.label}
-              <span
-                aria-hidden
-                className={`absolute inset-x-3 bottom-0 h-[2px] rounded-t transition-colors ${
-                  active ? 'bg-primary' : 'bg-transparent'
-                }`}
-              />
-            </Link>
-          );
-        })}
-      </nav>
+
+      {/* Drawer mobile (substitui nav horizontal antiga que estourava) */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 sm:hidden" role="dialog" aria-modal="true">
+          {/* Backdrop */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fechar menu"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          />
+          {/* Painel deslizante da esquerda */}
+          <div className="bg-bg border-border absolute inset-y-0 left-0 flex w-[78%] max-w-[300px] flex-col border-r shadow-xl">
+            <div className="border-border/60 flex items-center justify-between border-b px-4 py-3">
+              <span className="text-fg text-sm font-semibold">Menu</span>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="text-fg-muted hover:bg-bg-muted hover:text-fg rounded p-1"
+                aria-label="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+              {NAV.map((item) => {
+                const active =
+                  item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center rounded-md px-3 py-2.5 text-sm transition-colors ${
+                      active
+                        ? 'bg-primary-subtle/40 text-primary font-medium'
+                        : 'text-fg hover:bg-bg-muted'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            {user && (
+              <div className="border-border/60 flex items-center gap-3 border-t p-3">
+                <UserAvatar
+                  name={user.name}
+                  userId={user.id}
+                  avatarUrl={user.avatarUrl}
+                  size="md"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-fg truncate text-sm font-medium">{user.name}</p>
+                  <p className="text-fg-muted truncate text-[11px]">{user.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-fg-muted hover:bg-bg-muted hover:text-danger rounded-md p-1.5"
+                  aria-label="Sair"
+                  title="Sair"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

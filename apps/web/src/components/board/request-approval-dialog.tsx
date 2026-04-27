@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, MessageCircle, Phone, Trash2, User, X } from 'lucide-react';
 
@@ -10,6 +10,7 @@ import { membersQueries } from '@/lib/queries/members';
 import { requestApproval, type ReviewerInputDTO } from '@/lib/queries/approvals';
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
+import { TemplateVarsBar } from './template-vars-bar';
 
 type Mode = 'user' | 'phone-existing' | 'phone-new';
 
@@ -35,6 +36,7 @@ export function RequestApprovalDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const messageRef = useRef<HTMLTextAreaElement>(null);
   const [reviewers, setReviewers] = useState<ReviewerDraft[]>([]);
   const [message, setMessage] = useState('');
   const [defaultOnApproveListId, setDefaultOnApproveListId] = useState<string>('');
@@ -167,14 +169,31 @@ export function RequestApprovalDialog({
               Mensagem (opcional)
             </label>
             <textarea
+              ref={messageRef}
               id="approval-message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={2000}
               rows={3}
-              placeholder="Ex: Pode revisar antes de publicar?"
+              placeholder="Ex: Pode revisar antes de publicar {{card.title}}?"
               className="border-border bg-bg focus-visible:ring-primary resize-none rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2"
             />
+            <TemplateVarsBar
+              inputRef={messageRef}
+              value={message}
+              onChange={setMessage}
+              vars={[
+                { token: '{{card.title}}', label: 'Título do card' },
+                { token: '{{card.list.name}}', label: 'Coluna' },
+                { token: '{{card.board.name}}', label: 'Fluxo' },
+                { token: '{{requester.name}}', label: 'Quem pediu' },
+                { token: '{{reviewer.name}}', label: 'Revisor' },
+              ]}
+            />
+            <p className="text-fg-subtle text-[10px] leading-relaxed">
+              Variáveis são substituídas no momento do envio. Cada revisor recebe a mensagem com seu
+              próprio nome em <code className="text-fg-muted">{'{{reviewer.name}}'}</code>.
+            </p>
           </div>
 
           <details className="border-border bg-bg-muted/20 rounded-md border">

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { PhoneNullableSchema } from '@/common/util/phone-schema';
+
 export const UpdateMemberSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   /**
@@ -8,12 +10,8 @@ export const UpdateMemberSchema = z.object({
    * email sem o user confirmar.
    */
   email: z.string().email().toLowerCase().trim().optional(),
-  phone: z
-    .string()
-    .regex(/^\d{10,15}$/, 'Telefone deve ter 10 a 15 dígitos (E.164 sem o "+")')
-    .nullable()
-    .optional()
-    .or(z.literal('').transform(() => null)),
+  /** Aceita formatado ("+55 31 99988-7777") e normaliza pra digitos. */
+  phone: PhoneNullableSchema,
 });
 export type UpdateMemberRequest = z.infer<typeof UpdateMemberSchema>;
 

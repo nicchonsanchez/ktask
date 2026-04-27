@@ -4,13 +4,19 @@ import { z } from 'zod';
  * Reviewer pode ser: (a) user interno (membro da Org), ou (b) phone-only
  * (externo, recebe link tokenizado por WhatsApp). XOR garantido pelo Zod
  * com refine — nunca os dois simultaneamente.
+ *
+ * Phone aceita input formatado ("+55 31 99988-7777") e normaliza pra
+ * dígitos puros via transform.
  */
 export const ReviewerInputSchema = z
   .object({
     userId: z.string().min(1).optional(),
     phone: z
       .string()
-      .regex(/^\d{10,15}$/, 'Telefone deve estar em E.164 sem o "+", apenas dígitos')
+      .transform((v) => v.replace(/\D/g, ''))
+      .refine((v) => /^\d{10,15}$/.test(v), {
+        message: 'Telefone deve ter 10 a 15 dígitos (DDI + DDD + número).',
+      })
       .optional(),
     externalName: z.string().min(1).max(120).optional(),
   })

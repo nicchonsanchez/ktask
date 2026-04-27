@@ -116,6 +116,10 @@ services:
       EVOLUTION_DEFAULT_URL: ${EVOLUTION_DEFAULT_URL:-}
       EVOLUTION_DEFAULT_API_KEY: ${EVOLUTION_DEFAULT_API_KEY:-}
       EVOLUTION_DEFAULT_INSTANCE: ${EVOLUTION_DEFAULT_INSTANCE:-}
+      # URL pública do frontend — usada em links que saem por WhatsApp
+      # (aprovações, notificações). Se não setado vira localhost:3000 e
+      # links saem quebrados.
+      APP_URL: ${APP_URL:-https://${KTASK_WEB_DOMAIN}}
       INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY}
       SENTRY_DSN: ${SENTRY_DSN:-}
       # Storage (MinIO S3-compat). Endpoint interno via rede docker; endpoint publico via Caddy.

@@ -16,14 +16,27 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+/**
+ * Normaliza phone removendo tudo que não é dígito (espaço, +, traço,
+ * parênteses, pontos). Usado como Zod transform — aceita inputs colados
+ * formatados ("+55 (31) 99988-7777") e garante só-dígitos no banco.
+ */
+const PhoneSchema = z
+  .union([z.string(), z.literal('')])
+  .nullable()
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined || v === '') return null;
+    return v.replace(/\D/g, '');
+  })
+  .refine((v) => v === null || /^\d{10,15}$/.test(v), {
+    message: 'Telefone deve ter de 10 a 15 dígitos (DDI + DDD + número).',
+  });
+
 export const UpdateProfileRequestSchema = z.object({
   name: z.string().min(2).max(120).trim().optional(),
   avatarUrl: z.string().url().nullable().optional(),
-  phone: z
-    .string()
-    .regex(/^\d{10,15}$/, 'Telefone deve ter de 10 a 15 dígitos (E.164 sem o "+").')
-    .nullable()
-    .optional(),
+  phone: PhoneSchema,
   notifyApprovalsOnWhatsApp: z.boolean().optional(),
   locale: z.enum(['pt-BR', 'en', 'es']).optional(),
   timezone: z.string().optional(),

@@ -11,12 +11,17 @@ export const CreateContactSchema = z.object({
     .max(200)
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  /** Aceita formatado ("+55 31 99988-7777") e normaliza pra dígitos. */
   phone: z
-    .string()
-    .trim()
-    .max(40)
+    .union([z.string(), z.literal('')])
     .optional()
-    .or(z.literal('').transform(() => undefined)),
+    .transform((v) => {
+      if (v === undefined || v === '') return undefined;
+      return v.replace(/\D/g, '');
+    })
+    .refine((v) => v === undefined || (v.length >= 8 && v.length <= 15), {
+      message: 'Telefone deve ter de 8 a 15 dígitos.',
+    }),
   document: z
     .string()
     .trim()
