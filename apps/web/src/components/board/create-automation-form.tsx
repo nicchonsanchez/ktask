@@ -20,6 +20,7 @@ import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
 import { TemplateVarsBar } from './template-vars-bar';
 import { VarTextarea, type TemplateVar } from './var-textarea';
+import { MessageTemplateButtons } from './message-template-buttons';
 
 const COMMENT_VARS: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
@@ -860,6 +861,7 @@ function CommentTemplateConfig({
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="flex flex-col gap-2">
+      <MessageTemplateButtons type="comment" value={value} onChange={onChange} />
       <VarTextarea
         ref={ref}
         value={value}
@@ -1191,7 +1193,10 @@ function SendWhatsAppConfig({
       )}
 
       <div className="flex flex-col gap-2">
-        <label className="text-fg-muted text-[11px] font-medium">Mensagem</label>
+        <div className="flex items-center justify-between">
+          <label className="text-fg-muted text-[11px] font-medium">Mensagem</label>
+          <MessageTemplateButtons type="whatsapp" value={template} onChange={setTemplate} />
+        </div>
         <VarTextarea
           ref={templateRef}
           value={template}

@@ -36,6 +36,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ImporterModule } from './modules/importer/importer.module';
 import { MembersAdminModule } from './modules/members-admin/members-admin.module';
+import { MessageTemplatesModule } from './modules/message-templates/message-templates.module';
 
 @Module({
   imports: [
@@ -110,6 +111,7 @@ import { MembersAdminModule } from './modules/members-admin/members-admin.module
     ContactsModule,
     ImporterModule,
     MembersAdminModule,
+    MessageTemplatesModule,
     HealthModule,
   ],
   providers: [
