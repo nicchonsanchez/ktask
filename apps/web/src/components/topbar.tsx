@@ -20,7 +20,7 @@ const NAV = [
   { href: '/indicadores', label: 'Indicadores' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/empresa', label: 'Empresa' },
-  { href: '/configuracoes/membros', label: 'Membros' },
+  { href: '/configuracoes', label: 'Configurações' },
 ];
 
 export function Topbar() {
