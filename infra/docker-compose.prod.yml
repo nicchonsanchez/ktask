@@ -85,9 +85,10 @@ services:
     networks: [ktask]
 
   api:
-    build:
-      context: ..
-      dockerfile: apps/api/Dockerfile
+    # Imagem buildada e publicada no GHCR pelo workflow Deploy.
+    # IMAGE_TAG vem do prod.env (default 'latest') ou e exportado pelo workflow.
+    # Pra rollback manual: editar prod.env com IMAGE_TAG=<sha-anterior> + compose up -d.
+    image: ghcr.io/kharis-edu/ktask-api:${IMAGE_TAG:-latest}
     container_name: ktask-api
     restart: unless-stopped
     depends_on:
@@ -131,13 +132,9 @@ services:
     networks: [ktask]
 
   web:
-    build:
-      context: ..
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
-        NEXT_PUBLIC_APP_NAME: KTask
+    # Build args (NEXT_PUBLIC_*) sao definidos no momento do build no
+    # GHA runner (ver .github/workflows/deploy.yml). Aqui so o pull.
+    image: ghcr.io/kharis-edu/ktask-web:${IMAGE_TAG:-latest}
     container_name: ktask-web
     restart: unless-stopped
     depends_on:

@@ -1,21 +1,41 @@
 name: Deploy
 
+# Pipeline de deploy KTask:
+#   1. wait-ci  — aguarda o workflow CI passar (lint/typecheck/test)
+#   2. build    — builda API e Web no runner, taggeia com SHA + latest, e
+#                 publica no GitHub Container Registry (ghcr.io). Imutável.
+#   3. deploy   — copia compose/Caddyfile pra VM, faz docker login com token
+#                 efêmero do workflow, pulla as imagens taggadas com SHA atual,
+#                 sobe a stack via compose. Sem build na VM, sem git pull.
+#                 VM nunca precisa de credencial GitHub permanente.
+#
+# Rollback: rerun workflow_dispatch com input image_tag=<sha-anterior>, ou
+# setar IMAGE_TAG no infra/prod.env da VM e rodar compose up -d.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag da imagem GHCR pra deployar (default = SHA do commit)'
+        required: false
+        default: ''
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_API: ghcr.io/${{ github.repository_owner }}/ktask-api
+  IMAGE_WEB: ghcr.io/${{ github.repository_owner }}/ktask-web
 
 jobs:
   wait-ci:
     name: Aguarda CI passar
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Necessario pra wait-on-check-action ler check-runs API.
-    # Em repo privado, o GITHUB_TOKEN default nao tem checks:read.
     permissions:
       checks: read
       contents: read
@@ -30,14 +50,80 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 15
 
+  build:
+    name: Build & push imagens GHCR
+    needs: wait-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "value=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_API }}:${{ steps.tag.outputs.value }}
+            ${{ env.IMAGE_API }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build & push Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.ktask.agenciakharis.com.br
+            NEXT_PUBLIC_WS_URL=wss://api.ktask.agenciakharis.com.br
+            NEXT_PUBLIC_APP_NAME=KTask
+          tags: |
+            ${{ env.IMAGE_WEB }}:${{ steps.tag.outputs.value }}
+            ${{ env.IMAGE_WEB }}:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
   deploy:
     name: Deploy Hetzner
-    needs: wait-ci
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
-
+    permissions:
+      contents: read
+      packages: read
     steps:
+      - uses: actions/checkout@v4
+
       - name: Prepara SSH
         run: |
           mkdir -p ~/.ssh
@@ -47,36 +133,61 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_HOST_KEY }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Executa deploy remoto
+      - name: Envia compose + Caddyfile pra VM
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          # VM precisa ter /opt/ktask/infra/ ja existente. O scp atualiza
+          # arquivos sem precisar de git auth na VM.
+          ssh -i ~/.ssh/id_ed25519 -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p /opt/ktask/infra"
+          scp -i ~/.ssh/id_ed25519 -o UserKnownHostsFile=~/.ssh/known_hosts \
+            infra/docker-compose.prod.yml \
+            infra/Caddyfile \
+            "$DEPLOY_USER@$DEPLOY_HOST:/opt/ktask/infra/"
+
+      - name: Pull imagens + up via compose
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           ssh -i ~/.ssh/id_ed25519 -o UserKnownHostsFile=~/.ssh/known_hosts \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "bash -s" <<'REMOTE'
+            "IMAGE_TAG=$IMAGE_TAG GHCR_TOKEN=$GHCR_TOKEN GHCR_USER=$GHCR_USER bash -s" <<'REMOTE'
           set -euo pipefail
           cd /opt/ktask
-          echo "--- git pull ---"
-          git fetch --prune origin
-          git reset --hard origin/main
-          echo "--- docker build + up ---"
-          docker compose -f infra/docker-compose.prod.yml --env-file infra/prod.env up -d --build --remove-orphans
+          echo "--- docker login ghcr.io (token efemero) ---"
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+          # Garante que IMAGE_TAG e demais vars vao pro compose
+          echo "--- pull imagens (tag=$IMAGE_TAG) ---"
+          export IMAGE_TAG
+          docker compose -f infra/docker-compose.prod.yml --env-file infra/prod.env pull api web
+
+          echo "--- up -d ---"
+          docker compose -f infra/docker-compose.prod.yml --env-file infra/prod.env up -d --remove-orphans
+
           echo "--- aguardando healthchecks ---"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             api_status=$(docker inspect -f '{{.State.Health.Status}}' ktask-api 2>/dev/null || echo starting)
             web_status=$(docker inspect -f '{{.State.Health.Status}}' ktask-web 2>/dev/null || echo starting)
-            echo "api=$api_status web=$web_status"
+            echo "[$i] api=$api_status web=$web_status"
             if [ "$api_status" = "healthy" ] && [ "$web_status" = "healthy" ]; then
               echo "--- deploy ok ---"
+              docker logout ghcr.io || true
               exit 0
             fi
             sleep 5
           done
+
           echo "--- timeout, logs recentes ---"
-          docker logs ktask-api --tail 50 || true
-          docker logs ktask-web --tail 50 || true
+          docker logs ktask-api --tail 80 || true
+          docker logs ktask-web --tail 80 || true
+          docker logout ghcr.io || true
           exit 1
           REMOTE
 
