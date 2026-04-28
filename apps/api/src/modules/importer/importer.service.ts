@@ -73,6 +73,9 @@ export interface MatchSuggestion {
   score: number;
   /** Mapping previamente salvo na Org (forca esse target sem fuzzy). */
   savedTargetId?: string | null;
+  /** Coluna salva anteriormente como "Marcar como Finalizado". So vale
+   * pra kind='list'. Quando true, frontend pre-seleciona type='complete'. */
+  savedAsComplete?: boolean;
 }
 
 export interface ImportPreviewResult {
@@ -158,6 +161,11 @@ export class ImporterService {
 
       // Se ha mapping salvo, force ele (mesmo se null = ignorar)
       if (hasSaved) {
+        // Sentinel especial '__COMPLETE__' = coluna marcada como
+        // "Finalizado" — frontend pre-seleciona type='complete'.
+        if (savedTargetId === '__COMPLETE__') {
+          return { sourceName, candidate: null, score: 1.0, savedAsComplete: true };
+        }
         const candidate = savedTargetId
           ? (candidates.find((c) => c.id === savedTargetId) ?? null)
           : null;
@@ -268,6 +276,10 @@ export class ImporterService {
     // Pre-resolve mapping de listas: cria nova quando type=create
     const listsByName = new Map<string, string>();
     const ignoredListNames = new Set<string>();
+    /// Colunas marcadas como "Finalizado" — cards delas serao criados
+    /// com completedAt setado. listId pra eles vem da ultima lista do
+    /// board (resolvida abaixo).
+    const completeListNames = new Set<string>();
     for (const [sourceName, target] of Object.entries(body.lists)) {
       if (target.type === 'existing') {
         listsByName.set(sourceName, target.listId);
@@ -288,8 +300,43 @@ export class ImporterService {
         });
         listsByName.set(sourceName, created.id);
         report.createdLists++;
+      } else if (target.type === 'complete') {
+        completeListNames.add(sourceName);
       } else if (target.type === 'ignore') {
         ignoredListNames.add(sourceName);
+      }
+    }
+
+    // Pra colunas type='complete', resolve a "ultima lista" do board
+    // (depois das listas de 'create' acima ja terem sido inseridas).
+    // Cards vao fisicamente pra essa lista mas com completedAt setado,
+    // entao aparecem so no drawer "Finalizados".
+    let completeFallbackListId: string | null = null;
+    if (completeListNames.size > 0) {
+      const lastList = await this.prisma.list.findFirst({
+        where: { boardId: board.id, isArchived: false },
+        orderBy: { position: 'desc' },
+        select: { id: true, position: true },
+      });
+      if (lastList) {
+        completeFallbackListId = lastList.id;
+      } else {
+        // Board sem lista: cria uma minima pra hospedar os cards completados
+        const created = await this.prisma.list.create({
+          data: {
+            organizationId: tenant.organizationId,
+            boardId: board.id,
+            name: 'Concluído',
+            position: 1024,
+          },
+          select: { id: true },
+        });
+        completeFallbackListId = created.id;
+        report.createdLists++;
+      }
+      // Mapeia cada nome 'complete' pra essa lista
+      for (const name of completeListNames) {
+        listsByName.set(name, completeFallbackListId);
       }
     }
 
@@ -321,6 +368,7 @@ export class ImporterService {
           contactsByName,
           userByName,
           report,
+          forceCompleted: completeListNames.has(listSourceName),
         });
         if (created) {
           cardIdByShortCode.set(created.shortCode, created.id);
@@ -399,7 +447,9 @@ export class ImporterService {
 
     for (const [sourceName, target] of Object.entries(body.lists)) {
       // 'create' nao persiste — quando a lista existir no proximo import,
-      // vai virar match exato (existing). 'ignore' e 'existing' persistem.
+      // vira match exato (existing). 'ignore' e 'existing' persistem.
+      // 'complete' persiste com sentinel '__COMPLETE__' pra ser
+      // re-detectado no preview do proximo import.
       if (target.type === 'existing') {
         ops.push(
           this.prisma.orgImportMapping.upsert({
@@ -428,6 +478,20 @@ export class ImporterService {
             update: { targetId: null },
           }),
         );
+      } else if (target.type === 'complete') {
+        ops.push(
+          this.prisma.orgImportMapping.upsert({
+            where: {
+              organizationId_kind_sourceName: {
+                organizationId,
+                kind: 'list',
+                sourceName,
+              },
+            },
+            create: { organizationId, kind: 'list', sourceName, targetId: '__COMPLETE__' },
+            update: { targetId: '__COMPLETE__' },
+          }),
+        );
       }
     }
 
@@ -449,6 +513,8 @@ export class ImporterService {
     contactsByName: Map<string, string>;
     userByName: Map<string, string | null>;
     report: ImportReport;
+    /** Se true, cria card com completedAt setado (coluna 'complete'). */
+    forceCompleted?: boolean;
   }): Promise<{ id: string; shortCode: string } | null> {
     const {
       row,
@@ -460,6 +526,7 @@ export class ImporterService {
       contactsByName,
       userByName,
       report,
+      forceCompleted = false,
     } = args;
 
     const shortCode = row[HEADER_INDEX.identificador]?.trim();
@@ -500,7 +567,9 @@ export class ImporterService {
     const dataEntrega = this.parseDateBR(row[HEADER_INDEX.dataEntrega]);
     const criadoEm = this.parseDateBR(row[HEADER_INDEX.criadoEm]);
     const finalizadoEm = this.parseDateBR(row[HEADER_INDEX.finalizadoEm]);
-    const isCompleted = row[HEADER_INDEX.status]?.trim() === 'completed';
+    /// completed se: (a) status do CSV = 'completed' OU (b) coluna foi
+    /// mapeada como 'complete' no wizard (forceCompleted)
+    const isCompleted = forceCompleted || row[HEADER_INDEX.status]?.trim() === 'completed';
 
     // Lider via mapping
     const leaderName = row[HEADER_INDEX.lider]?.trim();

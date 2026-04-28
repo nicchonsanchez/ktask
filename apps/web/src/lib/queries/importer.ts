@@ -18,6 +18,8 @@ export interface MatchSuggestion {
   score: number;
   /** Mapping previamente salvo na Org. Quando definido, force esse target. */
   savedTargetId?: string | null;
+  /** True se mapping salvo era "Marcar como Finalizado" (sentinel). */
+  savedAsComplete?: boolean;
 }
 
 export interface ImportPreviewResult {
@@ -31,6 +33,7 @@ export interface ImportPreviewResult {
 export type ListMappingTarget =
   | { type: 'existing'; listId: string }
   | { type: 'create'; name: string }
+  | { type: 'complete' }
   | { type: 'ignore' };
 
 export interface ImportExecuteInput {

@@ -30,11 +30,17 @@ export type ImportPreviewRequest = z.infer<typeof ImportPreviewSchema>;
  * Mapping de uma lista/coluna do CSV pra entidade do KTask.
  *   { type: 'existing', listId } -> usa lista existente do board
  *   { type: 'create',   name }   -> cria nova lista com esse nome
+ *   { type: 'complete' }         -> marca cards como Finalizado
+ *                                   (completedAt setado; aparecem na
+ *                                   coluna virtual "Finalizados" e
+ *                                   ficam fisicamente na ultima lista
+ *                                   do board)
  *   { type: 'ignore' }           -> cards nesta coluna sao pulados
  */
 export const ListMappingTargetSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('existing'), listId: z.string().min(1) }),
   z.object({ type: z.literal('create'), name: z.string().min(1).max(120) }),
+  z.object({ type: z.literal('complete') }),
   z.object({ type: z.literal('ignore') }),
 ]);
 export type ListMappingTarget = z.infer<typeof ListMappingTargetSchema>;

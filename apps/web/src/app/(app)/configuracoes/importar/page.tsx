@@ -294,9 +294,13 @@ function Step2({
       }
       const lists: Record<string, ListMappingTarget> = {};
       for (const l of preview.lists) {
-        lists[l.sourceName] = l.candidate
-          ? { type: 'existing', listId: l.candidate.id }
-          : { type: 'create', name: l.sourceName };
+        if (l.savedAsComplete) {
+          lists[l.sourceName] = { type: 'complete' };
+        } else if (l.candidate) {
+          lists[l.sourceName] = { type: 'existing', listId: l.candidate.id };
+        } else {
+          lists[l.sourceName] = { type: 'create', name: l.sourceName };
+        }
       }
       update({ preview, members, lists, error: null });
     },
@@ -442,12 +446,15 @@ function Step2({
                       ? `existing:${target.listId}`
                       : target?.type === 'create'
                         ? 'create'
-                        : 'ignore'
+                        : target?.type === 'complete'
+                          ? 'complete'
+                          : 'ignore'
                   }
                   onChange={(e) => {
                     const v = e.target.value;
                     let next: ListMappingTarget;
                     if (v === 'create') next = { type: 'create', name: l.sourceName };
+                    else if (v === 'complete') next = { type: 'complete' };
                     else if (v === 'ignore') next = { type: 'ignore' };
                     else next = { type: 'existing', listId: v.replace('existing:', '') };
                     update({ lists: { ...state.lists, [l.sourceName]: next } });
@@ -455,6 +462,7 @@ function Step2({
                   className="border-border bg-bg rounded-md border px-2 py-1 text-xs"
                 >
                   <option value="create">⊕ Criar nova lista "{l.sourceName}"</option>
+                  <option value="complete">✓ Marcar como Finalizado</option>
                   <option value="ignore">⊘ Ignorar (cards desta coluna)</option>
                   {boardLists.length > 0 && (
                     <optgroup label="Existentes">
@@ -527,6 +535,7 @@ function Step3({
   // Resumo
   const ignoredMembers = Object.values(state.members).filter((v) => v === null).length;
   const newLists = Object.values(state.lists).filter((t) => t.type === 'create').length;
+  const completeLists = Object.values(state.lists).filter((t) => t.type === 'complete').length;
   const ignoredLists = Object.values(state.lists).filter((t) => t.type === 'ignore').length;
 
   return (
@@ -540,6 +549,12 @@ function Step3({
         <li>
           ✓ <span className="font-medium">{newLists}</span> listas novas serão criadas
         </li>
+        {completeLists > 0 && (
+          <li>
+            ✓ <span className="font-medium">{completeLists}</span> coluna(s) serão marcadas como
+            Finalizado (cards com completedAt)
+          </li>
+        )}
         <li>
           ✓ <span className="font-medium">{Object.keys(state.members).length}</span> mapeamentos de
           membros confirmados
