@@ -131,6 +131,40 @@ export function restoreBoard(boardId: string) {
   return api.post(`/api/v1/boards/${boardId}/restore`, {});
 }
 
+export interface BoardDeletePreview {
+  boardId: string;
+  boardName: string;
+  isAlreadyArchived: boolean;
+  totalCards: number;
+  /** Cards cujo board primario eh este e nao tem CardPresence em outro board. */
+  exclusiveCards: number;
+  /** Cards multi-fluxo: tambem aparecem em outros boards via CardPresence. */
+  multiFlowCards: number;
+  totalLists: number;
+  totalActivities: number;
+}
+
+export const boardDeletePreviewQuery = (boardId: string) => ({
+  queryKey: ['boards', boardId, 'delete-preview'] as const,
+  queryFn: () => api.get<BoardDeletePreview>(`/api/v1/boards/${boardId}/delete-preview`),
+});
+
+export type DeleteBoardStrategy =
+  | { strategy: 'archive-cascade' }
+  | { strategy: 'delete-all'; confirmName: string };
+
+export interface DeleteBoardResult {
+  ok: true;
+  strategy: 'archive-cascade' | 'delete-all';
+  archivedCards: number;
+  deletedCards: number;
+  deletedLists?: number;
+}
+
+export function executeBoardDelete(boardId: string, body: DeleteBoardStrategy) {
+  return api.post<DeleteBoardResult>(`/api/v1/boards/${boardId}/delete`, body);
+}
+
 export function addBoardMember(
   boardId: string,
   userId: string,

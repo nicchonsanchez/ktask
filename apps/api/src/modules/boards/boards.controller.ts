@@ -22,9 +22,11 @@ import { BoardsService } from './boards.service';
 import {
   AddBoardMemberSchema,
   CreateBoardSchema,
+  DeleteBoardStrategySchema,
   UpdateBoardSchema,
   type AddBoardMemberRequest,
   type CreateBoardRequest,
+  type DeleteBoardStrategyRequest,
   type UpdateBoardRequest,
 } from './dto/board.schemas';
 
@@ -90,6 +92,29 @@ export class BoardsController {
     @Param('boardId') boardId: string,
   ) {
     return this.boards.restore(user.userId, org, boardId);
+  }
+
+  @Get(':boardId/delete-preview')
+  @ApiOperation({ summary: 'Contagens pra preview de exclusao do board (doc 29)' })
+  deletePreview(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.boards.deletePreview(user.userId, org, boardId);
+  }
+
+  @Post(':boardId/delete')
+  @ApiOperation({
+    summary: 'Excluir board com estrategia explicita (archive-cascade | delete-all)',
+  })
+  executeDelete(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+    @Body(new ZodValidationPipe(DeleteBoardStrategySchema)) body: DeleteBoardStrategyRequest,
+  ) {
+    return this.boards.executeDelete(user.userId, org, boardId, body);
   }
 
   @Get(':boardId/completed-cards')

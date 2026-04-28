@@ -293,6 +293,22 @@ Ver `09-engine-automacoes.md` (engine geral) e `23-automacoes-coluna.md` (UX + c
 
 ---
 
+## Exclusão de fluxo (board) — doc 29
+
+Hoje só tem `archive` (soft delete). Falta hard delete com opções pros
+cards (deletar todos / desvincular / mover pra outro / deletar só
+órfãos). Plano completo: [29-exclusao-de-fluxo.md](29-exclusao-de-fluxo.md).
+
+- [x] Verificar invariantes de `CardPresence` no schema (card pode ficar sem presença?) — `Card.boardId` é NOT NULL, schema em transição multi-fluxo
+- [x] Migration `BOARD_DELETED` no enum `ActivityType`
+- [x] Endpoint GET `/v1/boards/:id/delete-preview` (contagens)
+- [x] Endpoint POST `/v1/boards/:id/delete` — V1 com `archive-cascade` e `delete-all`
+- [x] UI: `delete-board-dialog.tsx` com preview + confirmação por nome pro `delete-all`
+- [ ] **V2:** estratégias `move` / `unlink` / `delete-orphans` (envolvem reassignment de `Card.boardId`)
+- [ ] **Bug correlato no importer:** cards com `shortCode` já existente devem **adicionar `CardPresence` no novo board** em vez de pular silenciosamente (doc/PR próprio — relacionado ao 28)
+
+---
+
 ## Pra fazer com user acordado (decisões + acessos)
 
 - [ ] **Subdomínio dev online (`dev.ktask.agenciakharis.com.br`)** — ambiente de teste online separado da prod. Envolve: DNS Cloudflare (registro A), Caddyfile na VM Hetzner, docker-compose.prod.yml estendido com containers de dev, banco `ktask_dev` separado, .env.dev, GitHub Actions workflow novo (deploy em push pra branch `dev`). Bate em SSH + Caddyfile prod + secrets — exige user acordado pra acompanhar. Estimativa: 2-3h dedicadas.

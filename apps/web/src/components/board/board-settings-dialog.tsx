@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Archive, ChevronDown, Globe, Loader2, Lock, Plus } from 'lucide-react';
+import { Archive, ChevronDown, Globe, Loader2, Lock, Plus, Trash2 } from 'lucide-react';
 
 import { Button, Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import {
@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
+import { DeleteBoardDialog } from './delete-board-dialog';
 
 type Visibility = 'PRIVATE' | 'ORGANIZATION';
 
@@ -44,6 +45,7 @@ export function BoardSettingsDialog({
   const [cardOrdering, setCardOrdering] = useState<CardOrdering>(board.cardOrdering);
   const [inheritTeam, setInheritTeam] = useState<boolean>(board.inheritTeamOnNewCards);
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -199,6 +201,33 @@ export function BoardSettingsDialog({
                 Inativar
               </Button>
             </Section>
+
+            <Section title="Excluir fluxo">
+              <p className="text-fg mb-2 text-xs font-semibold">Exclusão definitiva do fluxo:</p>
+              <ul className="text-fg-muted mb-3 list-disc space-y-1 pl-5 text-[11px] leading-relaxed">
+                <li>
+                  Diferente de inativar — esta ação remove o fluxo permanentemente. Cards exclusivos
+                  do fluxo podem ser arquivados (reversível) ou apagados de vez (irreversível);
+                </li>
+                <li>
+                  Cards que aparecem em outros fluxos não são afetados pela opção
+                  &quot;arquivar&quot;, mas são apagados pela opção &quot;excluir
+                  definitivamente&quot;;
+                </li>
+                <li>
+                  O diálogo mostra contagens detalhadas e exige confirmação por digitar o nome do
+                  fluxo antes do delete definitivo.
+                </li>
+              </ul>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteOpen(true)}
+                className="text-danger border-danger/40 hover:bg-danger-subtle"
+              >
+                <Trash2 size={14} />
+                Excluir fluxo…
+              </Button>
+            </Section>
           </div>
 
           {/* Coluna direita: privacidade + equipe + salvar + autoria */}
@@ -255,6 +284,17 @@ export function BoardSettingsDialog({
           </div>
         </div>
       </DialogContent>
+
+      <DeleteBoardDialog
+        board={board}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onSuccess={() => {
+          setDeleteOpen(false);
+          invalidate();
+          window.location.href = '/quadros';
+        }}
+      />
     </Dialog>
   );
 }

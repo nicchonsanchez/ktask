@@ -34,3 +34,23 @@ export const AddBoardMemberSchema = z.object({
   role: z.enum(['ADMIN', 'EDITOR', 'COMMENTER', 'VIEWER']).optional(),
 });
 export type AddBoardMemberRequest = z.infer<typeof AddBoardMemberSchema>;
+
+/**
+ * Estrategias de exclusao de fluxo (doc 29).
+ *   archive-cascade: arquiva o board E os cards exclusivos dele. Reversivel
+ *                    via /restore. Default seguro.
+ *   delete-all:      hard delete via cascade do Postgres. Apaga board, cards
+ *                    (mesmo multi-fluxo), listas, presencas, activities. Exige
+ *                    confirmacao por digitar o nome do board no payload.
+ *   move/unlink/delete-orphans: previstas no doc mas nao implementadas em V1
+ *                    (envolvem reassignment de Card.boardId NOT NULL).
+ */
+export const DeleteBoardStrategySchema = z.discriminatedUnion('strategy', [
+  z.object({ strategy: z.literal('archive-cascade') }),
+  z.object({
+    strategy: z.literal('delete-all'),
+    /** Nome exato do board, pra prevenir delete acidental. */
+    confirmName: z.string().min(1).max(120),
+  }),
+]);
+export type DeleteBoardStrategyRequest = z.infer<typeof DeleteBoardStrategySchema>;

@@ -7,6 +7,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { StorageService } from '@/modules/storage/storage.service';
 
 import { BoardAccessService } from './board-access.service';
+import type { DeleteBoardStrategyRequest } from './dto/board.schemas';
 
 interface CreateBoardInput {
   name: string;
@@ -379,6 +380,179 @@ export class BoardsService {
       where: { id: boardId },
       data: { isArchived: false },
     });
+  }
+
+  /**
+   * Pre-visualizacao de exclusao (doc 29). Retorna contagens que ajudam o
+   * usuario a entender o impacto antes de confirmar. Nao muta nada.
+   *
+   * exclusiveCards: cards cujo Card.boardId aponta SO pra este board e nao
+   *                 tem CardPresence ativa em outro board (orfaos se removido).
+   * multiFlowCards: cards deste board que tambem aparecem em outros boards
+   *                 via CardPresence. Sao os "preservaveis".
+   */
+  async deletePreview(userId: string, tenant: TenantContext, boardId: string) {
+    await this.access.assertAccess(userId, boardId, tenant, 'ADMIN');
+
+    const board = await this.prisma.board.findFirst({
+      where: { id: boardId, organizationId: tenant.organizationId },
+      select: { id: true, name: true, isArchived: true },
+    });
+    if (!board) throw new BadRequestException('Board nao encontrado.');
+
+    // Cards cujo board PRIMARIO eh este. Card.boardId eh NOT NULL no schema,
+    // entao todo card "pertence" a um board principal mesmo no modo multi-fluxo.
+    const cardsHere = await this.prisma.card.findMany({
+      where: { boardId, organizationId: tenant.organizationId },
+      select: {
+        id: true,
+        presences: {
+          where: { removedAt: null, boardId: { not: boardId } },
+          select: { boardId: true },
+        },
+      },
+    });
+
+    let exclusiveCards = 0;
+    let multiFlowCards = 0;
+    for (const card of cardsHere) {
+      if (card.presences.length > 0) multiFlowCards++;
+      else exclusiveCards++;
+    }
+
+    const [totalLists, totalActivities] = await Promise.all([
+      this.prisma.list.count({ where: { boardId } }),
+      this.prisma.activity.count({ where: { boardId } }),
+    ]);
+
+    return {
+      boardId: board.id,
+      boardName: board.name,
+      isAlreadyArchived: board.isArchived,
+      totalCards: cardsHere.length,
+      exclusiveCards,
+      multiFlowCards,
+      totalLists,
+      totalActivities,
+    };
+  }
+
+  /**
+   * Executa exclusao de board com estrategia explicita (doc 29).
+   *
+   * archive-cascade: marca board.isArchived = true E arquiva cards exclusivos.
+   *                  Cards multi-fluxo NAO sao arquivados (continuam vivos
+   *                  pelos outros boards). Reversivel via /restore + desarquivar
+   *                  cards manualmente.
+   * delete-all:      hard delete. Cascade FK do Postgres remove cards,
+   *                  presences, listas. Activities com boardId viram orfas
+   *                  (campo eh denormalizado, sem FK). Activities ligadas a
+   *                  cards apagados vao junto via Card.activities cascade.
+   *                  IRREVERSIVEL.
+   */
+  async executeDelete(
+    userId: string,
+    tenant: TenantContext,
+    boardId: string,
+    body: DeleteBoardStrategyRequest,
+  ) {
+    await this.access.assertAccess(userId, boardId, tenant, 'ADMIN');
+
+    const board = await this.prisma.board.findFirst({
+      where: { id: boardId, organizationId: tenant.organizationId },
+      select: { id: true, name: true },
+    });
+    if (!board) throw new BadRequestException('Board nao encontrado.');
+
+    if (body.strategy === 'archive-cascade') {
+      // Arquiva cards exclusivos antes de arquivar o board.
+      const cardsHere = await this.prisma.card.findMany({
+        where: { boardId, organizationId: tenant.organizationId, isArchived: false },
+        select: {
+          id: true,
+          presences: {
+            where: { removedAt: null, boardId: { not: boardId } },
+            select: { boardId: true },
+            take: 1,
+          },
+        },
+      });
+      const exclusiveIds = cardsHere.filter((c) => c.presences.length === 0).map((c) => c.id);
+
+      let archivedCards = 0;
+      await this.prisma.$transaction(async (tx) => {
+        if (exclusiveIds.length > 0) {
+          const result = await tx.card.updateMany({
+            where: { id: { in: exclusiveIds } },
+            data: { isArchived: true },
+          });
+          archivedCards = result.count;
+        }
+        await tx.board.update({ where: { id: boardId }, data: { isArchived: true } });
+        await tx.activity.create({
+          data: {
+            organizationId: tenant.organizationId,
+            boardId,
+            actorId: userId,
+            type: 'BOARD_ARCHIVED',
+            payload: {
+              boardId,
+              strategy: 'archive-cascade',
+              archivedCards,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+      });
+
+      return {
+        ok: true,
+        strategy: 'archive-cascade' as const,
+        archivedCards,
+        deletedCards: 0,
+      };
+    }
+
+    // delete-all: requer confirmacao por nome
+    if (body.confirmName.trim() !== board.name.trim()) {
+      throw new BadRequestException(
+        `Nome de confirmacao nao confere. Digite exatamente "${board.name}".`,
+      );
+    }
+
+    const [totalCards, totalLists] = await Promise.all([
+      this.prisma.card.count({ where: { boardId } }),
+      this.prisma.list.count({ where: { boardId } }),
+    ]);
+
+    // Activity ANTES do delete pra preservar registro forense — Activity nao
+    // tem FK pra Board (boardId eh string denormalizada), entao sobrevive.
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId,
+        actorId: userId,
+        type: 'BOARD_DELETED',
+        payload: {
+          boardId,
+          boardName: board.name,
+          strategy: 'delete-all',
+          deletedCards: totalCards,
+          deletedLists: totalLists,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    // Cascade FK no schema cuida do resto: cards, presences, listas, members,
+    // labels, automations, comments, attachments, etc.
+    await this.prisma.board.delete({ where: { id: boardId } });
+
+    return {
+      ok: true,
+      strategy: 'delete-all' as const,
+      archivedCards: 0,
+      deletedCards: totalCards,
+      deletedLists: totalLists,
+    };
   }
 
   async addMember(
