@@ -327,10 +327,21 @@ completo: [30-fluxos-arquivados-drawer.md](30-fluxos-arquivados-drawer.md).
 Cards já importados em outro board são silenciosamente pulados em vez de
 ganharem `CardPresence` no novo board. Plano: [31-importer-multi-fluxo.md](31-importer-multi-fluxo.md).
 
-- [ ] `importCard` (legado): substituir skip por upsert de `CardPresence`
-- [ ] `importCardWithMapping` (wizard V2): mesma lógica + suporte ao `forceCompleted` na presence nova
-- [ ] `ImportReport` ganha `linkedToFlow: number` separado de `created`/`skipped`
-- [ ] Frontend wizard mostra `linkedToFlow` no relatório final
+- [x] `importCard` (legado): substituir skip por upsert de `CardPresence`
+- [x] `importCardWithMapping` (wizard V2): mesma lógica + suporte ao `forceCompleted` na presence nova
+- [x] `ImportReport` ganha `linkedToFlow: number` separado de `created`/`skipped`
+- [x] Frontend wizard mostra `linkedToFlow` no relatório final
+
+---
+
+## Aprovação WhatsApp: card completo — doc 32
+
+Página `/aprovar/[token]` mostrava só título + board + lista. Recipient
+externo precisa ver tudo pra decidir. Plano: [32-aprovacao-card-completo.md](32-aprovacao-card-completo.md).
+
+- [x] Backend `getPublicView()` retorna descrição, anexos (com URL pública), comentários, atividades, checklists, membros, líder, labels
+- [x] Frontend `/aprovar/[token]` renderiza descrição (RichEditor read-only), seções colapsáveis (anexos, checklists, histórico)
+- [x] Aviso de privacidade no doc: link expõe todo o conteúdo do card
 
 ---
 

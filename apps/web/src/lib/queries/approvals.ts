@@ -67,6 +67,50 @@ export interface DecideApprovalInput {
   note?: string;
 }
 
+export interface PublicApprovalAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageKey: string;
+  kind: 'FILE' | 'IMAGE' | 'LINK';
+  externalUrl: string | null;
+  createdAt: string;
+  /** URL publica resolvida pelo backend (storageKey ou externalUrl). */
+  publicUrl: string | null;
+}
+
+export interface PublicApprovalChecklistItem {
+  id: string;
+  text: string;
+  isDone: boolean;
+  position: number;
+  dueDate: string | null;
+}
+
+export interface PublicApprovalChecklist {
+  id: string;
+  title: string;
+  position: number;
+  items: PublicApprovalChecklistItem[];
+}
+
+export interface PublicApprovalComment {
+  id: string;
+  body: unknown;
+  editedAt: string | null;
+  createdAt: string;
+  author: { id: string; name: string; avatarUrl: string | null };
+}
+
+export interface PublicApprovalActivity {
+  id: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+  actor: { id: string; name: string; avatarUrl: string | null } | null;
+}
+
 export interface PublicApprovalView {
   reviewer: {
     id: string;
@@ -81,10 +125,23 @@ export interface PublicApprovalView {
       id: string;
       title: string;
       description: unknown;
-      priority: string;
+      priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+      startDate: string | null;
       dueDate: string | null;
+      completedAt: string | null;
+      estimateMinutes: number | null;
       board: { id: string; name: string; color: string | null };
       list: { id: string; name: string };
+      lead: { id: string; name: string; avatarUrl: string | null } | null;
+      labels: Array<{ label: { id: string; name: string; color: string } }>;
+      members: Array<{
+        role: 'MEMBER' | 'REVIEWER';
+        user: { id: string; name: string; avatarUrl: string | null };
+      }>;
+      checklists: PublicApprovalChecklist[];
+      attachments: PublicApprovalAttachment[];
+      comments: PublicApprovalComment[];
+      activities: PublicApprovalActivity[];
     };
   };
 }

@@ -5,17 +5,36 @@ import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  CheckSquare,
   Clock,
+  Download,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Link2,
   Loader2,
+  MessageSquare,
   ShieldCheck,
+  Square,
+  Tag,
   ThumbsDown,
   ThumbsUp,
+  Users,
   XCircle,
 } from 'lucide-react';
 
-import { approvalsQueries, publicDecideApproval } from '@/lib/queries/approvals';
+import {
+  approvalsQueries,
+  publicDecideApproval,
+  type PublicApprovalActivity,
+  type PublicApprovalAttachment,
+  type PublicApprovalChecklist,
+  type PublicApprovalComment,
+  type PublicApprovalView,
+} from '@/lib/queries/approvals';
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
+import { RichEditor } from '@/components/editor';
 
 /**
  * Página pública de aprovação. Acessada via link tokenizado enviado por
@@ -185,54 +204,419 @@ export default function PublicApprovalPage() {
   );
 }
 
-interface CardSummaryProps {
-  approval: {
-    requestedBy?: { id: string; name: string; avatarUrl: string | null };
-    card: {
-      title: string;
-      priority: string;
-      dueDate: string | null;
-      board: { name: string; color: string | null };
-      list: { name: string };
-    };
-  };
-}
+function CardSummary({ approval }: { approval: PublicApprovalView['approval'] }) {
+  const card = approval.card;
+  const hasDescription = Boolean(card.description) && JSON.stringify(card.description) !== '{}';
+  const labels = card.labels.map((l) => l.label);
 
-function CardSummary({ approval }: CardSummaryProps) {
   return (
-    <div className="border-border bg-bg-muted/30 flex flex-col gap-3 rounded-md border p-4">
-      <div>
-        <h2 className="text-base font-semibold leading-tight">{approval.card.title}</h2>
-        <p className="text-fg-muted mt-1 text-xs">
-          <span
-            className="border-border/60 inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5"
-            style={
-              approval.card.board.color
-                ? { borderColor: approval.card.board.color, color: approval.card.board.color }
-                : undefined
-            }
-          >
-            {approval.card.board.name}
-          </span>
-          <span className="ml-1.5">· {approval.card.list.name}</span>
-        </p>
-      </div>
-      {approval.requestedBy && (
-        <div className="flex items-center gap-2 text-xs">
-          <UserAvatar
-            name={approval.requestedBy.name}
-            userId={approval.requestedBy.id}
-            avatarUrl={approval.requestedBy.avatarUrl}
-            size="xs"
-          />
-          <span className="text-fg-muted">
-            <span className="text-fg font-medium">{approval.requestedBy.name}</span> pediu sua
-            aprovação
-          </span>
+    <div className="flex flex-col gap-4">
+      {/* Cabecalho do card */}
+      <div className="border-border bg-bg-muted/30 flex flex-col gap-3 rounded-md border p-4">
+        <div>
+          <h2 className="text-base font-semibold leading-tight">{card.title}</h2>
+          <p className="text-fg-muted mt-1 text-xs">
+            <span
+              className="border-border/60 inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5"
+              style={
+                card.board.color
+                  ? { borderColor: card.board.color, color: card.board.color }
+                  : undefined
+              }
+            >
+              {card.board.name}
+            </span>
+            <span className="ml-1.5">· {card.list.name}</span>
+          </p>
         </div>
+
+        {/* Metadata: prioridade + datas */}
+        <MetaRow card={card} />
+
+        {labels.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Tag size={12} className="text-fg-muted" />
+            {labels.map((l) => (
+              <span
+                key={l.id}
+                className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                style={{ backgroundColor: l.color + '33', color: l.color }}
+              >
+                {l.name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {(card.lead || card.members.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Users size={12} className="text-fg-muted" />
+            {card.lead && (
+              <span className="border-border/60 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]">
+                <UserAvatar
+                  name={card.lead.name}
+                  userId={card.lead.id}
+                  avatarUrl={card.lead.avatarUrl}
+                  size="xs"
+                />
+                <span className="font-medium">{card.lead.name}</span>
+                <span className="text-fg-muted">· líder</span>
+              </span>
+            )}
+            {card.members
+              .filter((m) => m.user.id !== card.lead?.id)
+              .map((m) => (
+                <span
+                  key={m.user.id}
+                  className="border-border/60 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]"
+                >
+                  <UserAvatar
+                    name={m.user.name}
+                    userId={m.user.id}
+                    avatarUrl={m.user.avatarUrl}
+                    size="xs"
+                  />
+                  {m.user.name}
+                </span>
+              ))}
+          </div>
+        )}
+
+        {approval.requestedBy && (
+          <div className="border-border/60 mt-1 flex items-center gap-2 border-t pt-3 text-xs">
+            <UserAvatar
+              name={approval.requestedBy.name}
+              userId={approval.requestedBy.id}
+              avatarUrl={approval.requestedBy.avatarUrl}
+              size="xs"
+            />
+            <span className="text-fg-muted">
+              <span className="text-fg font-medium">{approval.requestedBy.name}</span> pediu sua
+              aprovação
+            </span>
+          </div>
+        )}
+      </div>
+
+      {hasDescription && (
+        <Section title="Descrição" icon={<FileText size={13} />}>
+          <RichEditor value={card.description} readOnly onChange={() => undefined} />
+        </Section>
+      )}
+
+      {card.checklists.length > 0 && (
+        <Section title={`Checklists (${card.checklists.length})`} icon={<CheckSquare size={13} />}>
+          <ChecklistsView checklists={card.checklists} />
+        </Section>
+      )}
+
+      {card.attachments.length > 0 && (
+        <Section
+          title={`Anexos (${card.attachments.length})`}
+          icon={<FileText size={13} />}
+          defaultOpen
+        >
+          <AttachmentsView attachments={card.attachments} />
+        </Section>
+      )}
+
+      {(card.comments.length > 0 || card.activities.length > 0) && (
+        <Section title="Histórico" icon={<MessageSquare size={13} />}>
+          <TimelineView comments={card.comments} activities={card.activities} />
+        </Section>
       )}
     </div>
   );
+}
+
+function MetaRow({ card }: { card: PublicApprovalView['approval']['card'] }) {
+  const meta: React.ReactNode[] = [];
+  if (card.priority && card.priority !== 'NONE') {
+    meta.push(
+      <span key="prio" className={`text-[11px] font-medium ${priorityColor(card.priority)}`}>
+        {priorityLabel(card.priority)}
+      </span>,
+    );
+  }
+  if (card.startDate) {
+    meta.push(
+      <span key="start" className="text-fg-muted text-[11px]">
+        início {formatDate(card.startDate)}
+      </span>,
+    );
+  }
+  if (card.dueDate) {
+    meta.push(
+      <span key="due" className="text-fg-muted text-[11px]">
+        prazo {formatDate(card.dueDate)}
+      </span>,
+    );
+  }
+  if (card.completedAt) {
+    meta.push(
+      <span key="done" className="text-success text-[11px]">
+        finalizado {formatDate(card.completedAt)}
+      </span>,
+    );
+  }
+  if (meta.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {meta.map((m, i) => (
+        <span key={i}>{m}</span>
+      ))}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  icon,
+  children,
+  defaultOpen,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="border-border bg-bg-muted/20 group rounded-md border [&_summary::-webkit-details-marker]:hidden"
+    >
+      <summary className="text-fg flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-medium">
+        <span className="text-fg-muted">{icon}</span>
+        <span className="flex-1">{title}</span>
+        <span className="text-fg-muted text-[11px] group-open:hidden">expandir</span>
+        <span className="text-fg-muted hidden text-[11px] group-open:inline">recolher</span>
+      </summary>
+      <div className="border-border/60 border-t px-4 py-3">{children}</div>
+    </details>
+  );
+}
+
+function ChecklistsView({ checklists }: { checklists: PublicApprovalChecklist[] }) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {checklists.map((cl) => {
+        const total = cl.items.length;
+        const done = cl.items.filter((i) => i.isDone).length;
+        return (
+          <li key={cl.id} className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-fg text-sm font-medium">{cl.title}</span>
+              <span className="text-fg-muted text-[11px]">
+                {done}/{total}
+              </span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {cl.items.map((it) => (
+                <li key={it.id} className="flex items-start gap-2 text-xs">
+                  {it.isDone ? (
+                    <CheckSquare size={13} className="text-success mt-0.5 shrink-0" />
+                  ) : (
+                    <Square size={13} className="text-fg-subtle mt-0.5 shrink-0" />
+                  )}
+                  <span className={it.isDone ? 'text-fg-muted line-through' : 'text-fg'}>
+                    {it.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function AttachmentsView({ attachments }: { attachments: PublicApprovalAttachment[] }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {attachments.map((a) => (
+        <li
+          key={a.id}
+          className="border-border/60 hover:bg-bg-muted/40 flex items-center gap-3 rounded-md border p-2"
+        >
+          <span className="text-fg-muted shrink-0">
+            {a.kind === 'IMAGE' ? (
+              <ImageIcon size={16} />
+            ) : a.kind === 'LINK' ? (
+              <Link2 size={16} />
+            ) : (
+              <FileText size={16} />
+            )}
+          </span>
+          {a.kind === 'IMAGE' && a.publicUrl && (
+            <img
+              src={a.publicUrl}
+              alt={a.fileName}
+              className="border-border/60 size-12 shrink-0 rounded border object-cover"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-fg truncate text-xs font-medium">{a.fileName}</p>
+            <p className="text-fg-muted text-[11px]">
+              {formatBytes(a.sizeBytes)} · {a.mimeType}
+            </p>
+          </div>
+          {a.publicUrl ? (
+            <a
+              href={a.publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-border text-fg hover:bg-bg-muted shrink-0 rounded-md border px-2 py-1 text-[11px]"
+            >
+              {a.kind === 'LINK' ? <ExternalLink size={11} /> : <Download size={11} />}
+            </a>
+          ) : (
+            <span className="text-fg-subtle shrink-0 text-[10px]">indisponível</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TimelineView({
+  comments,
+  activities,
+}: {
+  comments: PublicApprovalComment[];
+  activities: PublicApprovalActivity[];
+}) {
+  // Merge ordenado por createdAt desc.
+  type Item =
+    | { kind: 'comment'; data: PublicApprovalComment; t: number }
+    | { kind: 'activity'; data: PublicApprovalActivity; t: number };
+  const items: Item[] = [
+    ...comments.map<Item>((c) => ({
+      kind: 'comment',
+      data: c,
+      t: new Date(c.createdAt).getTime(),
+    })),
+    ...activities.map<Item>((a) => ({
+      kind: 'activity',
+      data: a,
+      t: new Date(a.createdAt).getTime(),
+    })),
+  ].sort((a, b) => b.t - a.t);
+
+  return (
+    <ul className="flex flex-col gap-3">
+      {items.map((it, i) => (
+        <li key={i} className="flex items-start gap-2 text-xs">
+          {it.kind === 'comment' ? (
+            <CommentItem comment={it.data} />
+          ) : (
+            <ActivityItem activity={it.data} />
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CommentItem({ comment }: { comment: PublicApprovalComment }) {
+  return (
+    <>
+      <UserAvatar
+        name={comment.author.name}
+        userId={comment.author.id}
+        avatarUrl={comment.author.avatarUrl}
+        size="xs"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-fg font-medium">{comment.author.name}</span>
+          <span className="text-fg-muted text-[10px]">{formatDateTime(comment.createdAt)}</span>
+        </div>
+        <div className="text-fg mt-0.5 text-xs leading-relaxed">
+          <RichEditor value={comment.body} readOnly onChange={() => undefined} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ActivityItem({ activity }: { activity: PublicApprovalActivity }) {
+  return (
+    <>
+      {activity.actor ? (
+        <UserAvatar
+          name={activity.actor.name}
+          userId={activity.actor.id}
+          avatarUrl={activity.actor.avatarUrl}
+          size="xs"
+        />
+      ) : (
+        <span className="bg-bg-muted size-5 shrink-0 rounded-full" />
+      )}
+      <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
+        <span className="text-fg">
+          {activity.actor?.name ?? 'Sistema'} · {humanActivity(activity.type)}
+        </span>
+        <span className="text-fg-muted ml-1">{formatDateTime(activity.createdAt)}</span>
+      </div>
+    </>
+  );
+}
+
+function priorityColor(p: string): string {
+  switch (p) {
+    case 'URGENT':
+      return 'text-danger';
+    case 'HIGH':
+      return 'text-warning';
+    case 'MEDIUM':
+      return 'text-primary';
+    case 'LOW':
+      return 'text-fg-muted';
+    default:
+      return 'text-fg-muted';
+  }
+}
+function priorityLabel(p: string): string {
+  return (
+    {
+      URGENT: 'Urgente',
+      HIGH: 'Alta',
+      MEDIUM: 'Média',
+      LOW: 'Baixa',
+    }[p] ?? p
+  );
+}
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+function humanActivity(type: string): string {
+  const map: Record<string, string> = {
+    CARD_CREATED: 'criou o card',
+    CARD_UPDATED: 'atualizou o card',
+    CARD_MOVED: 'moveu o card',
+    CARD_COMPLETED: 'finalizou o card',
+    CARD_UNCOMPLETED: 'reabriu o card',
+    CARD_ARCHIVED: 'arquivou o card',
+    COMMENT_CREATED: 'comentou',
+    APPROVAL_REQUESTED: 'pediu aprovação',
+    APPROVAL_APPROVED: 'aprovou',
+    APPROVAL_REJECTED: 'reprovou',
+  };
+  return map[type] ?? type.toLowerCase().replace(/_/g, ' ');
 }
 
 function DecidedBanner({ status }: { status: string }) {
@@ -276,10 +660,10 @@ function DecidedBanner({ status }: { status: string }) {
 
 function CenteredCard({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="bg-bg-muted/40 flex min-h-screen items-center justify-center px-4 py-10">
+    <div className="bg-bg-muted/40 flex min-h-screen justify-center px-4 py-10">
       <div
-        className={`bg-bg border-border w-full rounded-lg border p-6 shadow-md ${
-          wide ? 'max-w-xl' : 'max-w-md'
+        className={`bg-bg border-border h-fit w-full rounded-lg border p-6 shadow-md ${
+          wide ? 'max-w-2xl' : 'max-w-md'
         }`}
       >
         {children}

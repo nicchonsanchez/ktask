@@ -16,6 +16,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
+import { StorageService } from '@/modules/storage/storage.service';
 
 import type {
   RequestApprovalRequest,
@@ -72,6 +73,7 @@ export class ApprovalsService {
     private readonly notifications: NotificationsService,
     private readonly whatsapp: WhatsAppHelper,
     private readonly events: EventEmitter2,
+    private readonly storage: StorageService,
   ) {}
 
   // ============================================================
@@ -786,6 +788,16 @@ export class ApprovalsService {
   // ============================================================
   // Public (token)
   // ============================================================
+  /**
+   * Doc 32: aprovador externo precisa ver TUDO do card pra decidir
+   * com responsabilidade — descricao rica, anexos, timeline, checklists,
+   * membros, labels. Antes era so titulo + board + lista + prioridade.
+   *
+   * Privacidade: o token tokenizado expoe TODO o conteudo do card pra
+   * quem tem o link. Aceitavel pela natureza do fluxo (cliente decide
+   * com base no contexto), mas solicitante deve evitar pedir aprovacao
+   * de cards com info sensivel da equipe (comentarios internos).
+   */
   async getPublicView(token: string) {
     const reviewer = await this.prisma.cardApprovalReviewer.findUnique({
       where: { accessToken: token },
@@ -799,9 +811,80 @@ export class ApprovalsService {
                 title: true,
                 description: true,
                 priority: true,
+                startDate: true,
                 dueDate: true,
+                completedAt: true,
+                estimateMinutes: true,
                 board: { select: { id: true, name: true, color: true } },
                 list: { select: { id: true, name: true } },
+                lead: { select: { id: true, name: true, avatarUrl: true } },
+                labels: {
+                  select: {
+                    label: { select: { id: true, name: true, color: true } },
+                  },
+                },
+                members: {
+                  select: {
+                    role: true,
+                    user: { select: { id: true, name: true, avatarUrl: true } },
+                  },
+                },
+                checklists: {
+                  select: {
+                    id: true,
+                    title: true,
+                    position: true,
+                    items: {
+                      select: {
+                        id: true,
+                        text: true,
+                        isDone: true,
+                        position: true,
+                        dueDate: true,
+                      },
+                      orderBy: { position: 'asc' },
+                    },
+                  },
+                  orderBy: { position: 'asc' },
+                },
+                attachments: {
+                  where: { embedded: false },
+                  select: {
+                    id: true,
+                    fileName: true,
+                    mimeType: true,
+                    sizeBytes: true,
+                    storageKey: true,
+                    kind: true,
+                    externalUrl: true,
+                    createdAt: true,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 50,
+                },
+                comments: {
+                  where: { deletedAt: null },
+                  select: {
+                    id: true,
+                    body: true,
+                    editedAt: true,
+                    createdAt: true,
+                    author: { select: { id: true, name: true, avatarUrl: true } },
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 50,
+                },
+                activities: {
+                  select: {
+                    id: true,
+                    type: true,
+                    payload: true,
+                    createdAt: true,
+                    actor: { select: { id: true, name: true, avatarUrl: true } },
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 50,
+                },
               },
             },
             requestedBy: { select: { id: true, name: true, avatarUrl: true } },
@@ -813,6 +896,15 @@ export class ApprovalsService {
     if (!reviewer) throw new NotFoundException('Token inválido.');
 
     const expired = reviewer.expiresAt.getTime() < Date.now();
+
+    // Hidrata URL publica pros anexos com storageKey (igual hydrateCoverInListResult
+    // de boards.service). externalUrl (links) usa diretamente.
+    const card = reviewer.approval.card;
+    const attachmentsHydrated = card.attachments.map((a) => ({
+      ...a,
+      publicUrl: a.externalUrl ?? this.tryPublicUrl(a.storageKey),
+    }));
+
     return {
       reviewer: {
         id: reviewer.id,
@@ -822,8 +914,20 @@ export class ApprovalsService {
         expiresAt: reviewer.expiresAt,
         expired,
       },
-      approval: reviewer.approval,
+      approval: {
+        ...reviewer.approval,
+        card: { ...card, attachments: attachmentsHydrated },
+      },
     };
+  }
+
+  /** Wrap em try/catch porque storage pode estar nao-configurado em dev. */
+  private tryPublicUrl(key: string): string | null {
+    try {
+      return this.storage.publicUrlFor(key);
+    } catch {
+      return null;
+    }
   }
 }
 
