@@ -7,6 +7,7 @@ import { PasswordService } from '@/common/crypto/password.service';
 import { TokenService } from '@/common/crypto/token.service';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { UsersService } from '@/modules/users/users.service';
+import { InvitationsService } from '@/modules/organizations/invitations.service';
 
 type MockedUser = {
   id: string;
@@ -88,6 +89,15 @@ describe('AuthService', () => {
         { provide: TokenService, useValue: tokens },
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
+        // Doc 34: AuthService passou a depender de InvitationsService
+        // para o fluxo signupFromInvite. Mock vazio cobre os testes
+        // existentes (login/refresh/logout) que nao tocam essa rota.
+        {
+          provide: InvitationsService,
+          useValue: {
+            previewByRawToken: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
