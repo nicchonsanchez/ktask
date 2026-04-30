@@ -5,20 +5,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Copy, MailPlus, Trash2, Check, Loader2, Search } from 'lucide-react';
+import { Copy, MailPlus, Trash2, Check, Loader2, Search, Send } from 'lucide-react';
 import { ORG_ROLE_LABELS, OrgRoleSchema, type OrgRole } from '@ktask/contracts';
 
 import { Button, Input, Label } from '@ktask/ui';
 import {
   inviteMember,
   membersQueries,
+  resendInvitation,
   revokeInvitation,
   type InvitationRow,
   type MemberRow,
 } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/lib/api-client';
-import { useConfirm } from '@/components/ui/dialogs';
+import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { UserAvatar } from '@/components/user-avatar';
 import { MemberDetailModal } from '@/components/settings/member-detail-modal';
 
@@ -296,9 +297,20 @@ function PendingInviteRow({
   onChange: () => void;
 }) {
   const confirm = useConfirm();
+  const notify = useNotify();
   const revoke = useMutation({
     mutationFn: () => revokeInvitation(invitation.id),
     onSuccess: onChange,
+  });
+  const resend = useMutation({
+    mutationFn: () => resendInvitation(invitation.id),
+    onSuccess: () => {
+      const channels = invitation.phone ? 'e-mail e WhatsApp' : 'e-mail';
+      notify.success(`Convite reenviado por ${channels}.`);
+      onChange();
+    },
+    onError: (err) =>
+      notify.error(err instanceof ApiError ? err.message : 'Falha ao reenviar convite.'),
   });
 
   return (
@@ -309,8 +321,19 @@ function PendingInviteRow({
           Papel: <span className="text-fg">{ORG_ROLE_LABELS[invitation.role]}</span> · Enviado por{' '}
           {invitation.invitedBy.name} · Expira{' '}
           {new Date(invitation.expiresAt).toLocaleDateString('pt-BR')}
+          {invitation.phone && ` · WhatsApp ${invitation.phone}`}
         </p>
       </div>
+      <button
+        type="button"
+        onClick={() => resend.mutate()}
+        disabled={resend.isPending || revoke.isPending}
+        title="Gera novo link e dispara nos canais configurados (link antigo deixa de valer)"
+        className="text-fg-muted hover:text-primary inline-flex items-center gap-1 text-xs disabled:opacity-50"
+      >
+        {resend.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+        Reenviar
+      </button>
       <button
         type="button"
         onClick={async () => {
@@ -324,8 +347,8 @@ function PendingInviteRow({
           )
             revoke.mutate();
         }}
-        disabled={revoke.isPending}
-        className="text-fg-muted hover:text-danger inline-flex items-center gap-1 text-xs"
+        disabled={revoke.isPending || resend.isPending}
+        className="text-fg-muted hover:text-danger inline-flex items-center gap-1 text-xs disabled:opacity-50"
       >
         <Trash2 size={12} /> Revogar
       </button>

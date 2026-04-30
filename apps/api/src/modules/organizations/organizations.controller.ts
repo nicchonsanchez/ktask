@@ -149,6 +149,29 @@ export class OrganizationsController {
     };
   }
 
+  @Post('invitations/:invitationId/resend')
+  @RequireOrgRole('ADMIN')
+  @ApiOperation({ summary: 'Reenviar convite (doc 35.1) — gera novo token e dispara canais' })
+  async resendInvitation(
+    @CurrentOrg() org: TenantContext,
+    @Param('invitationId') invitationId: string,
+  ) {
+    const { invitation, rawToken } = await this.invitations.resend(
+      invitationId,
+      org.organizationId,
+    );
+    return {
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        phone: invitation.phone,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt.toISOString(),
+      },
+      rawToken,
+    };
+  }
+
   @Delete('invitations/:invitationId')
   @RequireOrgRole('ADMIN')
   @ApiOperation({ summary: 'Revogar convite pendente' })

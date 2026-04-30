@@ -65,6 +65,23 @@ export function revokeInvitation(invitationId: string) {
   return api.delete(`/api/v1/organizations/invitations/${invitationId}`);
 }
 
+/**
+ * Doc 35.1: reenvia convite pendente. Backend gera novo token (link
+ * antigo deixa de valer), renova expiraçao e dispara email + WhatsApp.
+ */
+export function resendInvitation(invitationId: string) {
+  return api.post<{
+    invitation: {
+      id: string;
+      email: string;
+      phone: string | null;
+      role: OrgRole;
+      expiresAt: string;
+    };
+    rawToken: string;
+  }>(`/api/v1/organizations/invitations/${invitationId}/resend`, {});
+}
+
 export interface InvitePreview {
   email: string;
   role: OrgRole;

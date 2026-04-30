@@ -253,6 +253,39 @@ export class InvitationsService {
     });
   }
 
+  /**
+   * Doc 35.1: reenvia convite pendente — gera novo token (link antigo
+   * para de valer), renova expiresAt e dispara nos canais configurados
+   * (email sempre; WhatsApp se phone presente).
+   *
+   * Reutiliza email/role/phone do invite original. Util quando o
+   * convidado nao recebeu o link, perdeu, ou esta proximo de expirar.
+   */
+  async resend(invitationId: string, organizationId: string) {
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: invitationId },
+    });
+    if (!invite || invite.organizationId !== organizationId) {
+      throw new NotFoundException('Convite não encontrado.');
+    }
+    if (invite.acceptedAt) {
+      throw new BadRequestException('Convite já aceito não pode ser reenviado.');
+    }
+
+    const rawToken = this.tokens.generate();
+    const tokenHash = this.tokens.hash(rawToken);
+    const updated = await this.prisma.invitation.update({
+      where: { id: invitationId },
+      data: {
+        token: tokenHash,
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      },
+    });
+
+    void this.dispatchInvitationChannels(updated, rawToken).catch(() => undefined);
+    return { invitation: updated, rawToken };
+  }
+
   async revoke(invitationId: string, organizationId: string) {
     const invite = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
