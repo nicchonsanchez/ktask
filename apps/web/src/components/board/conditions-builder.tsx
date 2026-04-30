@@ -155,10 +155,10 @@ function ConditionRow({
         <select
           value={condition.field}
           onChange={(e) => changeField(e.target.value as AutomationCondition['field'])}
-          className="border-border focus:border-primary rounded-md border bg-transparent px-1.5 py-1 text-[12px] focus:outline-none"
+          className="border-border focus:border-primary bg-bg text-fg rounded-md border px-1.5 py-1 text-[12px] focus:outline-none"
         >
           {FIELDS.map((f) => (
-            <option key={f.value} value={f.value}>
+            <option key={f.value} value={f.value} className="bg-bg text-fg">
               {f.label}
             </option>
           ))}
@@ -168,10 +168,10 @@ function ConditionRow({
           onChange={(e) =>
             onChange({ ...condition, operator: e.target.value as never } as AutomationCondition)
           }
-          className="border-border focus:border-primary flex-1 rounded-md border bg-transparent px-1.5 py-1 text-[12px] focus:outline-none"
+          className="border-border focus:border-primary bg-bg text-fg flex-1 rounded-md border px-1.5 py-1 text-[12px] focus:outline-none"
         >
           {opsFor(condition.field).map((op) => (
-            <option key={op.value} value={op.value}>
+            <option key={op.value} value={op.value} className="bg-bg text-fg">
               {op.label}
             </option>
           ))}
