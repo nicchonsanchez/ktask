@@ -228,7 +228,10 @@ export class MeService {
 
   /**
    * GET /me/recent-cards — últimos cards visitados pelo user (até 12).
-   * Cards arquivados ficam fora. Boards arquivados também.
+   * Cards arquivados e boards arquivados ficam fora.
+   * Filtra apenas cards onde o user e lider OU membro da equipe — visitar
+   * um card por curiosidade nao deve fazer ele aparecer aqui se o user
+   * nao tem responsabilidade direta.
    */
   async getRecentCards(userId: string, org: TenantContext) {
     const visits = await this.prisma.cardVisit.findMany({
@@ -238,6 +241,7 @@ export class MeService {
           organizationId: org.organizationId,
           isArchived: false,
           board: { isArchived: false },
+          OR: [{ leadId: userId }, { members: { some: { userId } } }],
         },
       },
       include: {
