@@ -557,14 +557,34 @@ export class ApprovalsService {
       cardId: updated.approval.cardId,
     });
 
-    // Notifica o requester
+    // Notifica o requester com contexto: quem decidiu + titulo do card +
+    // nota opcional. Antes era so titulo generico ("Aprovacao concedida")
+    // sem nada no body — usuario nao sabia a qual card se referia.
+    const cardWithTitle = await this.prisma.card.findUnique({
+      where: { id: updated.approval.cardId },
+      select: { title: true },
+    });
+    let deciderName: string | null = decider.decidedByExternalName;
+    if (!deciderName && decider.decidedById) {
+      const u = await this.prisma.user.findUnique({
+        where: { id: decider.decidedById },
+        select: { name: true },
+      });
+      deciderName = u?.name ?? null;
+    }
+    const verb = newStatus === 'APPROVED' ? 'aprovou' : 'reprovou';
+    const cardTitle = cardWithTitle?.title ?? 'card';
+    const subject = deciderName ?? 'Alguém';
+    const note = body.note?.trim();
+    const summary = `${subject} ${verb} o card "${cardTitle}"${note ? ` — ${note}` : ''}`;
+
     await this.notifications
       .create({
         userId: updated.approval.requestedById,
         organizationId: updated.approval.organizationId,
         type: 'CUSTOM',
         title: newStatus === 'APPROVED' ? 'Aprovação concedida' : 'Aprovação reprovada',
-        body: body.note?.trim() || undefined,
+        body: summary,
         entityType: 'Card',
         entityId: updated.approval.cardId,
       })

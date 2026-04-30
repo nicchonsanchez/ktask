@@ -49,17 +49,21 @@ export class NotificationsScheduler {
       select: {
         id: true,
         title: true,
+        dueDate: true,
         organizationId: true,
         leadId: true,
         members: { select: { userId: true } },
+        list: { select: { name: true } },
+        board: { select: { name: true } },
       },
     });
 
     for (const card of dueToday) {
+      const where = card.list?.name ? ` (na coluna "${card.list.name}")` : '';
       await this.notifyCardRecipients(card, {
         type: 'DUE_SOON',
         title: `Prazo do card é hoje`,
-        body: card.title,
+        body: `O card "${card.title}" vence hoje${where}.`,
       });
     }
 
@@ -74,17 +78,25 @@ export class NotificationsScheduler {
       select: {
         id: true,
         title: true,
+        dueDate: true,
         organizationId: true,
         leadId: true,
         members: { select: { userId: true } },
+        list: { select: { name: true } },
+        board: { select: { name: true } },
       },
     });
 
     for (const card of overdue) {
+      const days = card.dueDate
+        ? Math.max(1, Math.floor((startOfTodayBRT.getTime() - card.dueDate.getTime()) / 86_400_000))
+        : 1;
+      const dayLabel = days === 1 ? '1 dia' : `${days} dias`;
+      const where = card.list?.name ? ` na coluna "${card.list.name}"` : '';
       await this.notifyCardRecipients(card, {
         type: 'DUE_SOON', // enum nao tem OVERDUE — titulo diferencia
         title: `Card está atrasado`,
-        body: card.title,
+        body: `"${card.title}" venceu há ${dayLabel}${where}.`,
       });
     }
 
