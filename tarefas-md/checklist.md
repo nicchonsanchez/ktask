@@ -305,7 +305,32 @@ cards (deletar todos / desvincular / mover pra outro / deletar só
 - [x] Endpoint POST `/v1/boards/:id/delete` — V1 com `archive-cascade` e `delete-all`
 - [x] UI: `delete-board-dialog.tsx` com preview + confirmação por nome pro `delete-all`
 - [ ] **V2:** estratégias `move` / `unlink` / `delete-orphans` (envolvem reassignment de `Card.boardId`)
-- [ ] **Bug correlato no importer:** cards com `shortCode` já existente devem **adicionar `CardPresence` no novo board** em vez de pular silenciosamente (doc/PR próprio — relacionado ao 28)
+
+---
+
+## Drawer de fluxos arquivados — doc 30
+
+Hoje não existe UI pra reativar fluxo arquivado (só endpoint solto). Plano
+completo: [30-fluxos-arquivados-drawer.md](30-fluxos-arquivados-drawer.md).
+
+- [ ] V1.1 doc 29: persistir `archivedCardIds` no payload da Activity `BOARD_ARCHIVED`
+- [ ] Migration: adicionar `BOARD_RESTORED` no enum `ActivityType`
+- [ ] Endpoint `GET /v1/boards/archived` (GESTOR+ via `ORG_ROLES_WITH_BOARD_BYPASS`)
+- [ ] `POST /v1/boards/:id/restore` aceita `{ restoreCascadedCards?: boolean }` (default true) — restaura cards usando `archivedCardIds` do payload
+- [ ] Frontend: `archived-boards-drawer.tsx` com lista, contagens, botão restaurar
+- [ ] Frontend: botão "Arquivados (N)" no header de `/quadros`, só pra GESTOR+ e quando N > 0
+
+---
+
+## Importer multi-fluxo — doc 31
+
+Cards já importados em outro board são silenciosamente pulados em vez de
+ganharem `CardPresence` no novo board. Plano: [31-importer-multi-fluxo.md](31-importer-multi-fluxo.md).
+
+- [ ] `importCard` (legado): substituir skip por upsert de `CardPresence`
+- [ ] `importCardWithMapping` (wizard V2): mesma lógica + suporte ao `forceCompleted` na presence nova
+- [ ] `ImportReport` ganha `linkedToFlow: number` separado de `created`/`skipped`
+- [ ] Frontend wizard mostra `linkedToFlow` no relatório final
 
 ---
 

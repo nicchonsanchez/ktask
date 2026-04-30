@@ -52,6 +52,9 @@ export interface ImportReport {
   totalRows: number;
   created: number;
   skipped: number;
+  /** Doc 31: cards que ja existiam (mesmo shortCode) e ganharam CardPresence
+   *  no board novo deste import. Multi-fluxo emergente. */
+  linkedToFlow: number;
   errors: Array<{ row: number; cardName: string; reason: string }>;
   createdContacts: number;
   createdLabels: number;
@@ -60,6 +63,13 @@ export interface ImportReport {
   /** Modo dry-run: nada foi commitado. */
   dryRun: boolean;
 }
+
+/** Resultado de importar uma linha. Doc 31 introduz 'linked' e 'already-linked'. */
+type CardImportOutcome = {
+  id: string;
+  shortCode: string;
+  outcome: 'created' | 'linked' | 'already-linked';
+};
 
 /**
  * Sugestao de match pra um nome do CSV. `score` 0-1, com 1 = match
@@ -265,6 +275,7 @@ export class ImporterService {
       totalRows: rows.length,
       created: 0,
       skipped: 0,
+      linkedToFlow: 0,
       errors: [],
       createdContacts: 0,
       createdLabels: 0,
@@ -358,7 +369,7 @@ export class ImporterService {
         continue;
       }
       try {
-        const created = await this.importCardWithMapping({
+        const result = await this.importCardWithMapping({
           row,
           tenant,
           userId,
@@ -370,9 +381,11 @@ export class ImporterService {
           report,
           forceCompleted: completeListNames.has(listSourceName),
         });
-        if (created) {
-          cardIdByShortCode.set(created.shortCode, created.id);
-          report.created++;
+        if (result) {
+          cardIdByShortCode.set(result.shortCode, result.id);
+          if (result.outcome === 'created') report.created++;
+          else if (result.outcome === 'linked') report.linkedToFlow++;
+          else report.skipped++;
         } else {
           report.skipped++;
         }
@@ -515,7 +528,7 @@ export class ImporterService {
     report: ImportReport;
     /** Se true, cria card com completedAt setado (coluna 'complete'). */
     forceCompleted?: boolean;
-  }): Promise<{ id: string; shortCode: string } | null> {
+  }): Promise<CardImportOutcome | null> {
     const {
       row,
       tenant,
@@ -532,14 +545,9 @@ export class ImporterService {
     const shortCode = row[HEADER_INDEX.identificador]?.trim();
     if (!shortCode) return null;
 
-    // Idempotencia
-    const existing = await this.prisma.card.findUnique({
-      where: { organizationId_shortCode: { organizationId: tenant.organizationId, shortCode } },
-      select: { id: true },
-    });
-    if (existing) return null;
-
-    // Resolve lista via mapping; fallback: cria com nome do CSV
+    // Resolve lista via mapping; fallback: cria com nome do CSV.
+    // Movido pra antes da idempotencia pra reusar pro caminho de linking
+    // multi-fluxo (doc 31).
     const listSourceName = row[HEADER_INDEX.colunaAtual]?.trim() || 'A fazer';
     let listId = listsByName.get(listSourceName);
     if (!listId) {
@@ -560,6 +568,69 @@ export class ImporterService {
       listId = created.id;
       listsByName.set(listSourceName, listId);
       report.createdLists++;
+    }
+
+    // Idempotencia + multi-fluxo (doc 31): card com mesmo shortCode ja
+    // existe na Org? Vincula ao novo board via CardPresence em vez de
+    // pular silenciosamente.
+    const existing = await this.prisma.card.findUnique({
+      where: { organizationId_shortCode: { organizationId: tenant.organizationId, shortCode } },
+      select: { id: true },
+    });
+    if (existing) {
+      const finalizadoEmExisting = this.parseDateBR(row[HEADER_INDEX.finalizadoEm]);
+      const presenceCompleted = forceCompleted || row[HEADER_INDEX.status]?.trim() === 'completed';
+
+      const presenceExisting = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId: existing.id, boardId } },
+        select: { removedAt: true },
+      });
+      if (presenceExisting && presenceExisting.removedAt === null) {
+        return { id: existing.id, shortCode, outcome: 'already-linked' };
+      }
+
+      const lastInList = await this.prisma.cardPresence.findFirst({
+        where: { listId },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      const positionLink = (lastInList?.position ?? 0) + 1024;
+
+      await this.prisma.cardPresence.upsert({
+        where: { cardId_boardId: { cardId: existing.id, boardId } },
+        update: {
+          listId,
+          position: positionLink,
+          removedAt: null,
+          completedAt: presenceCompleted ? (finalizadoEmExisting ?? new Date()) : null,
+          completedById: presenceCompleted ? userId : null,
+        },
+        create: {
+          cardId: existing.id,
+          boardId,
+          listId,
+          position: positionLink,
+          completedAt: presenceCompleted ? (finalizadoEmExisting ?? new Date()) : null,
+          completedById: presenceCompleted ? userId : null,
+        },
+      });
+
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId,
+          cardId: existing.id,
+          actorId: userId,
+          type: 'CARD_CREATED',
+          payload: {
+            via: 'ummense-import-v2',
+            action: 'linked-to-flow',
+            cardId: existing.id,
+          },
+        },
+      });
+
+      return { id: existing.id, shortCode, outcome: 'linked' };
     }
 
     // Datas
@@ -725,7 +796,7 @@ export class ImporterService {
       },
     });
 
-    return { id: card.id, shortCode: card.shortCode! };
+    return { id: card.id, shortCode: card.shortCode!, outcome: 'created' };
   }
 
   /**
@@ -859,6 +930,7 @@ export class ImporterService {
       totalRows: rows.length,
       created: 0,
       skipped: 0,
+      linkedToFlow: 0,
       errors: [],
       createdContacts: 0,
       createdLabels: 0,
@@ -924,7 +996,7 @@ export class ImporterService {
       const row = rows[i]!;
       const cardName = row[HEADER_INDEX.nome] || '(sem nome)';
       try {
-        const created = await this.importCard({
+        const result = await this.importCard({
           row,
           rowIndex: i,
           tenant,
@@ -936,9 +1008,11 @@ export class ImporterService {
           userByNormName,
           report,
         });
-        if (created) {
-          cardIdByShortCode.set(created.shortCode, created.id);
-          report.created++;
+        if (result) {
+          cardIdByShortCode.set(result.shortCode, result.id);
+          if (result.outcome === 'created') report.created++;
+          else if (result.outcome === 'linked') report.linkedToFlow++;
+          else report.skipped++;
         } else {
           report.skipped++;
         }
@@ -1019,7 +1093,7 @@ export class ImporterService {
     contactsByName: Map<string, string>;
     userByNormName: Map<string, string>;
     report: ImportReport;
-  }): Promise<{ id: string; shortCode: string } | null> {
+  }): Promise<CardImportOutcome | null> {
     const {
       row,
       tenant,
@@ -1035,16 +1109,8 @@ export class ImporterService {
     const shortCode = row[HEADER_INDEX.identificador]?.trim();
     if (!shortCode) return null;
 
-    // Idempotencia
-    const existing = await this.prisma.card.findUnique({
-      where: {
-        organizationId_shortCode: { organizationId: tenant.organizationId, shortCode },
-      },
-      select: { id: true },
-    });
-    if (existing) return null;
-
-    // Resolve lista
+    // Resolve lista (movido pra antes da idempotencia pra reusar no link
+    // multi-fluxo, doc 31)
     const listName = row[HEADER_INDEX.colunaAtual]?.trim() || 'A fazer';
     let listId = listsByName.get(listName);
     if (!listId) {
@@ -1073,6 +1139,54 @@ export class ImporterService {
         report.createdLists++;
       }
       listsByName.set(listName, listId);
+    }
+
+    // Idempotencia + multi-fluxo (doc 31)
+    const existing = await this.prisma.card.findUnique({
+      where: {
+        organizationId_shortCode: { organizationId: tenant.organizationId, shortCode },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      const finalizadoEmExisting = this.parseDateBR(row[HEADER_INDEX.finalizadoEm]);
+      const presenceCompleted = row[HEADER_INDEX.status]?.trim() === 'completed';
+
+      const presenceExisting = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId: existing.id, boardId } },
+        select: { removedAt: true },
+      });
+      if (presenceExisting && presenceExisting.removedAt === null) {
+        return { id: existing.id, shortCode, outcome: 'already-linked' };
+      }
+
+      const lastInList = await this.prisma.cardPresence.findFirst({
+        where: { listId },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      const positionLink = (lastInList?.position ?? 0) + 1024;
+
+      await this.prisma.cardPresence.upsert({
+        where: { cardId_boardId: { cardId: existing.id, boardId } },
+        update: {
+          listId,
+          position: positionLink,
+          removedAt: null,
+          completedAt: presenceCompleted ? (finalizadoEmExisting ?? new Date()) : null,
+          completedById: presenceCompleted ? userId : null,
+        },
+        create: {
+          cardId: existing.id,
+          boardId,
+          listId,
+          position: positionLink,
+          completedAt: presenceCompleted ? (finalizadoEmExisting ?? new Date()) : null,
+          completedById: presenceCompleted ? userId : null,
+        },
+      });
+
+      return { id: existing.id, shortCode, outcome: 'linked' };
     }
 
     // Datas
@@ -1247,7 +1361,7 @@ export class ImporterService {
       },
     });
 
-    return { id: card.id, shortCode: card.shortCode! };
+    return { id: card.id, shortCode: card.shortCode!, outcome: 'created' };
   }
 
   /**

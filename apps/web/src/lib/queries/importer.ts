@@ -4,6 +4,8 @@ export interface ImportReport {
   totalRows: number;
   created: number;
   skipped: number;
+  /** Doc 31: cards ja existentes que ganharam CardPresence neste board (multi-fluxo). */
+  linkedToFlow: number;
   errors: Array<{ row: number; cardName: string; reason: string }>;
   createdContacts: number;
   createdLabels: number;

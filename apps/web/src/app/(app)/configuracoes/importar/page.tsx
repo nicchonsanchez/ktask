@@ -615,6 +615,7 @@ function FinalReport({ report, onRestart }: { report: ImportReport; onRestart: (
       <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <Stat label="Linhas no CSV" value={report.totalRows} />
         <Stat label="Criados" value={report.created} highlight />
+        <Stat label="Vinculados ao fluxo" value={report.linkedToFlow} highlight />
         <Stat label="Pulados" value={report.skipped} muted />
         <Stat label="Erros" value={report.errors.length} danger={report.errors.length > 0} />
         <Stat label="Listas criadas" value={report.createdLists} />
