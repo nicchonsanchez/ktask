@@ -11,16 +11,19 @@ import {
   updateAutomation,
   type Automation,
   type AutomationActionType,
+  type AutomationCondition,
   type AutomationTrigger,
   type CreateAutomationInput,
 } from '@/lib/queries/automations';
 import { labelsQueries } from '@/lib/queries/labels';
 import { orgMembersQuery } from '@/lib/queries/cards';
+import { contactsQueries, type ContactRow } from '@/lib/queries/contacts';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
 import { TemplateVarsBar } from './template-vars-bar';
 import { VarTextarea, type TemplateVar } from './var-textarea';
 import { MessageTemplateButtons } from './message-template-buttons';
+import { ConditionsBuilder } from './conditions-builder';
 
 const COMMENT_VARS: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
@@ -34,22 +37,40 @@ const CHILD_TITLE_VARS: TemplateVar[] = [
   { token: '{{card.list.name}}', label: 'Coluna' },
 ];
 
-const WHATSAPP_VARS: TemplateVar[] = [
+const WHATSAPP_VARS_BASE: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
   { token: '{{card.list.name}}', label: 'Coluna' },
   { token: '{{card.board.name}}', label: 'Fluxo' },
   { token: '{{card.lead.name}}', label: 'Líder do card' },
   { token: '{{actor.name}}', label: 'Quem disparou' },
+];
+
+/** Modos User / Lead / Phone — vars de "destinatário" abstrato. */
+const WHATSAPP_VARS_RECIPIENT: TemplateVar[] = [
+  ...WHATSAPP_VARS_BASE,
   {
     token: '{{recipient.name}}',
-    label: 'Nome do contato',
+    label: 'Nome do destinatário',
     hint: 'Quem vai receber a mensagem',
   },
   {
     token: '{{recipient.firstName}}',
+    label: 'Primeiro nome do destinatário',
+    hint: 'Útil pra saudação informal',
+  },
+];
+
+/** Modos CARD_CONTACTS / CONTACT — vars do Contact específico (doc 33). */
+const WHATSAPP_VARS_CONTACT: TemplateVar[] = [
+  ...WHATSAPP_VARS_BASE,
+  { token: '{{contact.name}}', label: 'Nome do contato', hint: 'Nome do CRM' },
+  {
+    token: '{{contact.firstName}}',
     label: 'Primeiro nome do contato',
     hint: 'Útil pra saudação informal',
   },
+  { token: '{{contact.email}}', label: 'Email do contato' },
+  { token: '{{contact.phone}}', label: 'Telefone do contato' },
 ];
 
 /**
@@ -106,17 +127,19 @@ export function CreateAutomationForm({
     initial?.flowPosition ?? 'TOP',
   );
   // SEND_WHATSAPP: 3 modos de destinatário (lead do card / member da org / phone literal)
-  const [waRecipientMode, setWaRecipientMode] = useState<'CARD_LEAD' | 'USER' | 'PHONE'>(
-    initial?.waRecipientMode ?? 'CARD_LEAD',
-  );
+  const [waRecipientMode, setWaRecipientMode] = useState<
+    'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT'
+  >(initial?.waRecipientMode ?? 'CARD_LEAD');
   const [waUserId, setWaUserId] = useState(initial?.waUserId ?? '');
   const [waPhone, setWaPhone] = useState(initial?.waPhone ?? '');
+  const [waContactId, setWaContactId] = useState(initial?.waContactId ?? '');
   const [waTemplate, setWaTemplate] = useState(
     initial?.waTemplate ??
       'Olá! O card "{{card.title}}" entrou em "{{card.list.name}}". Pode dar uma olhada?',
   );
 
   const [label, setLabel] = useState(initial?.label ?? '');
+  const [conditions, setConditions] = useState<AutomationCondition[]>(initial?.conditions ?? []);
 
   // Quando editar uma automação diferente sem desmontar, ressincroniza state.
   useEffect(() => {
@@ -141,21 +164,23 @@ export function CreateAutomationForm({
     setWaRecipientMode(next.waRecipientMode);
     setWaUserId(next.waUserId);
     setWaPhone(next.waPhone);
+    setWaContactId(next.waContactId);
     setWaTemplate(next.waTemplate);
     setLabel(next.label);
+    setConditions(next.conditions);
   }, [editing]);
 
   const queryClient = useQueryClient();
   const notify = useNotify();
 
-  const labelsQ = useQuery({
-    ...labelsQueries.byBoard(boardId),
-    enabled: actionType === 'INSERT_TAGS' || actionType === 'REMOVE_TAGS',
-  });
-  const membersQ = useQuery({
-    ...orgMembersQuery,
-    enabled:
-      actionType === 'SET_LEAD' || actionType === 'ADD_TEAM' || actionType === 'SEND_WHATSAPP',
+  // labels e members também são usados pelo ConditionsBuilder, então
+  // ficam sempre habilitados — qualquer actionType pode ter condições
+  // de tags/lead.
+  const labelsQ = useQuery(labelsQueries.byBoard(boardId));
+  const membersQ = useQuery(orgMembersQuery);
+  const contactsQ = useQuery({
+    ...contactsQueries.list(),
+    enabled: actionType === 'SEND_WHATSAPP',
   });
 
   const createMut = useMutation({
@@ -178,10 +203,13 @@ export function CreateAutomationForm({
         waRecipientMode,
         waUserId,
         waPhone,
+        waContactId,
         waTemplate,
       });
       const triggerConfig =
         trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {};
+      // Backend distingue undefined (não mexer) de null (limpar). Lista vazia -> null.
+      const conditionsPayload = conditions.length > 0 ? conditions : null;
       if (editing) {
         return updateAutomation(editing.id, {
           trigger,
@@ -189,6 +217,7 @@ export function CreateAutomationForm({
           actionType,
           actionConfig,
           label: label.trim() ? label.trim() : null,
+          conditions: conditionsPayload,
         });
       }
       const input: CreateAutomationInput = {
@@ -197,6 +226,7 @@ export function CreateAutomationForm({
         actionType,
         actionConfig,
         label: label.trim() || undefined,
+        conditions: conditionsPayload,
       };
       return createAutomation(list.id, input);
     },
@@ -221,6 +251,7 @@ export function CreateAutomationForm({
       waRecipientMode,
       waUserId,
       waPhone,
+      waContactId,
       waTemplate,
     });
 
@@ -381,12 +412,16 @@ export function CreateAutomationForm({
             <SendWhatsAppConfig
               members={membersQ.data ?? []}
               membersLoading={membersQ.isLoading}
+              contacts={contactsQ.data ?? []}
+              contactsLoading={contactsQ.isLoading}
               recipientMode={waRecipientMode}
               setRecipientMode={setWaRecipientMode}
               userId={waUserId}
               setUserId={setWaUserId}
               phone={waPhone}
               setPhone={setWaPhone}
+              contactId={waContactId}
+              setContactId={setWaContactId}
               template={waTemplate}
               setTemplate={setWaTemplate}
             />
@@ -397,6 +432,18 @@ export function CreateAutomationForm({
               Configuração específica desta ação ainda não foi implementada.
             </p>
           )}
+        </section>
+
+        <section className="mt-5">
+          <h3 className="text-fg mb-2 text-[12px] font-semibold uppercase tracking-wide">
+            Quando rodar (condições)
+          </h3>
+          <ConditionsBuilder
+            conditions={conditions}
+            onChange={setConditions}
+            labels={labelsQ.data ?? []}
+            members={membersQ.data ?? []}
+          />
         </section>
 
         <section className="mt-5">
@@ -477,9 +524,10 @@ interface ConfigState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
-  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
   waUserId: string;
   waPhone: string;
+  waContactId: string;
   waTemplate: string;
 }
 
@@ -531,6 +579,8 @@ function buildActionConfig(
         ...(s.waRecipientMode === 'CARD_LEAD' ? { useCardLead: true } : {}),
         ...(s.waRecipientMode === 'USER' ? { userId: s.waUserId } : {}),
         ...(s.waRecipientMode === 'PHONE' ? { phone: s.waPhone.replace(/\D/g, '') } : {}),
+        ...(s.waRecipientMode === 'CARD_CONTACTS' ? { useCardContacts: true } : {}),
+        ...(s.waRecipientMode === 'CONTACT' ? { contactId: s.waContactId } : {}),
       };
     default:
       return {};
@@ -546,9 +596,10 @@ function validateAction(
     teamUserIds: string[];
     commentTemplate: string;
     childTitleTemplate: string;
-    waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+    waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
     waUserId: string;
     waPhone: string;
+    waContactId: string;
     waTemplate: string;
   },
 ): boolean {
@@ -576,6 +627,8 @@ function validateAction(
       if (s.waRecipientMode === 'CARD_LEAD') return true;
       if (s.waRecipientMode === 'USER') return Boolean(s.waUserId);
       if (s.waRecipientMode === 'PHONE') return /^\d{10,15}$/.test(s.waPhone.replace(/\D/g, ''));
+      if (s.waRecipientMode === 'CARD_CONTACTS') return true;
+      if (s.waRecipientMode === 'CONTACT') return Boolean(s.waContactId);
       return false;
     default:
       return false;
@@ -599,11 +652,13 @@ interface InitialState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
-  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
+  waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
   waUserId: string;
   waPhone: string;
+  waContactId: string;
   waTemplate: string;
   label: string;
+  conditions: AutomationCondition[];
 }
 
 /**
@@ -647,22 +702,31 @@ function extractInitial(a: Automation): InitialState {
     flowPosition: cfg.position === 'BOTTOM' ? 'BOTTOM' : 'TOP',
     waRecipientMode:
       a.actionType === 'SEND_WHATSAPP'
-        ? cfg.useCardLead === true
-          ? 'CARD_LEAD'
-          : typeof cfg.userId === 'string' && cfg.userId
-            ? 'USER'
-            : 'PHONE'
+        ? cfg.useCardContacts === true
+          ? 'CARD_CONTACTS'
+          : typeof cfg.contactId === 'string' && cfg.contactId
+            ? 'CONTACT'
+            : cfg.useCardLead === true
+              ? 'CARD_LEAD'
+              : typeof cfg.userId === 'string' && cfg.userId
+                ? 'USER'
+                : 'PHONE'
         : 'CARD_LEAD',
     waUserId:
       a.actionType === 'SEND_WHATSAPP' && typeof cfg.userId === 'string'
         ? (cfg.userId as string)
         : '',
     waPhone: typeof cfg.phone === 'string' ? (cfg.phone as string) : '',
+    waContactId:
+      a.actionType === 'SEND_WHATSAPP' && typeof cfg.contactId === 'string'
+        ? (cfg.contactId as string)
+        : '',
     waTemplate:
       a.actionType === 'SEND_WHATSAPP' && typeof cfg.template === 'string'
         ? (cfg.template as string)
         : '',
     label: a.label ?? '',
+    conditions: Array.isArray(a.conditions) ? a.conditions : [],
   };
 }
 
@@ -1100,28 +1164,46 @@ function CheckboxRow({
 function SendWhatsAppConfig({
   members,
   membersLoading,
+  contacts,
+  contactsLoading,
   recipientMode,
   setRecipientMode,
   userId,
   setUserId,
   phone,
   setPhone,
+  contactId,
+  setContactId,
   template,
   setTemplate,
 }: {
   members: Array<{ userId: string; user: { id: string; name: string; phone: string | null } }>;
   membersLoading: boolean;
-  recipientMode: 'CARD_LEAD' | 'USER' | 'PHONE';
-  setRecipientMode: (v: 'CARD_LEAD' | 'USER' | 'PHONE') => void;
+  contacts: ContactRow[];
+  contactsLoading: boolean;
+  recipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
+  setRecipientMode: (v: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT') => void;
   userId: string;
   setUserId: (v: string) => void;
   phone: string;
   setPhone: (v: string) => void;
+  contactId: string;
+  setContactId: (v: string) => void;
   template: string;
   setTemplate: (v: string) => void;
 }) {
   const membersWithPhone = members.filter((m) => m.user.phone);
+  // Doc 33: contato com phone valido (CRM aceita formato livre, mas pra
+  // WhatsApp precisa ter ao menos 10 digitos apos sanitizacao).
+  const contactsWithPhone = contacts.filter(
+    (c) => c.phone && c.phone.replace(/\D/g, '').length >= 10,
+  );
   const templateRef = useRef<HTMLTextAreaElement>(null);
+
+  // Doc 33: vars variam conforme modo. Modos de contato so mostram
+  // {{contact.*}}; outros mostram {{recipient.*}}.
+  const isContactMode = recipientMode === 'CARD_CONTACTS' || recipientMode === 'CONTACT';
+  const activeVars = isContactMode ? WHATSAPP_VARS_CONTACT : WHATSAPP_VARS_RECIPIENT;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1140,6 +1222,15 @@ function SendWhatsAppConfig({
           <ModeBtn active={recipientMode === 'PHONE'} onClick={() => setRecipientMode('PHONE')}>
             Número avulso
           </ModeBtn>
+          <ModeBtn
+            active={recipientMode === 'CARD_CONTACTS'}
+            onClick={() => setRecipientMode('CARD_CONTACTS')}
+          >
+            Contato do card
+          </ModeBtn>
+          <ModeBtn active={recipientMode === 'CONTACT'} onClick={() => setRecipientMode('CONTACT')}>
+            Contato fixo
+          </ModeBtn>
         </div>
       </div>
 
@@ -1148,6 +1239,40 @@ function SendWhatsAppConfig({
           Usa o telefone do líder do card no momento que a automação rodar. Se o líder não tiver
           telefone cadastrado no perfil, a automação registra a tentativa mas não envia.
         </p>
+      )}
+
+      {recipientMode === 'CARD_CONTACTS' && (
+        <p className="text-fg-subtle bg-bg-muted/40 rounded px-2 py-1.5 text-[11px] leading-relaxed">
+          Envia uma mensagem pra cada contato vinculado ao card no momento que a automação disparar.
+          Contatos sem WhatsApp são pulados (registrado na timeline). Card sem contatos vinculados
+          não envia nada.
+        </p>
+      )}
+
+      {recipientMode === 'CONTACT' && (
+        <div className="flex flex-col gap-1">
+          <label className="text-fg-muted text-[11px] font-medium">
+            Contato do CRM (precisa ter WhatsApp)
+          </label>
+          <select
+            value={contactId}
+            onChange={(e) => setContactId(e.target.value)}
+            className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          >
+            <option value="">Selecione um contato</option>
+            {contactsLoading && <option disabled>Carregando…</option>}
+            {contactsWithPhone.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.phone})
+              </option>
+            ))}
+          </select>
+          {!contactsLoading && contactsWithPhone.length === 0 && (
+            <p className="text-fg-subtle text-[11px]">
+              Nenhum contato com WhatsApp cadastrado. Adicione em /contatos.
+            </p>
+          )}
+        </div>
       )}
 
       {recipientMode === 'USER' && (
@@ -1201,7 +1326,7 @@ function SendWhatsAppConfig({
           ref={templateRef}
           value={template}
           onChange={setTemplate}
-          vars={WHATSAPP_VARS}
+          vars={activeVars}
           rows={4}
           placeholder='Digite / para inserir uma variável. Ex: O card "/título" entrou em /coluna'
         />
@@ -1209,7 +1334,7 @@ function SendWhatsAppConfig({
           inputRef={templateRef}
           value={template}
           onChange={setTemplate}
-          vars={WHATSAPP_VARS.map((v) => ({ token: v.token, label: v.label }))}
+          vars={activeVars.map((v) => ({ token: v.token, label: v.label }))}
         />
       </div>
     </div>

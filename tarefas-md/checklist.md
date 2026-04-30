@@ -345,6 +345,41 @@ externo precisa ver tudo pra decidir. Plano: [32-aprovacao-card-completo.md](32-
 
 ---
 
+## Automação WhatsApp: contato como destinatário — doc 33
+
+Action `SEND_WHATSAPP` ganhou 2 novos modos: **Contato do card** (dinâmico,
+fan-out pra todos os CardContact) e **Contato fixo** (Contact específico
+do CRM). Plano: [33-automacao-whatsapp-contato.md](33-automacao-whatsapp-contato.md).
+
+- [x] Frontend: 2 novos `ModeBtn` no `SendWhatsAppConfig`
+- [x] Frontend: dropdown de `Contact` filtrado por phone válido
+- [x] Frontend: variáveis scoped por modo (`{{contact.*}}` vs `{{recipient.*}}`)
+- [x] Backend: `handleSendWhatsApp` lida com `useCardContacts` e `contactId`, sanitiza phone livre, fan-out + Activity de resumo
+- [x] Card sem contatos vinculados: log "sem contatos" e não envia
+- [x] Contato sem phone válido: registrado em `attempts[]` + Activity de resumo
+- [ ] **V2 (backlog)**: 1 AutomationRun por contato (hoje 1 run com `attempts[]` no result)
+
+---
+
+## Configuração condicional das automações — doc 26
+
+Cada automação pode ter um filtro extra (AND-only) que precisa passar antes
+da action rodar. Field/operator/value: tags (containsAny, notContainsAny,
+containsAll, notContainsAll), priority (is/isNot/isAny/isNotAny), lead
+(is/isNot/isAny/isSet/isNotSet), dueDate (overdue/dueToday/dueWithinDays/
+dueAfterDays/hasDueDate/noDueDate). Plano:
+[26-automacoes-condicional.md](26-automacoes-condicional.md).
+
+- [x] Schema: `Automation.conditions Json?` + migration
+- [x] Backend: `condition.types.ts` com `evaluateConditions()` (AND), 16 unit tests verdes
+- [x] Backend: integração na engine — falha das condições registra `AutomationRun` SKIPPED com motivo
+- [x] DTO Zod: `discriminatedUnion` por `field`, max 10 condições por automação
+- [x] Frontend: `ConditionsBuilder` com seleção field/operator/value específicos
+- [x] Frontend: integrado no `CreateAutomationForm` + persistência no PATCH/POST
+- [x] Frontend: resumo da condição no `AutomationRow` (linha sutil com ícone Filter)
+
+---
+
 ## Pra fazer com user acordado (decisões + acessos)
 
 - [ ] **Subdomínio dev online (`dev.ktask.agenciakharis.com.br`)** — ambiente de teste online separado da prod. Envolve: DNS Cloudflare (registro A), Caddyfile na VM Hetzner, docker-compose.prod.yml estendido com containers de dev, banco `ktask_dev` separado, .env.dev, GitHub Actions workflow novo (deploy em push pra branch `dev`). Bate em SSH + Caddyfile prod + secrets — exige user acordado pra acompanhar. Estimativa: 2-3h dedicadas.

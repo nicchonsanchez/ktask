@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -73,6 +73,10 @@ export class AutomationsService {
         actionConfig: (input.actionConfig ?? {}) as Prisma.InputJsonValue,
         label: input.label ?? null,
         isActive: input.isActive ?? true,
+        conditions:
+          input.conditions !== undefined && input.conditions !== null
+            ? (input.conditions as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         createdById: userId,
       },
       include: {
@@ -107,6 +111,12 @@ export class AutomationsService {
             : undefined,
         label: input.label !== undefined ? input.label : undefined,
         isActive: input.isActive,
+        conditions:
+          input.conditions === undefined
+            ? undefined
+            : input.conditions === null
+              ? Prisma.JsonNull
+              : (input.conditions as unknown as Prisma.InputJsonValue),
       },
     });
   }

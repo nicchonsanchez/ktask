@@ -6,6 +6,7 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
 import { EVENT_NAMES, type CardMovedPayload } from '@/modules/realtime/events.types';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
+import { evaluateConditions, type AutomationCondition } from './condition.types';
 
 /**
  * Event emitido por ApprovalsService quando uma aprovação é decidida.
@@ -181,6 +182,33 @@ export class AutomationsEngine {
         startedAt: new Date(),
       },
     });
+
+    // Avalia configuracao condicional ANTES da action. Se nao passar,
+    // marca run como SKIPPED e nao chama o handler. Conditions null/vazio
+    // = automacao sempre roda (default).
+    const conditions = automation.conditions as AutomationCondition[] | null | undefined;
+    if (conditions && Array.isArray(conditions) && conditions.length > 0) {
+      const cardForEval = await this.prisma.card.findUnique({
+        where: { id: cardId },
+        select: {
+          priority: true,
+          leadId: true,
+          dueDate: true,
+          labels: { select: { labelId: true } },
+        },
+      });
+      const passes = cardForEval ? evaluateConditions(cardForEval, conditions) : false;
+      if (!passes) {
+        return this.prisma.automationRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'SKIPPED',
+            finishedAt: new Date(),
+            error: 'Condições não atendidas',
+          },
+        });
+      }
+    }
 
     try {
       const result = await this.routeAction(automation, cardId);
@@ -863,12 +891,27 @@ export class AutomationsEngine {
   private async handleSendWhatsApp(
     automation: Automation,
     cardId: string,
-  ): Promise<{ delivered: boolean; phone: string | null; reason?: string }> {
+  ): Promise<{
+    delivered: boolean;
+    phone: string | null;
+    reason?: string;
+    /** Doc 33: quando modo CARD_CONTACTS, registra cada tentativa. */
+    attempts?: Array<{
+      contactId: string;
+      name: string;
+      phone: string | null;
+      delivered: boolean;
+      reason?: string;
+    }>;
+  }> {
     const config = automation.actionConfig as {
       template?: string;
       phone?: string;
       userId?: string;
       useCardLead?: boolean;
+      // Doc 33
+      useCardContacts?: boolean;
+      contactId?: string;
     };
     const template = config.template?.trim();
     if (!template) {
@@ -887,11 +930,106 @@ export class AutomationsEngine {
       return { delivered: false, phone: null, reason: 'Card nao encontrado' };
     }
 
+    const actor = await this.prisma.user.findUnique({
+      where: { id: automation.createdById },
+      select: { name: true },
+    });
+
+    const baseVars = {
+      'card.title': card.title,
+      'card.list.name': card.list.name,
+      'card.board.name': card.board.name,
+      'card.lead.name': card.lead?.name ?? '',
+      'actor.name': actor?.name ?? 'Automação',
+    };
+
+    // ----- Doc 33: modo CARD_CONTACTS — fan out pra todos os contatos -----
+    if (config.useCardContacts) {
+      const cardContacts = await this.prisma.cardContact.findMany({
+        where: { cardId },
+        include: {
+          contact: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      });
+      if (cardContacts.length === 0) {
+        await this.logAutomationActivity(card, automation, 'sem contatos vinculados ao card');
+        return { delivered: false, phone: null, reason: 'Card sem contatos vinculados' };
+      }
+
+      const attempts: Array<{
+        contactId: string;
+        name: string;
+        phone: string | null;
+        delivered: boolean;
+        reason?: string;
+      }> = [];
+
+      for (const cc of cardContacts) {
+        const result = await this.sendToContact(template, baseVars, cc.contact);
+        attempts.push({
+          contactId: cc.contact.id,
+          name: cc.contact.name,
+          phone: result.phone,
+          delivered: result.delivered,
+          ...(result.reason ? { reason: result.reason } : {}),
+        });
+      }
+
+      const sent = attempts.filter((a) => a.delivered).length;
+      const skipped = attempts.length - sent;
+      const skippedNames = attempts
+        .filter((a) => !a.delivered)
+        .map((a) => a.name)
+        .join(', ');
+      const summary =
+        skipped === 0
+          ? `${sent} mensagem(ns) enviada(s) via WhatsApp aos contatos do card.`
+          : `${sent} enviada(s), ${skipped} pulada(s) (sem WhatsApp ou erro): ${skippedNames}`;
+      await this.logAutomationActivity(card, automation, summary);
+
+      return {
+        delivered: sent > 0,
+        phone: null,
+        attempts,
+        ...(sent === 0 ? { reason: 'Nenhum contato com WhatsApp valido' } : {}),
+      };
+    }
+
+    // ----- Doc 33: modo CONTACT (fixo do CRM) -----
+    if (config.contactId) {
+      const contact = await this.prisma.contact.findUnique({
+        where: { id: config.contactId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          organizationId: true,
+        },
+      });
+      if (!contact || contact.organizationId !== automation.organizationId) {
+        return { delivered: false, phone: null, reason: 'Contato nao encontrado' };
+      }
+      const result = await this.sendToContact(template, baseVars, contact);
+      if (!result.delivered) {
+        await this.logAutomationActivity(
+          card,
+          automation,
+          `Mensagem nao enviada para ${contact.name}: ${result.reason ?? 'erro'}`,
+        );
+      }
+      return {
+        delivered: result.delivered,
+        phone: result.phone,
+        ...(result.reason ? { reason: result.reason } : {}),
+      };
+    }
+
+    // ----- Modos legados (lead, member, phone literal) -----
     let phone: string | null = null;
     let recipientName: string | null = null;
     if (config.phone && /^\d{10,15}$/.test(config.phone)) {
       phone = config.phone;
-      // Numero avulso nao tem nome cadastrado — vars de recipient ficam vazias
     } else if (config.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: config.userId },
@@ -908,19 +1046,10 @@ export class AutomationsEngine {
       return { delivered: false, phone: null, reason: 'Destinatario sem telefone' };
     }
 
-    const actor = await this.prisma.user.findUnique({
-      where: { id: automation.createdById },
-      select: { name: true },
-    });
-
     const firstName = recipientName ? (recipientName.split(' ')[0] ?? '') : '';
 
     const text = renderTemplate(template, {
-      'card.title': card.title,
-      'card.list.name': card.list.name,
-      'card.board.name': card.board.name,
-      'card.lead.name': card.lead?.name ?? '',
-      'actor.name': actor?.name ?? 'Automação',
+      ...baseVars,
       'recipient.name': recipientName ?? '',
       'recipient.firstName': firstName,
     });
@@ -931,6 +1060,68 @@ export class AutomationsEngine {
       phone,
       ...(ok ? {} : { reason: 'Evolution rejeitou ou desabilitada' }),
     };
+  }
+
+  /**
+   * Doc 33: envia mensagem pra um Contact especifico, sanitizando phone
+   * (campo livre no CRM) e resolvendo vars de contato. Retorna outcome
+   * pra logging granular.
+   */
+  private async sendToContact(
+    template: string,
+    baseVars: Record<string, string>,
+    contact: { id: string; name: string; email: string | null; phone: string | null },
+  ): Promise<{ delivered: boolean; phone: string | null; reason?: string }> {
+    const sanitized = (contact.phone ?? '').replace(/\D/g, '');
+    if (!/^\d{10,15}$/.test(sanitized)) {
+      return {
+        delivered: false,
+        phone: null,
+        reason: contact.phone ? 'Phone do contato em formato invalido' : 'Contato sem WhatsApp',
+      };
+    }
+
+    const firstName = contact.name.split(' ')[0] ?? '';
+    const text = renderTemplate(template, {
+      ...baseVars,
+      'contact.name': contact.name,
+      'contact.firstName': firstName,
+      'contact.email': contact.email ?? '',
+      'contact.phone': sanitized,
+    });
+
+    const ok = await this.whatsapp.sendText(sanitized, text);
+    return {
+      delivered: ok,
+      phone: sanitized,
+      ...(ok ? {} : { reason: 'Evolution rejeitou ou desabilitada' }),
+    };
+  }
+
+  /**
+   * Doc 33: posta entrada na timeline do card resumindo a tentativa
+   * de envio. Reutiliza Activity tipo CARD_UPDATED com payload distinto
+   * pra evitar migration de enum.
+   */
+  private async logAutomationActivity(
+    card: { id: string; board: { name: string } },
+    automation: Automation,
+    summary: string,
+  ): Promise<void> {
+    await this.prisma.activity
+      .create({
+        data: {
+          organizationId: automation.organizationId,
+          cardId: card.id,
+          type: 'CARD_UPDATED',
+          payload: {
+            via: 'automation-whatsapp',
+            automationId: automation.id,
+            summary,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      })
+      .catch(() => undefined);
   }
 }
 

@@ -7,6 +7,7 @@ import {
   Bot,
   ChevronLeft,
   Eye,
+  Filter,
   Flag,
   GitBranch,
   Layers,
@@ -33,6 +34,7 @@ import {
   updateAutomation,
   type Automation,
   type AutomationActionType,
+  type AutomationCondition,
 } from '@/lib/queries/automations';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { labelsQueries } from '@/lib/queries/labels';
@@ -371,6 +373,12 @@ function AutomationRow({
         <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
           Quando: <strong>{describeTrigger(automation.trigger)}</strong>
         </p>
+        {automation.conditions && automation.conditions.length > 0 && (
+          <p className="text-fg-subtle mt-0.5 inline-flex items-center gap-1 text-[10px] leading-snug">
+            <Filter size={10} />
+            <span>{summarizeConditions(automation.conditions, lookups)}</span>
+          </p>
+        )}
       </div>
 
       <button
@@ -482,6 +490,56 @@ const ACTION_ICON: Partial<Record<AutomationActionType, LucideIcon>> = {
 function iconFor(action: AutomationActionType) {
   const Icon = ACTION_ICON[action] ?? Bot;
   return <Icon size={13} />;
+}
+
+const PRIORITY_PT: Record<string, string> = {
+  NONE: 'Sem prioridade',
+  LOW: 'Baixa',
+  MEDIUM: 'Média',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
+
+function summarizeConditions(conditions: AutomationCondition[], lookups: RowLookups): string {
+  return conditions.map((c) => summarizeOne(c, lookups)).join(' • ');
+}
+
+function summarizeOne(c: AutomationCondition, lookups: RowLookups): string {
+  if (c.field === 'tags') {
+    const names = c.value
+      .map((id) => lookups.labels.find((l) => l.id === id)?.name ?? id)
+      .join(', ');
+    const op =
+      c.operator === 'containsAny'
+        ? 'tem alguma de'
+        : c.operator === 'notContainsAny'
+          ? 'não tem nenhuma de'
+          : c.operator === 'containsAll'
+            ? 'tem todas'
+            : 'não tem todas';
+    return `${op}: ${names}`;
+  }
+  if (c.field === 'priority') {
+    const names = c.value.map((p) => PRIORITY_PT[p] ?? p).join(', ');
+    const op = c.operator === 'is' || c.operator === 'isAny' ? 'prioridade é' : 'prioridade não é';
+    return `${op} ${names}`;
+  }
+  if (c.field === 'lead') {
+    if (c.operator === 'isSet') return 'tem líder';
+    if (c.operator === 'isNotSet') return 'sem líder';
+    const ids = c.value ?? [];
+    const names = ids.map((id) => lookups.members.find((m) => m.id === id)?.name ?? id).join(', ');
+    const op = c.operator === 'isNot' ? 'líder não é' : 'líder é';
+    return `${op} ${names}`;
+  }
+  // dueDate
+  if (c.operator === 'overdue') return 'atrasado';
+  if (c.operator === 'dueToday') return 'vence hoje';
+  if (c.operator === 'hasDueDate') return 'tem prazo';
+  if (c.operator === 'noDueDate') return 'sem prazo';
+  if (c.operator === 'dueWithinDays') return `vence em até ${c.value ?? 0} dias`;
+  if (c.operator === 'dueAfterDays') return `vence depois de ${c.value ?? 0} dias`;
+  return c.operator;
 }
 
 // ---------------- Catálogo (criação) ----------------

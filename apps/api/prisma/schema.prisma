@@ -963,6 +963,10 @@ model Automation {
   /// Payload específico da action. Ex: { tagIds: ["..."] } pra INSERT_TAGS.
   actionConfig   Json                 @default("{}")
   isActive       Boolean              @default(true)
+  /// Configuração condicional (AND entre todas). Cada item é um
+  /// AutomationCondition (ver dto). Null/undefined = sempre roda.
+  /// Avaliado em executeAutomation antes de chamar a action.
+  conditions     Json?
   /// Label opcional pra o usuário identificar a automação na lista
   /// (ex: "Marcar como urgente quando entrar em A fazer").
   label          String?

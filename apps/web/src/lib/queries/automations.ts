@@ -30,6 +30,36 @@ export type AutomationActionType =
 
 export type AutomationRunStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 
+export type Priority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export type AutomationCondition =
+  | {
+      field: 'tags';
+      operator: 'containsAny' | 'notContainsAny' | 'containsAll' | 'notContainsAll';
+      value: string[];
+    }
+  | {
+      field: 'priority';
+      operator: 'is' | 'isNot' | 'isAny' | 'isNotAny';
+      value: Priority[];
+    }
+  | {
+      field: 'lead';
+      operator: 'is' | 'isNot' | 'isAny' | 'isSet' | 'isNotSet';
+      value?: string[];
+    }
+  | {
+      field: 'dueDate';
+      operator:
+        | 'overdue'
+        | 'dueToday'
+        | 'dueWithinDays'
+        | 'dueAfterDays'
+        | 'hasDueDate'
+        | 'noDueDate';
+      value?: number;
+    };
+
 export interface Automation {
   id: string;
   organizationId: string;
@@ -41,6 +71,7 @@ export interface Automation {
   actionConfig: Record<string, unknown>;
   isActive: boolean;
   label: string | null;
+  conditions: AutomationCondition[] | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +111,7 @@ export interface CreateAutomationInput {
   actionConfig?: Record<string, unknown>;
   label?: string;
   isActive?: boolean;
+  conditions?: AutomationCondition[] | null;
 }
 
 export function createAutomation(listId: string, input: CreateAutomationInput) {

@@ -1,5 +1,47 @@
 import { z } from 'zod';
 
+const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+
+const TagsConditionSchema = z.object({
+  field: z.literal('tags'),
+  operator: z.enum(['containsAny', 'notContainsAny', 'containsAll', 'notContainsAll']),
+  value: z.array(z.string().cuid()).min(1),
+});
+
+const PriorityConditionSchema = z.object({
+  field: z.literal('priority'),
+  operator: z.enum(['is', 'isNot', 'isAny', 'isNotAny']),
+  value: z.array(PrioritySchema).min(1),
+});
+
+const LeadConditionSchema = z.object({
+  field: z.literal('lead'),
+  operator: z.enum(['is', 'isNot', 'isAny', 'isSet', 'isNotSet']),
+  value: z.array(z.string().cuid()).optional(),
+});
+
+const DueDateConditionSchema = z.object({
+  field: z.literal('dueDate'),
+  operator: z.enum([
+    'overdue',
+    'dueToday',
+    'dueWithinDays',
+    'dueAfterDays',
+    'hasDueDate',
+    'noDueDate',
+  ]),
+  value: z.number().int().min(0).max(365).optional(),
+});
+
+export const AutomationConditionSchema = z.discriminatedUnion('field', [
+  TagsConditionSchema,
+  PriorityConditionSchema,
+  LeadConditionSchema,
+  DueDateConditionSchema,
+]);
+
+export const AutomationConditionsSchema = z.array(AutomationConditionSchema).max(10);
+
 export const AutomationTriggerSchema = z.enum([
   'CARD_ENTERED',
   'CARD_LEFT',
@@ -44,6 +86,7 @@ export const CreateAutomationSchema = z.object({
   actionConfig: z.record(z.string(), z.unknown()).optional(),
   label: z.string().max(120).trim().optional(),
   isActive: z.boolean().optional(),
+  conditions: AutomationConditionsSchema.optional().nullable(),
 });
 export type CreateAutomationRequest = z.infer<typeof CreateAutomationSchema>;
 
@@ -54,5 +97,6 @@ export const UpdateAutomationSchema = z.object({
   actionConfig: z.record(z.string(), z.unknown()).optional(),
   label: z.string().max(120).trim().nullable().optional(),
   isActive: z.boolean().optional(),
+  conditions: AutomationConditionsSchema.optional().nullable(),
 });
 export type UpdateAutomationRequest = z.infer<typeof UpdateAutomationSchema>;
