@@ -21,6 +21,8 @@ export interface InvitationRow {
   id: string;
   organizationId: string;
   email: string;
+  /** Doc 35: telefone opcional do convidado pra envio via WhatsApp. */
+  phone: string | null;
   role: OrgRole;
   expiresAt: string;
   createdAt: string;
@@ -46,11 +48,17 @@ export function removeMember(userId: string) {
   return api.delete(`/api/v1/organizations/members/${userId}`);
 }
 
-export function inviteMember(email: string, role: OrgRole) {
+export function inviteMember(input: { email: string; role: OrgRole; phone?: string }) {
   return api.post<{
-    invitation: { id: string; email: string; role: OrgRole; expiresAt: string };
+    invitation: {
+      id: string;
+      email: string;
+      phone: string | null;
+      role: OrgRole;
+      expiresAt: string;
+    };
     rawToken: string;
-  }>('/api/v1/organizations/invitations', { email, role });
+  }>('/api/v1/organizations/invitations', input);
 }
 
 export function revokeInvitation(invitationId: string) {

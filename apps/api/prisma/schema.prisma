@@ -301,6 +301,9 @@ model Invitation {
   id             String    @id @default(cuid())
   organizationId String
   email          String
+  /// Telefone opcional pra disparar convite tambem via WhatsApp (doc 35).
+  /// Formato livre (vai ser sanitizado pra E.164 antes do envio).
+  phone          String?
   role           OrgRole   @default(MEMBER)
   token          String    @unique
   invitedById    String

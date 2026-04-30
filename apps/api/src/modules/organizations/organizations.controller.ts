@@ -129,16 +129,19 @@ export class OrganizationsController {
     const { invitation, rawToken } = await this.invitations.create({
       organizationId: org.organizationId,
       email: body.email,
+      phone: body.phone,
       role: body.role,
       invitedById: user.userId,
       actorRole: org.role,
     });
-    // TODO: enviar e-mail via MailService. Por enquanto devolvemos o token
-    // (só em dev; em prod nunca expor o token na resposta).
+    // Doc 34/35: dispatch de email + WhatsApp ja roda fire-and-forget no
+    // service. Devolvemos o link copiavel pro admin como fallback (caso
+    // o convidado nao receba os canais automaticos).
     return {
       invitation: {
         id: invitation.id,
         email: invitation.email,
+        phone: invitation.phone,
         role: invitation.role,
         expiresAt: invitation.expiresAt.toISOString(),
       },

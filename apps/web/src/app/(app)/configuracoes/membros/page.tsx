@@ -25,6 +25,15 @@ import { MemberDetailModal } from '@/components/settings/member-detail-modal';
 const InviteSchema = z.object({
   email: z.string().email('E-mail inválido.').toLowerCase().trim(),
   role: OrgRoleSchema.exclude(['OWNER']),
+  // Doc 35: telefone opcional pra envio via WhatsApp em paralelo ao email.
+  // Campo livre — sanitizamos client-side antes de enviar; backend revalida.
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || v.replace(/\D/g, '').length >= 10,
+      'Telefone precisa de DDI+DDD+número (mín. 10 dígitos).',
+    ),
 });
 type InviteInput = z.infer<typeof InviteSchema>;
 
@@ -169,7 +178,12 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   });
 
   const mut = useMutation({
-    mutationFn: (input: InviteInput) => inviteMember(input.email, input.role),
+    mutationFn: (input: InviteInput) =>
+      inviteMember({
+        email: input.email,
+        role: input.role,
+        phone: input.phone?.replace(/\D/g, '') || undefined,
+      }),
     onSuccess: (res) => {
       setLastToken(res.rawToken);
       setSubmitError(null);
@@ -191,7 +205,7 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
       onSubmit={handleSubmit((v) => mut.mutate(v))}
       className="border-border bg-bg-subtle rounded-lg border p-4"
     >
-      <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">
+      <div className="grid gap-3 sm:grid-cols-[1fr_180px_180px_auto]">
         <div className="flex flex-col gap-1">
           <Label htmlFor="invite-email">E-mail</Label>
           <Input
@@ -202,6 +216,19 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
             {...register('email')}
           />
           {errors.email && <p className="text-danger text-xs">{errors.email.message}</p>}
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="invite-phone">
+            WhatsApp <span className="text-fg-subtle text-[10px]">(opcional)</span>
+          </Label>
+          <Input
+            id="invite-phone"
+            type="tel"
+            placeholder="5531999999999"
+            error={!!errors.phone}
+            {...register('phone')}
+          />
+          {errors.phone && <p className="text-danger text-xs">{errors.phone.message}</p>}
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="invite-role">Papel</Label>

@@ -37,6 +37,12 @@ export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequest
 export const InviteMemberRequestSchema = z.object({
   email: z.string().email().toLowerCase().trim(),
   role: OrgRoleSchema.exclude(['OWNER']),
+  /**
+   * Telefone opcional pra disparar convite tambem via WhatsApp (doc 35).
+   * Aceita formato livre — backend sanitiza pra digitos. Se informado,
+   * precisa virar 10-15 digitos apos sanitizacao.
+   */
+  phone: z.string().optional(),
 });
 export type InviteMemberRequest = z.infer<typeof InviteMemberRequestSchema>;
 

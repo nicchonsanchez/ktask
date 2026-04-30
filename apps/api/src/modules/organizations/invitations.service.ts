@@ -10,6 +10,7 @@ import { ORG_ROLE_RANK, ORG_ROLE_LABELS } from '@ktask/contracts';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { TokenService } from '@/common/crypto/token.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 import { env } from '@/config/env';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000; // 7 dias
@@ -17,6 +18,9 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000; // 7 dias
 interface CreateInvitationParams {
   organizationId: string;
   email: string;
+  /** Doc 35: telefone opcional. Quando informado, dispara convite tambem
+   *  via WhatsApp em paralelo ao email. Sanitizado pra digitos puros. */
+  phone?: string;
   role: OrgRole;
   invitedById: string;
   actorRole: OrgRole;
@@ -33,6 +37,7 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly mail: MailService,
+    private readonly whatsapp: WhatsAppHelper,
   ) {}
 
   async create(
@@ -40,6 +45,14 @@ export class InvitationsService {
   ): Promise<{ invitation: Invitation; rawToken: string }> {
     const { organizationId, email, role, invitedById, actorRole } = params;
     const emailNormalized = email.toLowerCase().trim();
+    // Doc 35: phone opcional. Sanitiza pra digitos; rejeita se invalido.
+    const phoneSanitized = params.phone ? params.phone.replace(/\D/g, '') : '';
+    if (params.phone && !/^\d{10,15}$/.test(phoneSanitized)) {
+      throw new BadRequestException(
+        'Telefone inválido. Use formato com DDI+DDD+número (10 a 15 dígitos).',
+      );
+    }
+    const phoneStored = phoneSanitized || null;
 
     // Regra: convites só por OWNER/ADMIN. Papel convidado não pode ser > rank do actor,
     // e ninguém pode convidar como OWNER (só transferência faz isso).
@@ -85,6 +98,7 @@ export class InvitationsService {
       data: {
         organizationId,
         email: emailNormalized,
+        phone: phoneStored,
         role,
         token: tokenHash, // armazena hash (nunca o raw)
         invitedById,
@@ -92,18 +106,17 @@ export class InvitationsService {
       },
     });
 
-    // Doc 34: dispara email de convite. Falha gracioso — admin sempre tem
-    // o link copiavel como fallback (nao quebramos a request se SMTP cai).
-    void this.dispatchInvitationEmail(invitation, rawToken).catch(() => undefined);
+    // Doc 34/35: dispara email + WhatsApp (se phone). Falha gracioso —
+    // admin sempre tem o link copiavel como fallback.
+    void this.dispatchInvitationChannels(invitation, rawToken).catch(() => undefined);
 
     return { invitation, rawToken };
   }
 
   /**
-   * Doc 34: monta link e envia email pro convidado. Roda fire-and-forget
-   * — vide chamada em create() com `void`.
+   * Doc 35: dispara email + WhatsApp em paralelo (fire-and-forget).
    */
-  private async dispatchInvitationEmail(invitation: Invitation, rawToken: string) {
+  private async dispatchInvitationChannels(invitation: Invitation, rawToken: string) {
     const [organization, inviter] = await Promise.all([
       this.prisma.organization.findUnique({
         where: { id: invitation.organizationId },
@@ -117,14 +130,66 @@ export class InvitationsService {
     if (!organization) return;
 
     const inviteUrl = `${env.APP_URL}/convite/${rawToken}`;
-    await this.mail.sendInvitation({
-      to: invitation.email,
-      inviteUrl,
-      organizationName: organization.name,
-      invitedByName: inviter?.name ?? null,
-      roleLabel: ORG_ROLE_LABELS[invitation.role],
-      expiresAt: invitation.expiresAt,
+    const roleLabel = ORG_ROLE_LABELS[invitation.role];
+
+    await Promise.allSettled([
+      this.mail.sendInvitation({
+        to: invitation.email,
+        inviteUrl,
+        organizationName: organization.name,
+        invitedByName: inviter?.name ?? null,
+        roleLabel,
+        expiresAt: invitation.expiresAt,
+      }),
+      invitation.phone
+        ? this.dispatchInvitationWhatsApp({
+            phone: invitation.phone,
+            inviteUrl,
+            email: invitation.email,
+            organizationName: organization.name,
+            invitedByName: inviter?.name ?? null,
+            roleLabel,
+            expiresAt: invitation.expiresAt,
+          })
+        : Promise.resolve(),
+    ]);
+  }
+
+  /**
+   * Doc 35: mensagem de convite via WhatsApp. Texto fixo sem emojis,
+   * inclui o email do convite explicitamente pra o destinatario saber
+   * com qual conta vai entrar.
+   */
+  private async dispatchInvitationWhatsApp(params: {
+    phone: string;
+    inviteUrl: string;
+    email: string;
+    organizationName: string;
+    invitedByName: string | null;
+    roleLabel: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    const { phone, inviteUrl, email, organizationName, invitedByName, roleLabel, expiresAt } =
+      params;
+    const inviter = invitedByName ? `${invitedByName} convidou você` : 'Você foi convidado(a)';
+    const expiresStr = expiresAt.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
     });
+    const text = [
+      '*Convite para KTask*',
+      '',
+      `${inviter} para entrar na *${organizationName}* como *${roleLabel}*.`,
+      '',
+      'Para aceitar, abra o link abaixo. Sua conta será criada com o e-mail:',
+      email,
+      '',
+      inviteUrl,
+      '',
+      `Este convite expira em ${expiresStr}.`,
+    ].join('\n');
+    await this.whatsapp.sendText(phone, text).catch(() => undefined);
   }
 
   /**

@@ -376,6 +376,19 @@ login pra usuário sem conta. Plano: [34-cadastro-via-convite.md](34-cadastro-vi
 
 ---
 
+## Convite por WhatsApp — doc 35
+
+Approach A: campo telefone opcional no form de convite, dispara nos 2 canais.
+Plano: [35-convite-whatsapp.md](35-convite-whatsapp.md).
+
+- [x] Migration `Invitation.phone` (TEXT NULL)
+- [x] Schema contracts: `InviteMemberRequestSchema` aceita `phone`
+- [x] Backend: `InvitationsService` sanitiza phone, persiste, dispara WhatsApp em paralelo ao email (Promise.allSettled, fire-and-forget)
+- [x] Mensagem WhatsApp inclui o e-mail do convite explicitamente
+- [x] Frontend: campo "WhatsApp (opcional)" no form de convite
+
+---
+
 ## Configuração condicional das automações — doc 26
 
 Cada automação pode ter um filtro extra (AND-only) que precisa passar antes
