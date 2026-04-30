@@ -1,4 +1,11 @@
-import { Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { env } from '@/config/env';
@@ -6,6 +13,7 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { PasswordService } from '@/common/crypto/password.service';
 import { TokenService } from '@/common/crypto/token.service';
 import { UsersService, type PublicUser } from '@/modules/users/users.service';
+import { InvitationsService } from '@/modules/organizations/invitations.service';
 
 import type { JwtAccessPayload, LoginResult } from './auth.types';
 
@@ -65,7 +73,71 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly password: PasswordService,
     private readonly tokens: TokenService,
+    private readonly invitations: InvitationsService,
   ) {}
+
+  /**
+   * Doc 34: cria User a partir de um convite valido + cria Membership +
+   * marca convite aceito + retorna sessao logada. Usado pra fluxo de
+   * cadastro inline na pagina /convite/[token] quando email do convite
+   * ainda nao tem User cadastrado.
+   *
+   * Race: se outro signup com mesmo email aconteceu enquanto o user digitava,
+   * lanca 409 (frontend mostra "ja tem conta, peca pra logar").
+   */
+  async signupFromInvite(params: {
+    token: string;
+    name: string;
+    password: string;
+    userAgent?: string;
+    ip?: string;
+  }): Promise<LoginResult> {
+    const { token, name, password, userAgent, ip } = params;
+
+    if (password.length < 8) {
+      throw new BadRequestException('Senha precisa de pelo menos 8 caracteres.');
+    }
+
+    const invitation = await this.invitations.previewByRawToken(token);
+    const email = invitation.email.toLowerCase();
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        'Já existe uma conta com este e-mail. Faça login e abra o link novamente para aceitar o convite.',
+      );
+    }
+
+    const passwordHash = await this.password.hash(password);
+
+    const userId = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: name.trim(),
+          passwordHash,
+        },
+        select: { id: true },
+      });
+      await tx.membership.create({
+        data: {
+          userId: user.id,
+          organizationId: invitation.organizationId,
+          role: invitation.role,
+        },
+      });
+      await tx.invitation.update({
+        where: { id: invitation.id },
+        data: { acceptedAt: new Date() },
+      });
+      return user.id;
+    });
+
+    return this.issueTokens(userId, email, { userAgent, ip, rememberMe: true });
+  }
 
   async login({
     email,

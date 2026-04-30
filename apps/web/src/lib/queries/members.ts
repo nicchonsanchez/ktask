@@ -62,6 +62,8 @@ export interface InvitePreview {
   role: OrgRole;
   expiresAt: string;
   organization: { id: string; name: string; slug: string; logoUrl: string | null };
+  /** Doc 34: false = email novo, mostra form de cadastro inline. */
+  userExists: boolean;
 }
 
 export function previewInvitation(token: string) {
@@ -76,4 +78,37 @@ export function acceptInvitation(token: string) {
     '/api/v1/invitations/accept',
     { token },
   );
+}
+
+/**
+ * Doc 34: cria conta a partir do convite e loga automaticamente.
+ * Backend cria User + Membership + marca convite aceito em transacao.
+ */
+export interface SignupFromInviteInput {
+  token: string;
+  name: string;
+  password: string;
+}
+
+export interface SignupFromInviteResult {
+  accessToken: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    avatarUrl: string | null;
+    phone: string | null;
+    notifyApprovalsOnWhatsApp: boolean;
+    locale: string;
+    timezone: string;
+    twoFactorEnabled: boolean;
+    createdAt: string;
+  };
+}
+
+export function signupFromInvite(input: SignupFromInviteInput) {
+  return api.post<SignupFromInviteResult>('/api/v1/auth/signup-from-invite', input, {
+    skipAuth: true,
+    skipAuthRefresh: true,
+  });
 }

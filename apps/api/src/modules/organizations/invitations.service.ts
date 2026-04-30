@@ -5,10 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Invitation, OrgRole } from '@prisma/client';
-import { ORG_ROLE_RANK } from '@ktask/contracts';
+import { ORG_ROLE_RANK, ORG_ROLE_LABELS } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { TokenService } from '@/common/crypto/token.service';
+import { MailService } from '@/modules/mail/mail.service';
+import { env } from '@/config/env';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1_000; // 7 dias
 
@@ -30,6 +32,7 @@ export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly mail: MailService,
   ) {}
 
   async create(
@@ -89,7 +92,39 @@ export class InvitationsService {
       },
     });
 
+    // Doc 34: dispara email de convite. Falha gracioso — admin sempre tem
+    // o link copiavel como fallback (nao quebramos a request se SMTP cai).
+    void this.dispatchInvitationEmail(invitation, rawToken).catch(() => undefined);
+
     return { invitation, rawToken };
+  }
+
+  /**
+   * Doc 34: monta link e envia email pro convidado. Roda fire-and-forget
+   * — vide chamada em create() com `void`.
+   */
+  private async dispatchInvitationEmail(invitation: Invitation, rawToken: string) {
+    const [organization, inviter] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: invitation.organizationId },
+        select: { name: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: invitation.invitedById },
+        select: { name: true },
+      }),
+    ]);
+    if (!organization) return;
+
+    const inviteUrl = `${env.APP_URL}/convite/${rawToken}`;
+    await this.mail.sendInvitation({
+      to: invitation.email,
+      inviteUrl,
+      organizationName: organization.name,
+      invitedByName: inviter?.name ?? null,
+      roleLabel: ORG_ROLE_LABELS[invitation.role],
+      expiresAt: invitation.expiresAt,
+    });
   }
 
   /**
@@ -106,7 +141,14 @@ export class InvitationsService {
     if (invitation.acceptedAt) throw new BadRequestException('Convite já aceito.');
     if (invitation.expiresAt < new Date()) throw new BadRequestException('Convite expirado.');
 
-    return invitation;
+    // Doc 34: indica se o email do convite ja tem User. Frontend usa
+    // pra decidir entre "form de cadastro inline" (false) e "logar e
+    // aceitar" (true).
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: invitation.email.toLowerCase() },
+      select: { id: true },
+    });
+    return { ...invitation, userExists: Boolean(existingUser) };
   }
 
   async accept(params: AcceptInvitationParams) {

@@ -16,11 +16,19 @@ import type { Request, Response } from 'express';
 import { LoginRequestSchema, type LoginRequest, type User as UserContract } from '@ktask/contracts';
 import { ZodValidationPipe } from '@/common/validation/zod-validation.pipe';
 import { env } from '@/config/env';
+import { z } from 'zod';
 
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthenticatedRequestContext } from './auth.types';
+
+const SignupFromInviteSchema = z.object({
+  token: z.string().min(10),
+  name: z.string().min(2).max(120).trim(),
+  password: z.string().min(8).max(200),
+});
+type SignupFromInviteRequest = z.infer<typeof SignupFromInviteSchema>;
 
 const REFRESH_COOKIE_NAME = 'ktask_refresh';
 
@@ -63,6 +71,30 @@ export class AuthController {
 
     res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, cookieOptions(result.refreshExpiresAt));
 
+    return {
+      accessToken: result.accessToken,
+      user: result.user,
+    };
+  }
+
+  @Public()
+  @Post('signup-from-invite')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 900_000, limit: 10 } })
+  @ApiOperation({ summary: 'Doc 34: cria conta a partir de convite e loga' })
+  async signupFromInvite(
+    @Body(new ZodValidationPipe(SignupFromInviteSchema)) body: SignupFromInviteRequest,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.signupFromInvite({
+      token: body.token,
+      name: body.name,
+      password: body.password,
+      userAgent: req.headers['user-agent'] ?? undefined,
+      ip: req.ip,
+    });
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, cookieOptions(result.refreshExpiresAt));
     return {
       accessToken: result.accessToken,
       user: result.user,

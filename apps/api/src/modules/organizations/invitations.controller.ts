@@ -26,6 +26,8 @@ export class InvitationsController {
       role: inv.role,
       expiresAt: inv.expiresAt.toISOString(),
       organization: inv.organization,
+      // Doc 34: usuario novo precisa de form de cadastro; existente loga e aceita.
+      userExists: inv.userExists,
     };
   }
 

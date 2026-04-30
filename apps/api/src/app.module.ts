@@ -37,6 +37,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { ImporterModule } from './modules/importer/importer.module';
 import { MembersAdminModule } from './modules/members-admin/members-admin.module';
 import { MessageTemplatesModule } from './modules/message-templates/message-templates.module';
+import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { MessageTemplatesModule } from './modules/message-templates/message-temp
     ]),
     PrismaModule,
     CryptoModule,
+    MailModule,
     UsersModule,
     AuthModule,
     OrganizationsModule,

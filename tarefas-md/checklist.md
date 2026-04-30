@@ -361,6 +361,21 @@ do CRM). Plano: [33-automacao-whatsapp-contato.md](33-automacao-whatsapp-contato
 
 ---
 
+## Cadastro via convite + mailer — doc 34
+
+Convite estava quebrado: email não era enviado e link redirecionava pra
+login pra usuário sem conta. Plano: [34-cadastro-via-convite.md](34-cadastro-via-convite.md).
+
+- [x] Backend `previewByRawToken` retorna `userExists: boolean`
+- [x] Backend `POST /v1/auth/signup-from-invite` (público, rate-limit 10/15min)
+- [x] Backend `AuthService.signupFromInvite`: cria User+Membership+marca convite em transação, retorna tokens
+- [x] Frontend `/convite/[token]` com form de cadastro inline quando `userExists=false`
+- [x] **Mailer integrado**: `MailService` com nodemailer + SMTP da Kharis (mail.agenciakharis.com.br:465 SSL)
+- [x] **Email automático**: `InvitationsService.create` dispara email com link tokenizado fire-and-forget (link copiável continua sendo fallback se SMTP cair)
+- [x] Recuperação de senha por e-mail (decisão pendente do checklist) **— infra pronta**, falta endpoint/UI
+
+---
+
 ## Configuração condicional das automações — doc 26
 
 Cada automação pode ter um filtro extra (AND-only) que precisa passar antes
