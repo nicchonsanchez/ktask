@@ -261,6 +261,8 @@ export class AutomationsEngine {
         return this.handleUpdateFlowPosition(automation, cardId);
       case 'SEND_WHATSAPP':
         return this.handleSendWhatsApp(automation, cardId);
+      case 'SET_PRIVACY':
+        return this.handleSetPrivacy(automation, cardId);
 
       // Handlers ainda não implementados
       case 'FILL_FIELDS':
@@ -674,6 +676,64 @@ export class AutomationsEngine {
     });
 
     return { status: config.status };
+  }
+
+  /**
+   * Doc 25 V1.1: SET_PRIVACY — altera Card.privacy quando o trigger
+   * dispara. Use case classico: card entra em "Negociacao interna" =>
+   * vira TEAM_ONLY; entra em "Aprovacao cliente" => volta pra PUBLIC.
+   *
+   * Idempotente — se ja esta no estado alvo, nao registra activity.
+   */
+  private async handleSetPrivacy(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ privacy: string; changed: boolean }> {
+    const config = automation.actionConfig as {
+      privacy?: 'PUBLIC' | 'TEAM_ONLY';
+    };
+    if (!config.privacy) throw new Error('Privacidade alvo não informada.');
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { boardId: true, organizationId: true, privacy: true },
+    });
+    if (!card) throw new Error('Card não encontrado.');
+
+    if (card.privacy === config.privacy) {
+      return { privacy: config.privacy, changed: false };
+    }
+
+    await this.prisma.card.update({
+      where: { id: cardId },
+      data: { privacy: config.privacy },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: 'CARD_UPDATED',
+        payload: {
+          kind: 'privacy_changed',
+          from: card.privacy,
+          to: config.privacy,
+          via: 'automation',
+          automationId: automation.id,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+    });
+
+    return { privacy: config.privacy, changed: true };
   }
 
   /**

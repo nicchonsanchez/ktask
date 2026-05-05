@@ -116,6 +116,10 @@ export function CreateAutomationForm({
   const [cardStatus, setCardStatus] = useState<'COMPLETED' | 'REOPENED' | 'ARCHIVED'>(
     initial?.cardStatus ?? 'COMPLETED',
   );
+  // Doc 25 V1.1: SET_PRIVACY action
+  const [cardPrivacy, setCardPrivacy] = useState<'PUBLIC' | 'TEAM_ONLY'>(
+    initial?.cardPrivacy ?? 'TEAM_ONLY',
+  );
   const [childTitleTemplate, setChildTitleTemplate] = useState(
     initial?.childTitleTemplate ?? 'Sub-tarefa de {{card.title}}',
   );
@@ -155,6 +159,7 @@ export function CreateAutomationForm({
     setTeamUserIds(next.teamUserIds);
     setCommentTemplate(next.commentTemplate);
     setCardStatus(next.cardStatus);
+    setCardPrivacy(next.cardPrivacy);
     setChildTitleTemplate(next.childTitleTemplate);
     setCopyLead(next.copyLead);
     setCopyTeam(next.copyTeam);
@@ -194,6 +199,7 @@ export function CreateAutomationForm({
         teamUserIds,
         commentTemplate,
         cardStatus,
+        cardPrivacy,
         childTitleTemplate,
         copyLead,
         copyTeam,
@@ -393,6 +399,10 @@ export function CreateAutomationForm({
             <CardStatusConfig value={cardStatus} onChange={setCardStatus} />
           )}
 
+          {actionType === 'SET_PRIVACY' && (
+            <CardPrivacyConfig value={cardPrivacy} onChange={setCardPrivacy} />
+          )}
+
           {actionType === 'CREATE_CHILD_CARD' && (
             <CreateChildConfig
               titleTemplate={childTitleTemplate}
@@ -493,6 +503,7 @@ const IMPLEMENTED = new Set<AutomationActionType>([
   'CREATE_CHILD_CARD',
   'UPDATE_FLOW_POSITION',
   'SEND_WHATSAPP',
+  'SET_PRIVACY',
 ]);
 
 const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: boolean }> = [
@@ -518,6 +529,7 @@ interface ConfigState {
   teamUserIds: string[];
   commentTemplate: string;
   cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+  cardPrivacy: 'PUBLIC' | 'TEAM_ONLY';
   childTitleTemplate: string;
   copyLead: boolean;
   copyTeam: boolean;
@@ -565,6 +577,8 @@ function buildActionConfig(
       return { template: s.commentTemplate.trim() };
     case 'SET_CARD_STATUS':
       return { status: s.cardStatus };
+    case 'SET_PRIVACY':
+      return { privacy: s.cardPrivacy };
     case 'CREATE_CHILD_CARD':
       return {
         titleTemplate: s.childTitleTemplate.trim(),
@@ -620,6 +634,8 @@ function validateAction(
       return s.commentTemplate.trim().length > 0;
     case 'SET_CARD_STATUS':
       return true; // sempre tem default 'COMPLETED'
+    case 'SET_PRIVACY':
+      return true; // default 'TEAM_ONLY'
     case 'CREATE_CHILD_CARD':
       return s.childTitleTemplate.trim().length > 0;
     case 'SEND_WHATSAPP':
@@ -646,6 +662,7 @@ interface InitialState {
   teamUserIds: string[];
   commentTemplate: string;
   cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+  cardPrivacy: 'PUBLIC' | 'TEAM_ONLY';
   childTitleTemplate: string;
   copyLead: boolean;
   copyTeam: boolean;
@@ -691,6 +708,10 @@ function extractInitial(a: Automation): InitialState {
       cfg.status === 'COMPLETED' || cfg.status === 'REOPENED' || cfg.status === 'ARCHIVED'
         ? (cfg.status as 'COMPLETED' | 'REOPENED' | 'ARCHIVED')
         : 'COMPLETED',
+    cardPrivacy:
+      cfg.privacy === 'PUBLIC' || cfg.privacy === 'TEAM_ONLY'
+        ? (cfg.privacy as 'PUBLIC' | 'TEAM_ONLY')
+        : 'TEAM_ONLY',
     childTitleTemplate:
       typeof cfg.titleTemplate === 'string'
         ? (cfg.titleTemplate as string)
@@ -1077,6 +1098,62 @@ function FlowPositionConfig({
           <span className="text-fg text-[13px]">{opt.label}</span>
         </label>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Doc 25 V1.1: subform da action SET_PRIVACY. Avisa que cards privados
+ * podem sumir pra quem nao esta na equipe — comportamento esperado mas
+ * vale alertar quem configura.
+ */
+function CardPrivacyConfig({
+  value,
+  onChange,
+}: {
+  value: 'PUBLIC' | 'TEAM_ONLY';
+  onChange: (next: 'PUBLIC' | 'TEAM_ONLY') => void;
+}) {
+  const options: Array<{ value: 'PUBLIC' | 'TEAM_ONLY'; label: string; hint: string }> = [
+    {
+      value: 'PUBLIC',
+      label: 'Público',
+      hint: 'Todos do fluxo conseguem ver o card.',
+    },
+    {
+      value: 'TEAM_ONLY',
+      label: 'Só equipe',
+      hint: 'Apenas líder e membros da equipe veem (admin/gestor da Org sempre veem).',
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-fg-muted text-[11px] font-medium">Mudar privacidade para:</p>
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className={`hover:bg-bg-muted/30 flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors ${
+            value === opt.value ? 'border-primary bg-primary-subtle/30' : 'border-border/60'
+          }`}
+        >
+          <input
+            type="radio"
+            name="card-privacy"
+            value={opt.value}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="accent-primary mt-0.5"
+          />
+          <div className="flex-1">
+            <p className="text-fg text-[13px] font-medium">{opt.label}</p>
+            <p className="text-fg-subtle mt-0.5 text-[11px]">{opt.hint}</p>
+          </div>
+        </label>
+      ))}
+      <p className="text-warning text-[11px] leading-snug">
+        Atenção: ao mudar pra &quot;Só equipe&quot;, o card pode sumir pra quem não estiver na lista
+        de membros do card. Comportamento esperado, mas vale avisar a equipe.
+      </p>
     </div>
   );
 }

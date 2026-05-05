@@ -26,7 +26,8 @@ export type AutomationActionType =
   | 'UNLINK_FLOW'
   | 'UPDATE_FLOW_POSITION'
   | 'FLAG_DUE_TODAY'
-  | 'FLAG_OVERDUE';
+  | 'FLAG_OVERDUE'
+  | 'SET_PRIVACY';
 
 export type AutomationRunStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 

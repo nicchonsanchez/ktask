@@ -13,6 +13,7 @@ import {
   Layers,
   ListChecks,
   Loader2,
+  Lock,
   Mail,
   MessageSquare,
   Pencil,
@@ -460,6 +461,7 @@ const ACTION_LABEL: Partial<Record<AutomationActionType, string>> = {
   UPDATE_FLOW_POSITION: 'Reposicionar na coluna',
   FLAG_DUE_TODAY: 'Sinalizar marcos para hoje',
   FLAG_OVERDUE: 'Sinalizar marcos atrasados',
+  SET_PRIVACY: 'Alterar privacidade do card',
 };
 
 function describeAction(action: AutomationActionType): string {
@@ -485,6 +487,7 @@ const ACTION_ICON: Partial<Record<AutomationActionType, LucideIcon>> = {
   UPDATE_FLOW_POSITION: GitBranch,
   FLAG_DUE_TODAY: Flag,
   FLAG_OVERDUE: Flag,
+  SET_PRIVACY: Lock,
 };
 
 function iconFor(action: AutomationActionType) {
@@ -619,6 +622,14 @@ const CATALOG: CatalogCategory[] = [
         plan: 'PRO',
         ready: true,
         description: 'Cria automaticamente um sub-card da família.',
+      },
+      {
+        key: 'SET_PRIVACY',
+        label: 'Alterar privacidade do card',
+        icon: Lock,
+        plan: 'PRO',
+        ready: true,
+        description: 'Torna o card público ou privado quando entrar/sair da coluna.',
       },
       {
         key: 'FILL_FIELDS',
