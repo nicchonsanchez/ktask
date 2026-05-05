@@ -427,6 +427,13 @@ model List {
 
 // ==================== Cards ====================
 
+/// Doc 25: niveis de privacidade do card. V1 com 2 niveis; V2 pode
+/// expandir pros 4 do Ummense (TEAM_VIEW, LEAD_ONLY) se precisar.
+enum CardPrivacy {
+  PUBLIC
+  TEAM_ONLY
+}
+
 model Card {
   id                String    @id @default(cuid())
   organizationId    String // denormalizado: acelera filtros e futura RLS
@@ -435,6 +442,9 @@ model Card {
   /// importadores podem gravar valores arbitrarios (ex: "20250409000751"
   /// preservando ID do Ummense). Indexado pra resolver lookups #N -> id.
   shortCode         String?
+  /// Doc 25: PUBLIC (default) = todos do board veem. TEAM_ONLY = so
+  /// lider + CardMember veem (OWNER/ADMIN/GESTOR da Org bypass).
+  privacy           CardPrivacy @default(PUBLIC)
   boardId           String
   listId            String
   title             String

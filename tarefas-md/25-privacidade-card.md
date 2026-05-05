@@ -1,8 +1,8 @@
-# 25 — Privacidade por card (parkado)
+# 25 — Privacidade por card
 
-> **Status:** PARKADO (2026-04-27). Doc captura a discussão pra retomar
-> sem redescobrir. Decisão: não fazer agora — boards já cobrem 90% dos
-> casos e não tem dor concreta no uso interno.
+> **Status (2026-05-05):** V1 em implementação. Desparkado a pedido do
+> user — uso interno cresceu, alguns cards precisam ser visíveis só pra
+> líder + equipe (ex: discussão sensível com cliente, salário, RH).
 
 ## Motivação
 
@@ -36,3 +36,26 @@ CSV exportado preserva esse campo (col 8 do exporter).
 - Filtro em todos os endpoints de listagem (boards, cards, search, indicadores)
 - UI: ícone de cadeado no card-mini quando não-public; seletor no modal
 - Activity entry quando muda privacidade
+
+## V1 entregue (escopo reduzido)
+
+Pra controlar complexidade, V1 foca no caminho mais simples:
+
+- **2 níveis** ao invés de 4: `PUBLIC` (default) e `TEAM_ONLY` (só lead +
+  CardMember veem). Os 4 níveis do Ummense são overkill pro uso interno
+  — quem precisa ocultar quase sempre quer "só minha equipe vê".
+- **Bypass por Org**: OWNER/ADMIN/GESTOR sempre veem todos os cards
+  (mesmo bypass de board listing).
+- **Helper centralizado**: `cardWhereForUser(userId, orgRole)` em
+  `common/util/card-privacy.ts` retorna fragment Prisma reutilizável.
+- **Aplicado em endpoints críticos**:
+  - `boards.getOne` (lists.cards no board view)
+  - `cards.findById` (modal individual)
+  - `search.search` (busca global)
+  - `me/recent-cards`, `me/tasks` (home)
+- **Não aplicado em V1**: admin endpoints, importer, indicadores
+  agregados (estes só GESTOR+ acessa, então já bypass).
+- **Activity log**: `CARD_UPDATED` com payload `{ kind: 'privacy_changed' }`
+  no PATCH.
+
+V2 (backlog) revisita se precisar dos 4 níveis Ummense.

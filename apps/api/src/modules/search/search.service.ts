@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 
 import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { cardVisibilityWhere } from '@/common/util/card-privacy';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 
 export interface SearchResult {
@@ -58,7 +59,8 @@ export class SearchService {
     });
     const visibleBoardIds = visibleBoards.map((b) => b.id);
 
-    // Cards: título contendo q, em boards visíveis, não arquivado
+    // Cards: título contendo q, em boards visíveis, não arquivado.
+    // Doc 25: filtra cards privados que o user nao pode ver.
     const cards = visibleBoardIds.length
       ? await this.prisma.card.findMany({
           where: {
@@ -66,6 +68,7 @@ export class SearchService {
             isArchived: false,
             boardId: { in: visibleBoardIds },
             title: { contains: q, mode: 'insensitive' },
+            ...cardVisibilityWhere(userId, tenant.role),
           },
           orderBy: [{ updatedAt: 'desc' }],
           take: 10,

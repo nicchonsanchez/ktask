@@ -24,6 +24,8 @@ export interface BoardListItem {
   isFavorite: boolean;
 }
 
+export type CardPrivacy = 'PUBLIC' | 'TEAM_ONLY';
+
 export interface CardListItem {
   id: string;
   /** Identificador curto ("#412"). Null em cards antigos antes do backfill. */
@@ -31,6 +33,8 @@ export interface CardListItem {
   title: string;
   position: number;
   priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  /** Doc 25: privacidade do card (cadeado mostrado no mini se nao-PUBLIC). */
+  privacy: CardPrivacy;
   dueDate: string | null;
   isArchived: boolean;
   enteredListAt: string;

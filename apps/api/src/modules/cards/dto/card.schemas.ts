@@ -12,6 +12,11 @@ export const CreateCardSchema = z.object({
 });
 export type CreateCardRequest = z.infer<typeof CreateCardSchema>;
 
+/** Doc 25: niveis de privacidade. PUBLIC = todos do board veem;
+ *  TEAM_ONLY = so lider + CardMember (mais bypass de OWNER/ADMIN/GESTOR). */
+export const CardPrivacySchema = z.enum(['PUBLIC', 'TEAM_ONLY']);
+export type CardPrivacyValue = z.infer<typeof CardPrivacySchema>;
+
 export const UpdateCardSchema = z.object({
   title: z.string().min(1).max(500).trim().optional(),
   description: z.any().optional().nullable(),
@@ -23,6 +28,8 @@ export const UpdateCardSchema = z.object({
   leadId: z.string().cuid().nullable().optional(),
   /** Capa do card: ID de um Attachment do próprio card. Null remove. */
   coverAttachmentId: z.string().cuid().nullable().optional(),
+  /** Doc 25: privacidade do card. */
+  privacy: CardPrivacySchema.optional(),
 });
 export type UpdateCardRequest = z.infer<typeof UpdateCardSchema>;
 

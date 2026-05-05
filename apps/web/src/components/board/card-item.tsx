@@ -2,7 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Calendar, MessageSquare, CheckSquare, Paperclip, ShieldCheck } from 'lucide-react';
+import { Calendar, MessageSquare, CheckSquare, Paperclip, ShieldCheck, Lock } from 'lucide-react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
@@ -155,7 +155,16 @@ function CardInner({ card }: { card: CardListItem }) {
 
       {/* Título — destaque máximo. shortCode fica só no modal pra não
           poluir o mini (especialmente IDs longos importados do Ummense). */}
-      <p className="text-fg line-clamp-3 text-sm font-medium leading-snug">{card.title}</p>
+      <p className="text-fg line-clamp-3 text-sm font-medium leading-snug">
+        {card.privacy === 'TEAM_ONLY' && (
+          <Lock
+            size={11}
+            className="text-fg-muted mr-1 inline-block align-baseline"
+            aria-label="Card privado — só líder e equipe"
+          />
+        )}
+        {card.title}
+      </p>
 
       {/* Meta row (prazo + contadores) — discreta, só aparece se há algo */}
       {hasMetaRow && (

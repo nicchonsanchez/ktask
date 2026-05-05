@@ -8,6 +8,7 @@ import { StorageService } from '@/modules/storage/storage.service';
 
 import { BoardAccessService } from './board-access.service';
 import type { DeleteBoardStrategyRequest } from './dto/board.schemas';
+import { cardVisibilityWhere } from '@/common/util/card-privacy';
 
 interface CreateBoardInput {
   name: string;
@@ -223,7 +224,8 @@ export class BoardsService {
                 where: {
                   removedAt: null,
                   completedAt: null,
-                  card: { isArchived: false },
+                  // Doc 25: filtra cards privados que o user nao pode ver.
+                  card: { isArchived: false, ...cardVisibilityWhere(userId, tenant.role) },
                 },
                 orderBy: { position: 'asc' },
                 include: {

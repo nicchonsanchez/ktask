@@ -171,6 +171,17 @@ export function CardModalContent({
     onSuccess: invalidate,
   });
 
+  // Doc 25: toggle de privacidade. PUBLIC <-> TEAM_ONLY.
+  const privacyMut = useMutation({
+    mutationFn: (privacy: CardDetail['privacy']) => updateCard(card.id, { privacy }),
+    onMutate: (next) => ({ prev: optimistic('privacy', next) }),
+    onError: (e, _v, ctx) => {
+      rollback(ctx?.prev);
+      notify.error(errorMessage(e, 'Erro ao alterar privacidade.'));
+    },
+    onSuccess: invalidate,
+  });
+
   const dueDateMut = useMutation({
     mutationFn: (iso: string | null) => updateCard(card.id, { dueDate: iso }),
     onMutate: (iso) => ({ prev: optimistic('dueDate', iso) }),
@@ -421,6 +432,40 @@ export function CardModalContent({
                         );
                       })}
                     </div>
+                  </div>
+                </Block>
+
+                {/* Doc 25: Privacidade do card */}
+                <Block icon={<Lock size={14} />} label="Privacidade">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => privacyMut.mutate('PUBLIC')}
+                      disabled={privacyMut.isPending}
+                      aria-pressed={card.privacy === 'PUBLIC'}
+                      className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                        card.privacy === 'PUBLIC'
+                          ? 'border-fg/20 bg-bg text-fg shadow-sm'
+                          : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
+                      }`}
+                      title="Todos do fluxo veem"
+                    >
+                      Público
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => privacyMut.mutate('TEAM_ONLY')}
+                      disabled={privacyMut.isPending}
+                      aria-pressed={card.privacy === 'TEAM_ONLY'}
+                      className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                        card.privacy === 'TEAM_ONLY'
+                          ? 'border-warning/40 bg-warning-subtle text-warning shadow-sm'
+                          : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
+                      }`}
+                      title="Só líder e equipe (admin/gestor da Org sempre veem)"
+                    >
+                      <Lock size={10} /> Só equipe
+                    </button>
                   </div>
                 </Block>
 

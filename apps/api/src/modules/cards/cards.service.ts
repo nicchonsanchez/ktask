@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Priority, Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
+import { canViewCard } from '@/common/util/card-privacy';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
@@ -29,6 +35,8 @@ interface UpdateCardInput {
   estimateMinutes?: number | null;
   leadId?: string | null;
   coverAttachmentId?: string | null;
+  /** Doc 25: privacidade do card. */
+  privacy?: 'PUBLIC' | 'TEAM_ONLY';
 }
 
 interface MoveCardInput {
@@ -206,6 +214,21 @@ export class CardsService {
       },
     });
     if (!result) return null;
+    // Doc 25: privacidade por card. Aplicada aqui pra reusar `members`
+    // ja carregados pelo include — evita query extra.
+    if (
+      !canViewCard(
+        {
+          privacy: result.privacy,
+          leadId: result.leadId,
+          members: result.members.map((m) => ({ userId: m.userId })),
+        },
+        userId,
+        tenant.role,
+      )
+    ) {
+      throw new ForbiddenException('Card privado — você não tem acesso.');
+    }
     const enabled = this.storage.isEnabled();
     const hydrate = <T extends { storageKey: string }>(a: T) => ({
       ...a,
@@ -274,8 +297,28 @@ export class CardsService {
         leadId: input.leadId !== undefined ? input.leadId : undefined,
         coverAttachmentId:
           input.coverAttachmentId !== undefined ? input.coverAttachmentId : undefined,
+        // Doc 25: privacidade. Activity log gerado abaixo se mudou.
+        privacy: input.privacy ?? undefined,
       },
     });
+
+    // Doc 25: log de mudanca de privacidade
+    if (input.privacy && input.privacy !== card.privacy) {
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId: card.boardId,
+          cardId,
+          actorId: userId,
+          type: 'CARD_UPDATED',
+          payload: {
+            kind: 'privacy_changed',
+            from: card.privacy,
+            to: input.privacy,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     if (leadChanged) {
       await this.prisma.activity.create({

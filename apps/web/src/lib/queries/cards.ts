@@ -10,6 +10,8 @@ export interface CardDetail {
   title: string;
   description: unknown | null;
   priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  /** Doc 25: privacidade do card. */
+  privacy: 'PUBLIC' | 'TEAM_ONLY';
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
@@ -128,6 +130,8 @@ export interface UpdateCardInput {
   estimateMinutes?: number | null;
   leadId?: string | null;
   coverAttachmentId?: string | null;
+  /** Doc 25: privacidade. */
+  privacy?: 'PUBLIC' | 'TEAM_ONLY';
 }
 
 export function updateCard(cardId: string, input: UpdateCardInput) {
