@@ -20,6 +20,8 @@ export interface BoardListItem {
   updatedAt: string;
   cardsCount: number;
   membersCount: number;
+  /** Doc 36: favorito por usuário logado. */
+  isFavorite: boolean;
 }
 
 export interface CardListItem {
@@ -129,6 +131,15 @@ export function archiveBoard(boardId: string) {
 
 export function restoreBoard(boardId: string) {
   return api.post(`/api/v1/boards/${boardId}/restore`, {});
+}
+
+/** Doc 36: favorita/desfavorita board pro user atual. */
+export function favoriteBoard(boardId: string) {
+  return api.post<{ ok: true }>(`/api/v1/boards/${boardId}/favorite`, {});
+}
+
+export function unfavoriteBoard(boardId: string) {
+  return api.delete<{ ok: true }>(`/api/v1/boards/${boardId}/favorite`);
 }
 
 export interface BoardDeletePreview {

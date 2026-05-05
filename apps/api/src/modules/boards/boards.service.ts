@@ -73,13 +73,22 @@ export class BoardsService {
           OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
         };
 
-    const boards = await this.prisma.board.findMany({
-      where,
-      orderBy: [{ updatedAt: 'desc' }],
-      include: {
-        _count: { select: { cards: true, members: true } },
-      },
-    });
+    const [boards, favorites] = await Promise.all([
+      this.prisma.board.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }],
+        include: {
+          _count: { select: { cards: true, members: true } },
+        },
+      }),
+      // Doc 36: favoritos do user atual. Usado pra injetar isFavorite no
+      // resultado e permitir que o frontend agrupe Favoritos vs Todos.
+      this.prisma.boardFavorite.findMany({
+        where: { userId },
+        select: { boardId: true },
+      }),
+    ]);
+    const favSet = new Set(favorites.map((f) => f.boardId));
 
     return boards.map((b) => ({
       id: b.id,
@@ -93,7 +102,31 @@ export class BoardsService {
       updatedAt: b.updatedAt,
       cardsCount: b._count.cards,
       membersCount: b._count.members,
+      isFavorite: favSet.has(b.id),
     }));
+  }
+
+  /**
+   * Doc 36: favorita um board pro user atual. Idempotente — re-favoritar
+   * nao duplica nem erra.
+   */
+  async favorite(userId: string, tenant: TenantContext, boardId: string) {
+    // Reaproveita assertAccess: nao deixa favoritar board que o user nao
+    // pode ver. VIEWER eh suficiente.
+    await this.access.assertAccess(userId, boardId, tenant, 'VIEWER');
+    await this.prisma.boardFavorite.upsert({
+      where: { userId_boardId: { userId, boardId } },
+      update: {},
+      create: { userId, boardId },
+    });
+    return { ok: true };
+  }
+
+  async unfavorite(userId: string, _tenant: TenantContext, boardId: string) {
+    await this.prisma.boardFavorite
+      .delete({ where: { userId_boardId: { userId, boardId } } })
+      .catch(() => undefined);
+    return { ok: true };
   }
 
   async create(params: {

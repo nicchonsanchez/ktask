@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Users, Layers, Loader2, Lock, Globe2 } from 'lucide-react';
+import { Plus, Users, Layers, Loader2, Lock, Globe2, Star } from 'lucide-react';
 
 import {
   Button,
@@ -20,7 +20,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@ktask/ui';
-import { boardsQueries, createBoard, type BoardListItem } from '@/lib/queries/boards';
+import {
+  boardsQueries,
+  createBoard,
+  favoriteBoard,
+  unfavoriteBoard,
+  type BoardListItem,
+} from '@/lib/queries/boards';
 import { ApiError } from '@/lib/api-client';
 
 const CreateSchema = z.object({
@@ -77,49 +83,119 @@ export default function BoardsPage() {
         </div>
       )}
 
-      {boards.data && boards.data.length > 0 && (
+      {boards.data && boards.data.length > 0 && <BoardsListing boards={boards.data} />}
+    </div>
+  );
+}
+
+/**
+ * Doc 36: separa em "Favoritos" (topo) + "Todos os fluxos" (embaixo).
+ * Dentro de cada grupo, ordem alfabetica por nome.
+ */
+function BoardsListing({ boards }: { boards: BoardListItem[] }) {
+  const sorted = [...boards].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const favorites = sorted.filter((b) => b.isFavorite);
+  const others = sorted.filter((b) => !b.isFavorite);
+
+  return (
+    <div className="flex flex-col gap-8">
+      {favorites.length > 0 && (
+        <section>
+          <h2 className="text-fg-muted mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+            <Star size={12} className="fill-warning text-warning" /> Favoritos
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {favorites.map((b) => (
+              <BoardCard key={b.id} board={b} />
+            ))}
+          </div>
+        </section>
+      )}
+      <section>
+        {favorites.length > 0 && (
+          <h2 className="text-fg-muted mb-3 text-xs font-semibold uppercase tracking-wide">
+            Todos os fluxos
+          </h2>
+        )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {boards.data.map((b) => (
+          {others.map((b) => (
             <BoardCard key={b.id} board={b} />
           ))}
         </div>
-      )}
+      </section>
     </div>
   );
 }
 
 function BoardCard({ board }: { board: BoardListItem }) {
   const color = board.color ?? 'hsl(var(--primary))';
+  const queryClient = useQueryClient();
+
+  // Doc 36: toggle de favorito otimista. Atualiza o cache local antes do
+  // round-trip e reverte em erro.
+  const favMut = useMutation({
+    mutationFn: () => (board.isFavorite ? unfavoriteBoard(board.id) : favoriteBoard(board.id)),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['boards'] });
+      const prev = queryClient.getQueryData<BoardListItem[]>(['boards']);
+      queryClient.setQueryData<BoardListItem[]>(['boards'], (old) =>
+        old?.map((b) => (b.id === board.id ? { ...b, isFavorite: !b.isFavorite } : b)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['boards'], ctx.prev);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['boards'] }),
+  });
+
   return (
-    <Link
-      href={`/b/${board.id}`}
-      className="border-border bg-bg-subtle hover:bg-bg-muted group relative overflow-hidden rounded-lg border p-4 transition-colors"
-    >
+    <div className="border-border bg-bg-subtle hover:bg-bg-muted group relative overflow-hidden rounded-lg border p-4 transition-colors">
       <div
         className="absolute inset-x-0 top-0 h-1"
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <h3 className="line-clamp-2 text-sm font-semibold">{board.name}</h3>
-        {board.visibility === 'PRIVATE' ? (
-          <Lock size={14} className="text-fg-muted shrink-0" aria-label="Privado" />
-        ) : (
-          <Globe2 size={14} className="text-fg-muted shrink-0" aria-label="Toda a empresa" />
+      <Link href={`/b/${board.id}`} className="block">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 pr-12 text-sm font-semibold">{board.name}</h3>
+          {board.visibility === 'PRIVATE' ? (
+            <Lock size={14} className="text-fg-muted shrink-0" aria-label="Privado" />
+          ) : (
+            <Globe2 size={14} className="text-fg-muted shrink-0" aria-label="Toda a empresa" />
+          )}
+        </div>
+        {board.description && (
+          <p className="text-fg-muted line-clamp-2 text-xs">{board.description}</p>
         )}
-      </div>
-      {board.description && (
-        <p className="text-fg-muted line-clamp-2 text-xs">{board.description}</p>
-      )}
-      <div className="text-fg-subtle mt-4 flex items-center gap-3 text-xs">
-        <span className="inline-flex items-center gap-1">
-          <Layers size={12} /> {board.cardsCount} cards
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Users size={12} /> {board.membersCount}
-        </span>
-      </div>
-    </Link>
+        <div className="text-fg-subtle mt-4 flex items-center gap-3 text-xs">
+          <span className="inline-flex items-center gap-1">
+            <Layers size={12} /> {board.cardsCount} cards
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Users size={12} /> {board.membersCount}
+          </span>
+        </div>
+      </Link>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          favMut.mutate();
+        }}
+        title={board.isFavorite ? 'Desfavoritar' : 'Favoritar'}
+        aria-label={board.isFavorite ? 'Desfavoritar fluxo' : 'Favoritar fluxo'}
+        className="hover:bg-bg-emphasis absolute right-3 top-3 rounded p-1 transition-colors"
+      >
+        <Star
+          size={14}
+          className={
+            board.isFavorite ? 'fill-warning text-warning' : 'text-fg-subtle hover:text-warning'
+          }
+        />
+      </button>
+    </div>
   );
 }
 

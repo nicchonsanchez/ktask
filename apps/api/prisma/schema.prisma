@@ -219,6 +219,7 @@ model User {
   invitationsSent        Invitation[]    @relation("InvitationCreator")
   boardMemberships       BoardMember[]
   boardsCreated          Board[]         @relation("BoardCreator")
+  boardFavorites         BoardFavorite[]
   cardsCreated           Card[]          @relation("CardCreator")
   cardsCompleted         Card[]          @relation("CardCompletedBy")
   cardsLeading           Card[]          @relation("CardLead")
@@ -365,8 +366,23 @@ model Board {
   cards          Card[]
   automations    Automation[]
   cardPresences  CardPresence[]
+  favorites      BoardFavorite[]
 
   @@index([organizationId, isArchived])
+}
+
+/// Doc 36: favorito de fluxo por usuario. Lista em /quadros separa
+/// favoritados no topo + alfabetico em ambos os grupos.
+model BoardFavorite {
+  userId       String
+  boardId      String
+  favoritedAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@id([userId, boardId])
+  @@index([userId])
 }
 
 model BoardMember {

@@ -94,6 +94,26 @@ export class BoardsController {
     return this.boards.restore(user.userId, org, boardId);
   }
 
+  @Post(':boardId/favorite')
+  @ApiOperation({ summary: 'Favoritar fluxo (doc 36) — pessoal por usuário' })
+  favorite(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.boards.favorite(user.userId, org, boardId);
+  }
+
+  @Delete(':boardId/favorite')
+  @ApiOperation({ summary: 'Desfavoritar fluxo' })
+  unfavorite(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.boards.unfavorite(user.userId, org, boardId);
+  }
+
   @Get(':boardId/delete-preview')
   @ApiOperation({ summary: 'Contagens pra preview de exclusao do board (doc 29)' })
   deletePreview(
