@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { TenantGuard } from '@/common/tenant/tenant.guard';
@@ -32,5 +32,28 @@ export class AdminController {
   @ApiOperation({ summary: 'Stats agregados de tarefas (ChecklistItem) da Org' })
   tasksStats(@CurrentOrg() org: TenantContext) {
     return this.service.tasksStats(org);
+  }
+
+  @Get('stats/companies')
+  @ApiOperation({
+    summary: 'Doc 38: Stats por empresa cliente (Contact COMPANY) — cards e horas',
+  })
+  companiesStats(
+    @CurrentOrg() org: TenantContext,
+    @Query('from') fromStr?: string,
+    @Query('to') toStr?: string,
+    @Query('boardId') boardId?: string,
+  ) {
+    // Defaults: ultimos 30 dias se nao passado.
+    const now = new Date();
+    const from = fromStr ? new Date(fromStr) : new Date(now.getTime() - 30 * 24 * 60 * 60_000);
+    const to = toStr ? new Date(toStr) : now;
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw new BadRequestException('Parametros from/to devem ser datas ISO validas.');
+    }
+    if (from > to) {
+      throw new BadRequestException('from precisa ser anterior a to.');
+    }
+    return this.service.companiesStats(org, { from, to, boardId: boardId || undefined });
   }
 }

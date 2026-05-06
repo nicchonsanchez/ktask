@@ -41,6 +41,33 @@ export interface TasksStats {
   doneByDay: Array<{ day: string; count: number }>;
 }
 
+export interface CompaniesStatsParams {
+  from?: string; // ISO date
+  to?: string; // ISO date
+  boardId?: string;
+}
+
+export interface CompaniesStatsRow {
+  company: { id: string; name: string };
+  cardsCreated: number;
+  cardsCompleted: number;
+  /** Soma dos durationSec dos TimeEntry no periodo. */
+  hoursSeconds: number;
+  cardsOpen: number;
+}
+
+export interface CompaniesStats {
+  period: { from: string; to: string };
+  boardId: string | null;
+  rows: CompaniesStatsRow[];
+  noCompany: {
+    cardsCreated: number;
+    cardsCompleted: number;
+    hoursSeconds: number;
+    cardsOpen: number;
+  };
+}
+
 export const indicatorsQueries = {
   cards: () => ({
     queryKey: ['indicators', 'cards'] as const,
@@ -49,5 +76,16 @@ export const indicatorsQueries = {
   tasks: () => ({
     queryKey: ['indicators', 'tasks'] as const,
     queryFn: () => api.get<TasksStats>('/api/v1/admin/stats/tasks'),
+  }),
+  companies: (params: CompaniesStatsParams) => ({
+    queryKey: ['indicators', 'companies', params] as const,
+    queryFn: () => {
+      const sp = new URLSearchParams();
+      if (params.from) sp.set('from', params.from);
+      if (params.to) sp.set('to', params.to);
+      if (params.boardId) sp.set('boardId', params.boardId);
+      const qs = sp.toString();
+      return api.get<CompaniesStats>(`/api/v1/admin/stats/companies${qs ? `?${qs}` : ''}`);
+    },
   }),
 };

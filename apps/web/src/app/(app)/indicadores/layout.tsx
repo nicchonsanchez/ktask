@@ -7,6 +7,7 @@ const TABS = [
   { href: '/indicadores/timesheet', label: 'Timesheet da organização' },
   { href: '/indicadores/cards', label: 'Indicadores de cards' },
   { href: '/indicadores/tarefas', label: 'Indicadores de tarefas' },
+  { href: '/indicadores/empresas', label: 'Por empresa' },
 ];
 
 export default function IndicadoresLayout({ children }: { children: React.ReactNode }) {
