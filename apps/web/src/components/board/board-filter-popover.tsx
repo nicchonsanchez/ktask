@@ -5,6 +5,7 @@ import { Filter, X } from 'lucide-react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@ktask/ui';
 import type { BoardDetail, CardListItem } from '@/lib/queries/boards';
+import { UserAvatar } from '@/components/user-avatar';
 
 export type Priority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type DueFilter = 'all' | 'today' | 'week' | 'overdue' | 'none';
@@ -13,6 +14,8 @@ export interface BoardFilters {
   onlyMine: boolean;
   priorities: Priority[];
   labelIds: string[];
+  /** Cards onde alguma destas pessoas e lider OU esta na equipe. */
+  userIds: string[];
   due: DueFilter;
 }
 
@@ -20,6 +23,7 @@ export const EMPTY_FILTERS: BoardFilters = {
   onlyMine: false,
   priorities: [],
   labelIds: [],
+  userIds: [],
   due: 'all',
 };
 
@@ -28,6 +32,7 @@ export function activeFilterCount(f: BoardFilters): number {
   if (f.onlyMine) n++;
   if (f.priorities.length > 0) n++;
   if (f.labelIds.length > 0) n++;
+  if (f.userIds.length > 0) n++;
   if (f.due !== 'all') n++;
   return n;
 }
@@ -73,6 +78,19 @@ export function BoardFilterPopover({
       : [...filters.labelIds, labelId];
     onFiltersChange({ ...filters, labelIds: next });
   }
+
+  function toggleUser(userId: string) {
+    const next = filters.userIds.includes(userId)
+      ? filters.userIds.filter((x) => x !== userId)
+      : [...filters.userIds, userId];
+    onFiltersChange({ ...filters, userIds: next });
+  }
+
+  // Membros do board ordenados alfabeticamente. Usa board.members ja
+  // carregado no detalhe — sem query extra.
+  const sortedMembers = [...board.members].sort((a, b) =>
+    a.user.name.localeCompare(b.user.name, 'pt-BR'),
+  );
 
   return (
     <Popover>
@@ -147,6 +165,41 @@ export function BoardFilterPopover({
               })}
             </div>
           </section>
+
+          {sortedMembers.length > 0 && (
+            <section>
+              <p className="text-fg-muted mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide">
+                Pessoas (líder ou equipe)
+              </p>
+              <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
+                {sortedMembers.map((m) => {
+                  const checked = filters.userIds.includes(m.user.id);
+                  return (
+                    <label
+                      key={m.user.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 ${
+                        checked ? 'bg-primary-subtle/30' : 'hover:bg-bg-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleUser(m.user.id)}
+                        className="accent-primary"
+                      />
+                      <UserAvatar
+                        name={m.user.name}
+                        userId={m.user.id}
+                        avatarUrl={m.user.avatarUrl}
+                        size="sm"
+                      />
+                      <span className="text-fg truncate text-[12px]">{m.user.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {board.labels.length > 0 && (
             <section>
@@ -244,6 +297,16 @@ export function applyBoardFilters(
     if (filters.labelIds.length > 0) {
       const cardLabels = c.labels.map((l) => l.label.id);
       const hasAny = filters.labelIds.some((id) => cardLabels.includes(id));
+      if (!hasAny) return false;
+    }
+
+    // Pessoas: card precisa ter pelo menos uma das selecionadas como
+    // lider OU em members (OR entre as escolhidas).
+    if (filters.userIds.length > 0) {
+      const cardUserIds = new Set<string>();
+      if (c.leadId) cardUserIds.add(c.leadId);
+      for (const m of c.members) cardUserIds.add(m.user.id);
+      const hasAny = filters.userIds.some((id) => cardUserIds.has(id));
       if (!hasAny) return false;
     }
 
