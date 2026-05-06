@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 
-import { meQueries } from '@/lib/queries/me';
+import { meQueries, type CalendarResponse } from '@/lib/queries/me';
+import { userViewQueries } from '@/lib/queries/user-view';
 
 /**
  * Calendário compacto da home pessoal.
@@ -21,16 +22,20 @@ import { meQueries } from '@/lib/queries/me';
 export function MiniCalendar({
   selectedDay,
   onSelectDay,
+  viewAsUserId,
 }: {
   selectedDay?: string | null;
   onSelectDay?: (day: string) => void;
+  viewAsUserId?: string;
 }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
-  const { data } = useQuery({ ...meQueries.calendar(monthKey) });
+  const { data } = useQuery<CalendarResponse>(
+    viewAsUserId ? userViewQueries.calendar(viewAsUserId, monthKey) : meQueries.calendar(monthKey),
+  );
   const todayKey = useMemo(() => {
     const t = new Date();
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;

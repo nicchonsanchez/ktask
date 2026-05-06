@@ -9,7 +9,9 @@ import {
   bulkRescheduleToday,
   createStandaloneTask,
   type MeTask,
+  type MeTasksResponse,
 } from '@/lib/queries/me';
+import { userViewQueries } from '@/lib/queries/user-view';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { TarefaRow } from './tarefa-row';
 import { CreateTaskDialog } from './create-task-dialog';
@@ -27,14 +29,22 @@ import { CreateTaskDialog } from './create-task-dialog';
 export function TarefasPanel({
   selectedDay,
   onClearFilter,
+  viewAsUserId,
+  boardFilter,
 }: {
   selectedDay?: string | null;
   onClearFilter?: () => void;
+  viewAsUserId?: string;
+  boardFilter?: string | null;
 }) {
+  const readOnly = !!viewAsUserId;
   const [collapsed, setCollapsed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const tasksQuery = useQuery({ ...meQueries.tasks() });
-  const data = tasksQuery.data;
+  const tasksQuery = useQuery<MeTasksResponse>(
+    viewAsUserId ? userViewQueries.tasks(viewAsUserId) : meQueries.tasks(),
+  );
+  const rawData = tasksQuery.data;
+  const data = boardFilter && rawData ? filterTasksByBoard(rawData, boardFilter) : rawData;
   const filteredTasks = selectedDay && data ? filterTasksByDay(data, selectedDay) : null;
 
   return (
@@ -51,15 +61,17 @@ export function TarefasPanel({
             {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </button>
           <h2 className="text-fg text-sm font-semibold">Tarefas</h2>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            title="Adicionar tarefa rápida"
-            aria-label="Adicionar tarefa"
-            className="bg-primary-subtle text-primary hover:bg-primary hover:text-primary-fg inline-flex size-6 items-center justify-center rounded transition-colors"
-          >
-            <Plus size={13} />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              title="Adicionar tarefa rápida"
+              aria-label="Adicionar tarefa"
+              className="bg-primary-subtle text-primary hover:bg-primary hover:text-primary-fg inline-flex size-6 items-center justify-center rounded transition-colors"
+            >
+              <Plus size={13} />
+            </button>
+          )}
         </div>
       </div>
       <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -83,8 +95,10 @@ export function TarefasPanel({
 
           {!tasksQuery.isLoading && data && !filteredTasks && (
             <>
-              {data.overdue.length > 0 && <OverdueSection tasks={data.overdue} />}
-              <TodaySection tasks={data.today} />
+              {data.overdue.length > 0 && (
+                <OverdueSection tasks={data.overdue} readOnly={readOnly} />
+              )}
+              <TodaySection tasks={data.today} readOnly={readOnly} />
               {data.next7.length > 0 && <Next7Section tasks={data.next7} />}
               {data.noDate.length > 0 && <NoDateSection tasks={data.noDate} />}
 
@@ -104,7 +118,7 @@ export function TarefasPanel({
   );
 }
 
-function OverdueSection({ tasks }: { tasks: MeTask[] }) {
+function OverdueSection({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boolean }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const notify = useNotify();
@@ -133,14 +147,16 @@ function OverdueSection({ tasks }: { tasks: MeTask[] }) {
     <div>
       <div className="flex items-center justify-between gap-2 px-3 pb-1 pt-3 sm:px-4">
         <p className="text-fg-muted text-[12px] font-medium">Atrasadas</p>
-        <button
-          type="button"
-          onClick={handleRescheduleAll}
-          disabled={rescheduleMut.isPending}
-          className="text-primary hover:text-primary-hover text-[11px] font-medium disabled:opacity-60"
-        >
-          {rescheduleMut.isPending ? 'Atualizando…' : 'Atualizar todas as tarefas para hoje'}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={handleRescheduleAll}
+            disabled={rescheduleMut.isPending}
+            className="text-primary hover:text-primary-hover text-[11px] font-medium disabled:opacity-60"
+          >
+            {rescheduleMut.isPending ? 'Atualizando…' : 'Atualizar todas as tarefas para hoje'}
+          </button>
+        )}
       </div>
       {tasks.map((t) => (
         <TarefaRow key={t.id} task={t} variant="overdue" />
@@ -149,7 +165,7 @@ function OverdueSection({ tasks }: { tasks: MeTask[] }) {
   );
 }
 
-function TodaySection({ tasks }: { tasks: MeTask[] }) {
+function TodaySection({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boolean }) {
   const total = tasks.length;
   const done = 0; // a query só traz isDone=false; future: incluir done de hoje
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -174,7 +190,7 @@ function TodaySection({ tasks }: { tasks: MeTask[] }) {
       ) : (
         tasks.map((t) => <TarefaRow key={t.id} task={t} variant="today" />)
       )}
-      <InlineAddTaskRow />
+      {!readOnly && <InlineAddTaskRow />}
     </div>
   );
 }
@@ -352,6 +368,19 @@ function filterTasksByDay(
     const localKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
     return localKey === day;
   });
+}
+
+function filterTasksByBoard(data: MeTasksResponse, boardId: string): MeTasksResponse {
+  function pick(t: MeTask): boolean {
+    if (t.kind === 'checklist') return t.checklist.card.boardId === boardId;
+    return false; // standalone tasks não têm board — escondidas no filtro
+  }
+  return {
+    overdue: data.overdue.filter(pick),
+    today: data.today.filter(pick),
+    next7: data.next7.filter(pick),
+    noDate: data.noDate.filter(pick),
+  };
 }
 
 function inferVariantForDay(

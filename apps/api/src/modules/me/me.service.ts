@@ -283,6 +283,112 @@ export class MeService {
   }
 
   /**
+   * Resumo do estado de tarefas do user — counts dos 4 buckets (overdue/today/
+   * next7/noDate). Usado pelos contadores na lista de membros (/empresa) e
+   * no banner do modo "ver como".
+   *
+   * Mistura ChecklistItem (com card não arquivado) + standalone Task. Mesmo
+   * filtro de getTasks, só que retorna count em vez do payload completo.
+   */
+  async getSummary(userId: string, org: TenantContext) {
+    const { startOfDayUtc, endOfDayUtc, endOfNext7Utc } = this.brtDayBoundaries();
+
+    const baseWhereCl = {
+      assigneeId: userId,
+      isDone: false,
+      checklist: {
+        card: {
+          organizationId: org.organizationId,
+          isArchived: false,
+          board: { isArchived: false },
+        },
+      },
+    } as const;
+
+    const baseWhereTask = {
+      assigneeId: userId,
+      isDone: false,
+      organizationId: org.organizationId,
+    } as const;
+
+    const [
+      clOverdue,
+      clToday,
+      clNext7,
+      clNoDate,
+      tOverdue,
+      tToday,
+      tNext7,
+      tNoDate,
+      recentActivityCount,
+    ] = await Promise.all([
+      this.prisma.checklistItem.count({
+        where: { ...baseWhereCl, dueDate: { lt: startOfDayUtc } },
+      }),
+      this.prisma.checklistItem.count({
+        where: { ...baseWhereCl, dueDate: { gte: startOfDayUtc, lt: endOfDayUtc } },
+      }),
+      this.prisma.checklistItem.count({
+        where: { ...baseWhereCl, dueDate: { gte: endOfDayUtc, lt: endOfNext7Utc } },
+      }),
+      this.prisma.checklistItem.count({ where: { ...baseWhereCl, dueDate: null } }),
+      this.prisma.task.count({ where: { ...baseWhereTask, dueDate: { lt: startOfDayUtc } } }),
+      this.prisma.task.count({
+        where: { ...baseWhereTask, dueDate: { gte: startOfDayUtc, lt: endOfDayUtc } },
+      }),
+      this.prisma.task.count({
+        where: { ...baseWhereTask, dueDate: { gte: endOfDayUtc, lt: endOfNext7Utc } },
+      }),
+      this.prisma.task.count({ where: { ...baseWhereTask, dueDate: null } }),
+      this.prisma.activity.count({
+        where: {
+          organizationId: org.organizationId,
+          actorId: userId,
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+        },
+      }),
+    ]);
+
+    return {
+      overdue: clOverdue + tOverdue,
+      today: clToday + tToday,
+      next7: clNext7 + tNext7,
+      noDate: clNoDate + tNoDate,
+      recentActivityCount,
+    };
+  }
+
+  /**
+   * Últimas N atividades onde o user foi o ator. Usado pela aba "Atividade
+   * recente" no modo "ver como".
+   */
+  async getRecentActivity(userId: string, org: TenantContext, limit = 10) {
+    return this.prisma.activity.findMany({
+      where: {
+        organizationId: org.organizationId,
+        actorId: userId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 50),
+      select: {
+        id: true,
+        type: true,
+        payload: true,
+        createdAt: true,
+        cardId: true,
+        boardId: true,
+        card: {
+          select: {
+            id: true,
+            title: true,
+            board: { select: { id: true, name: true, color: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
    * GET /me/calendar?month=YYYY-MM — pontos por dia do mês.
    * Por enquanto só conta tarefas (ChecklistItems com dueDate) atribuídas
    * ao user. Eventos vão entrar na Fase 2.

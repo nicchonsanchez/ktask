@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Users, Building2, ChevronRight, Clock, ShieldCheck } from 'lucide-react';
+import { Users, Building2, Eye, ChevronRight, Clock, ShieldCheck } from 'lucide-react';
 import type { OrgRole } from '@ktask/contracts';
 import { ORG_ROLE_LABELS } from '@ktask/contracts';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
+import { orgMembersSummaryQuery, type MemberSummaryRow } from '@/lib/queries/user-view';
 
 interface CurrentOrg {
   id: string;
@@ -25,6 +26,8 @@ interface Member {
   createdAt: string;
   user: { id: string; name: string; email: string; avatarUrl: string | null };
 }
+
+const PRIVILEGED_ROLES: OrgRole[] = ['OWNER', 'ADMIN', 'GESTOR'];
 
 /**
  * Página "Empresa" — visão da organização atual (papel, membros, plano).
@@ -48,6 +51,16 @@ export default function EmpresaPage() {
     queryFn: () => api.get<Member[]>('/api/v1/organizations/members'),
     enabled: !!user,
   });
+
+  const isPrivileged = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
+
+  const summaryQuery = useQuery({
+    ...orgMembersSummaryQuery,
+    enabled: !!user && isPrivileged,
+  });
+
+  const summaryMap = new Map<string, MemberSummaryRow>();
+  for (const row of summaryQuery.data ?? []) summaryMap.set(row.userId, row);
 
   return (
     <div className="container py-10">
@@ -81,47 +94,88 @@ export default function EmpresaPage() {
       <section className="mt-10">
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-fg-muted text-sm font-semibold uppercase tracking-wide">Membros</h2>
-          <span className="text-fg-subtle text-[11px]">Clique pra ver o timesheet do membro.</span>
+          <span className="text-fg-subtle text-[11px]">
+            {isPrivileged
+              ? 'Veja contadores ou abra a visão de tarefas do membro.'
+              : 'Clique pra ver o timesheet do membro.'}
+          </span>
         </div>
         <div className="border-border bg-bg-subtle overflow-hidden rounded-lg border">
           {membersQuery.isLoading ? (
             <div className="text-fg-muted p-4 text-sm">Carregando...</div>
           ) : membersQuery.data && membersQuery.data.length > 0 ? (
             <ul className="divide-border divide-y">
-              {membersQuery.data.map((m) => (
-                <li key={m.id}>
-                  <Link
-                    href={`/indicadores/timesheet?userId=${m.user.id}`}
-                    className="hover:bg-bg-muted/40 group flex items-center gap-3 p-3 transition-colors"
-                    title={`Ver timesheet de ${m.user.name}`}
-                  >
-                    <div className="bg-primary-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-                      {m.user.name
-                        .split(' ')
-                        .map((w) => w[0])
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .join('')
-                        .toUpperCase()}
+              {membersQuery.data.map((m) => {
+                const s = summaryMap.get(m.user.id);
+                return (
+                  <li key={m.id} className="hover:bg-bg-muted/40 transition-colors">
+                    <div className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                      <div className="bg-primary-subtle text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+                        {m.user.name
+                          .split(' ')
+                          .map((w) => w[0])
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{m.user.name}</p>
+                        <p className="text-fg-muted truncate text-xs">{m.user.email}</p>
+                      </div>
+
+                      {isPrivileged && (
+                        <div className="order-3 flex shrink-0 gap-1.5 sm:order-none">
+                          <CounterBadge
+                            value={s?.overdue ?? 0}
+                            label="atrasadas"
+                            tone="danger"
+                            loading={summaryQuery.isLoading}
+                          />
+                          <CounterBadge
+                            value={s?.today ?? 0}
+                            label="vencem hoje"
+                            tone="warn"
+                            loading={summaryQuery.isLoading}
+                          />
+                          <CounterBadge
+                            value={s?.pending ?? 0}
+                            label="pendentes"
+                            tone="muted"
+                            loading={summaryQuery.isLoading}
+                          />
+                        </div>
+                      )}
+
+                      <span className="bg-bg-muted text-fg-muted shrink-0 rounded-full px-2 py-0.5 text-xs font-medium">
+                        {ORG_ROLE_LABELS[m.role]}
+                      </span>
+
+                      <div className="flex shrink-0 items-center gap-1">
+                        {isPrivileged && (
+                          <Link
+                            href={`/?as=${m.user.id}`}
+                            className="text-fg-muted hover:text-primary hover:bg-bg inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+                            title={`Ver home de ${m.user.name}`}
+                          >
+                            <Eye size={12} />
+                            Ver como
+                          </Link>
+                        )}
+                        <Link
+                          href={`/indicadores/timesheet?userId=${m.user.id}`}
+                          className="text-fg-muted hover:text-primary hover:bg-bg inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+                          title={`Timesheet de ${m.user.name}`}
+                        >
+                          <Clock size={12} />
+                          Timesheet
+                          <ChevronRight size={12} />
+                        </Link>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{m.user.name}</p>
-                      <p className="text-fg-muted truncate text-xs">{m.user.email}</p>
-                    </div>
-                    <span className="bg-bg-muted text-fg-muted rounded-full px-2 py-0.5 text-xs font-medium">
-                      {ORG_ROLE_LABELS[m.role]}
-                    </span>
-                    <Clock
-                      size={13}
-                      className="text-fg-subtle group-hover:text-primary shrink-0 transition-colors"
-                    />
-                    <ChevronRight
-                      size={14}
-                      className="text-fg-subtle group-hover:text-primary shrink-0 transition-colors"
-                    />
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <div className="text-fg-muted p-4 text-sm">Nenhum membro encontrado.</div>
@@ -129,6 +183,34 @@ export default function EmpresaPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function CounterBadge({
+  value,
+  label,
+  tone,
+  loading,
+}: {
+  value: number;
+  label: string;
+  tone: 'danger' | 'warn' | 'muted';
+  loading?: boolean;
+}) {
+  const toneClass =
+    tone === 'danger'
+      ? 'bg-danger-subtle text-danger border-danger/20'
+      : tone === 'warn'
+        ? 'bg-warning-subtle text-warning border-warning/20'
+        : 'bg-bg-muted text-fg-muted border-border';
+  const dim = value === 0 ? 'opacity-50' : '';
+  return (
+    <span
+      className={`inline-flex min-w-[28px] items-center justify-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${toneClass} ${dim}`}
+      title={`${value} ${label}`}
+    >
+      {loading ? '…' : value}
+    </span>
   );
 }
 

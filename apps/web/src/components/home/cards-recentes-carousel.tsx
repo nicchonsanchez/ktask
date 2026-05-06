@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Lock } from 'lucide-react';
 
 import { meQueries, type RecentCardItem } from '@/lib/queries/me';
+import { userViewQueries } from '@/lib/queries/user-view';
 import { UserAvatar } from '@/components/user-avatar';
 
 /**
@@ -17,10 +18,19 @@ import { UserAvatar } from '@/components/user-avatar';
  *   - Mantém → enquanto houver cards à frente
  *   - Scroll horizontal nativo (swipe no mobile, setas no desktop)
  */
-export function CardsRecentesCarousel() {
+export function CardsRecentesCarousel({
+  viewAsUserId,
+  boardFilter,
+}: {
+  viewAsUserId?: string;
+  boardFilter?: string | null;
+} = {}) {
   const [collapsed, setCollapsed] = useState(false);
-  const recentQuery = useQuery({ ...meQueries.recentCards() });
-  const data = recentQuery.data ?? [];
+  const recentQuery = useQuery<RecentCardItem[]>(
+    viewAsUserId ? userViewQueries.recentCards(viewAsUserId) : meQueries.recentCards(),
+  );
+  const allData: RecentCardItem[] = recentQuery.data ?? [];
+  const data = boardFilter ? allData.filter((it) => it.card.board.id === boardFilter) : allData;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);

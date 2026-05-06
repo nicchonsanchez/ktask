@@ -38,6 +38,7 @@ import { ImporterModule } from './modules/importer/importer.module';
 import { MembersAdminModule } from './modules/members-admin/members-admin.module';
 import { MessageTemplatesModule } from './modules/message-templates/message-templates.module';
 import { MailModule } from './modules/mail/mail.module';
+import { UsersViewModule } from './modules/users-view/users-view.module';
 
 @Module({
   imports: [
@@ -114,6 +115,7 @@ import { MailModule } from './modules/mail/mail.module';
     ImporterModule,
     MembersAdminModule,
     MessageTemplatesModule,
+    UsersViewModule,
     HealthModule,
   ],
   providers: [
