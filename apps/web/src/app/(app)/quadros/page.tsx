@@ -158,7 +158,7 @@ function BoardCard({ board }: { board: BoardListItem }) {
       />
       <Link href={`/b/${board.id}`} className="block">
         <div className="mb-2 flex items-start justify-between gap-2">
-          <h3 className="line-clamp-2 pr-12 text-sm font-semibold">{board.name}</h3>
+          <h3 className="line-clamp-2 pr-16 text-sm font-semibold">{board.name}</h3>
           {board.visibility === 'PRIVATE' ? (
             <Lock size={14} className="text-fg-muted shrink-0" aria-label="Privado" />
           ) : (
@@ -177,6 +177,9 @@ function BoardCard({ board }: { board: BoardListItem }) {
           </span>
         </div>
       </Link>
+      {/* Estrela favoritar — posicionada antes do icone de visibilidade
+          (lock/globe) pra nao sobrepor. text-fg-muted em vez de fg-subtle
+          pra ficar visivel em ambos os temas. */}
       <button
         type="button"
         onClick={(e) => {
@@ -186,12 +189,12 @@ function BoardCard({ board }: { board: BoardListItem }) {
         }}
         title={board.isFavorite ? 'Desfavoritar' : 'Favoritar'}
         aria-label={board.isFavorite ? 'Desfavoritar fluxo' : 'Favoritar fluxo'}
-        className="hover:bg-bg-emphasis absolute right-3 top-3 rounded p-1 transition-colors"
+        className="hover:bg-bg-emphasis absolute right-9 top-3 rounded p-1 transition-colors"
       >
         <Star
-          size={14}
+          size={16}
           className={
-            board.isFavorite ? 'fill-warning text-warning' : 'text-fg-subtle hover:text-warning'
+            board.isFavorite ? 'fill-warning text-warning' : 'text-fg-muted hover:text-warning'
           }
         />
       </button>

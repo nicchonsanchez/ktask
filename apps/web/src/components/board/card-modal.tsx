@@ -366,7 +366,14 @@ export function CardModalContent({
             <div className="divide-border/40 flex min-h-0 flex-col divide-y overflow-y-auto">
               {/* Equipe — linha única estilo Ummense: label + lead + avatares + cadeado */}
               <div className="px-5 py-4 sm:px-7">
-                <MembersInline card={card} boardId={boardId} />
+                <MembersInline
+                  card={card}
+                  boardId={boardId}
+                  onTogglePrivacy={() =>
+                    privacyMut.mutate(card.privacy === 'TEAM_ONLY' ? 'PUBLIC' : 'TEAM_ONLY')
+                  }
+                  togglingPrivacy={privacyMut.isPending}
+                />
               </div>
 
               <div className="flex flex-col gap-7 px-5 py-6 sm:px-7">
@@ -845,7 +852,17 @@ function MenuItem({
   );
 }
 
-function MembersInline({ card, boardId }: { card: CardDetail; boardId: string }) {
+function MembersInline({
+  card,
+  boardId,
+  onTogglePrivacy,
+  togglingPrivacy,
+}: {
+  card: CardDetail;
+  boardId: string;
+  onTogglePrivacy: () => void;
+  togglingPrivacy: boolean;
+}) {
   const queryClient = useQueryClient();
   // "Equipe" = membros do card que não são o líder atual
   const team = card.members.filter((m) => m.userId !== card.leadId);
@@ -882,14 +899,24 @@ function MembersInline({ card, boardId }: { card: CardDetail; boardId: string })
         )}
         <TeamPicker card={card} boardId={boardId} />
       </div>
+      {/* Doc 25: toggle rápido de privacidade. Click alterna PUBLIC <-> TEAM_ONLY.
+          Visual: cadeado neutro quando público; cadeado warning quando privado. */}
       <button
         type="button"
-        title="Privacidade do card (em breve)"
-        aria-label="Privacidade (em breve)"
-        className="text-fg-muted ml-auto disabled:opacity-60"
-        disabled
+        onClick={onTogglePrivacy}
+        disabled={togglingPrivacy}
+        title={
+          card.privacy === 'TEAM_ONLY'
+            ? 'Privado: só líder e equipe veem. Clique para tornar público.'
+            : 'Público: todos do fluxo veem. Clique para tornar privado.'
+        }
+        aria-label={card.privacy === 'TEAM_ONLY' ? 'Tornar público' : 'Tornar privado (só equipe)'}
+        aria-pressed={card.privacy === 'TEAM_ONLY'}
+        className={`hover:bg-bg-muted ml-auto inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:opacity-50 ${
+          card.privacy === 'TEAM_ONLY' ? 'text-warning' : 'text-fg-muted hover:text-fg'
+        }`}
       >
-        <Lock size={15} />
+        <Lock size={15} fill={card.privacy === 'TEAM_ONLY' ? 'currentColor' : 'none'} />
       </button>
     </div>
   );
