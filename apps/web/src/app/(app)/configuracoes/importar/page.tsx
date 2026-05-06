@@ -66,12 +66,20 @@ export default function ImportarPage() {
 
   return (
     <div className="container mx-auto max-w-3xl py-6">
-      <header className="mb-6">
-        <h1 className="text-xl font-semibold">Importar fluxo do Ummense</h1>
-        <p className="text-fg-muted mt-1 text-sm">
-          Wizard de 3 passos. Mapeia manualmente membros e colunas pra evitar duplicação ou perda de
-          líderes. Idempotente: re-importar não duplica.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Importar fluxo do Ummense</h1>
+          <p className="text-fg-muted mt-1 text-sm">
+            Wizard de 3 passos. Mapeia manualmente membros e colunas pra evitar duplicação ou perda
+            de líderes. Idempotente: re-importar não duplica.
+          </p>
+        </div>
+        <a
+          href="/configuracoes/importar/lote"
+          className="border-border hover:bg-bg-muted text-fg-muted hover:text-fg shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium"
+        >
+          Importar em lote →
+        </a>
       </header>
 
       <Stepper current={step} />
