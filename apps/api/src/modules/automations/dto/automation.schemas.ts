@@ -70,6 +70,7 @@ export const AutomationActionTypeSchema = z.enum([
   'UPDATE_FLOW_POSITION',
   'FLAG_DUE_TODAY',
   'FLAG_OVERDUE',
+  'SET_PRIVACY',
 ]);
 
 /**
