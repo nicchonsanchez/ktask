@@ -26,10 +26,20 @@ import {
  * Bloco "Contatos" do card-modal. Lista contatos vinculados, permite
  * adicionar (busca na agenda + opcao "Criar contato 'X'") e remover.
  *
+ * Doc 38: aceita `filterType` opcional pra renderizar 2 blocos visuais
+ * separados — "Empresa" (COMPANY) e "Contatos" (PERSON) — usando a
+ * mesma fonte de dados (CardContact). Sem filtro mostra tudo junto.
+ *
  * userMatch: se Contact bate por email/phone com User da Org, mostra
  * indicacao discreta "membro" ao lado do nome.
  */
-export function ContactsBlock({ cardId }: { cardId: string }) {
+export function ContactsBlock({
+  cardId,
+  filterType,
+}: {
+  cardId: string;
+  filterType?: ContactType;
+}) {
   const queryClient = useQueryClient();
   const linkedQ = useQuery({ ...contactsQueries.forCard(cardId) });
 
@@ -40,7 +50,11 @@ export function ContactsBlock({ cardId }: { cardId: string }) {
     },
   });
 
-  const linked = linkedQ.data ?? [];
+  const allLinked = linkedQ.data ?? [];
+  const linked = filterType ? allLinked.filter((c) => c.type === filterType) : allLinked;
+  // alreadyLinkedIds usa a lista completa pra evitar mostrar pessoa que
+  // ja esta vinculada quando o picker e do block de empresa, etc.
+  const alreadyLinkedIds = allLinked.map((c) => c.id);
 
   return (
     <div className="flex flex-col gap-2">
@@ -51,7 +65,7 @@ export function ContactsBlock({ cardId }: { cardId: string }) {
           ))}
         </ul>
       )}
-      <ContactPicker cardId={cardId} alreadyLinkedIds={linked.map((c) => c.id)} />
+      <ContactPicker cardId={cardId} alreadyLinkedIds={alreadyLinkedIds} filterType={filterType} />
     </div>
   );
 }
@@ -111,9 +125,11 @@ function ContactPill({ contact, onRemove }: { contact: ContactRow; onRemove: () 
 function ContactPicker({
   cardId,
   alreadyLinkedIds,
+  filterType,
 }: {
   cardId: string;
   alreadyLinkedIds: string[];
+  filterType?: ContactType;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -140,6 +156,7 @@ function ContactPicker({
     const q = query.trim().toLowerCase();
     return all.filter((c) => {
       if (linkedSet.has(c.id)) return false;
+      if (filterType && c.type !== filterType) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -147,7 +164,7 @@ function ContactPicker({
         c.phone?.includes(q)
       );
     });
-  }, [all, alreadyLinkedIds, query]);
+  }, [all, alreadyLinkedIds, query, filterType]);
 
   const linkMut = useMutation({
     mutationFn: (input: { contactId: string } | { name: string; type: ContactType }) =>
@@ -177,7 +194,11 @@ function ContactPicker({
         className="border-border hover:bg-bg-muted text-fg-muted hover:text-fg inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-1 text-[12px]"
       >
         <Plus size={12} />
-        Adicionar contato
+        {filterType === 'COMPANY'
+          ? 'Vincular empresa'
+          : filterType === 'PERSON'
+            ? 'Adicionar contato'
+            : 'Adicionar'}
       </button>
       {open && (
         <div className="border-border bg-bg absolute left-0 top-full z-30 mt-1 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-md border shadow-lg">
@@ -223,28 +244,32 @@ function ContactPicker({
             })}
             {showCreate && (
               <div className="border-border/60 mt-1 border-t pt-1">
-                <button
-                  type="button"
-                  onClick={() => linkMut.mutate({ name: trimmedQuery, type: 'PERSON' })}
-                  disabled={linkMut.isPending}
-                  className="hover:bg-bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-50"
-                >
-                  <Plus size={13} className="text-primary shrink-0" />
-                  <span>
-                    Criar pessoa “<span className="font-medium">{trimmedQuery}</span>”
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => linkMut.mutate({ name: trimmedQuery, type: 'COMPANY' })}
-                  disabled={linkMut.isPending}
-                  className="hover:bg-bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-50"
-                >
-                  <Building2 size={13} className="text-primary shrink-0" />
-                  <span>
-                    Criar empresa “<span className="font-medium">{trimmedQuery}</span>”
-                  </span>
-                </button>
+                {filterType !== 'COMPANY' && (
+                  <button
+                    type="button"
+                    onClick={() => linkMut.mutate({ name: trimmedQuery, type: 'PERSON' })}
+                    disabled={linkMut.isPending}
+                    className="hover:bg-bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-50"
+                  >
+                    <Plus size={13} className="text-primary shrink-0" />
+                    <span>
+                      Criar pessoa “<span className="font-medium">{trimmedQuery}</span>”
+                    </span>
+                  </button>
+                )}
+                {filterType !== 'PERSON' && (
+                  <button
+                    type="button"
+                    onClick={() => linkMut.mutate({ name: trimmedQuery, type: 'COMPANY' })}
+                    disabled={linkMut.isPending}
+                    className="hover:bg-bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-50"
+                  >
+                    <Building2 size={13} className="text-primary shrink-0" />
+                    <span>
+                      Criar empresa “<span className="font-medium">{trimmedQuery}</span>”
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </div>

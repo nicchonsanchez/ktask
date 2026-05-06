@@ -46,6 +46,11 @@ export interface CardListItem {
   coverImageUrl: string | null;
   members: Array<{ user: { id: string; name: string; avatarUrl: string | null } }>;
   labels: Array<{ label: { id: string; name: string; color: string } }>;
+  /** Doc 38: contatos vinculados (PERSON ou COMPANY). Alimenta filtro
+   *  "Empresa" do board e indicadores. */
+  contacts: Array<{
+    contact: { id: string; name: string; type: 'PERSON' | 'COMPANY' };
+  }>;
   _count: { comments: number; attachments: number; checklists: number; approvals: number };
 }
 

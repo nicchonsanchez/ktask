@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
+  Building2,
   ChevronsUp,
   Contact as ContactIcon,
   Copy,
@@ -496,9 +497,15 @@ export function CardModalContent({
                   </div>
                 </Block>
 
-                {/* Contatos vinculados */}
+                {/* Doc 38: Empresa(s) vinculada(s) — separado de Contatos pra
+                    nao misturar cliente com pessoas. Mesma fonte (CardContact). */}
+                <Block icon={<Building2 size={14} />} label="Empresa">
+                  <ContactsBlock cardId={card.id} filterType="COMPANY" />
+                </Block>
+
+                {/* Contatos (pessoas) vinculados */}
                 <Block icon={<ContactIcon size={14} />} label="Contatos">
-                  <ContactsBlock cardId={card.id} />
+                  <ContactsBlock cardId={card.id} filterType="PERSON" />
                 </Block>
 
                 {/* Aprovações por cliente */}

@@ -235,6 +235,13 @@ export class BoardsService {
                         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
                       },
                       labels: { include: { label: true } },
+                      // Doc 38: contatos (incluindo empresas) aparecem no
+                      // mini-card e alimentam o filtro "Empresa" do board.
+                      contacts: {
+                        include: {
+                          contact: { select: { id: true, name: true, type: true } },
+                        },
+                      },
                       cover: { select: { id: true, storageKey: true, mimeType: true } },
                       _count: {
                         select: {

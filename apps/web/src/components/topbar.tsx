@@ -19,7 +19,8 @@ const NAV = [
   { href: '/aprovacoes', label: 'Aprovações' },
   { href: '/indicadores', label: 'Indicadores' },
   { href: '/contatos', label: 'Contatos' },
-  { href: '/empresa', label: 'Empresa' },
+  { href: '/empresas', label: 'Empresas' },
+  { href: '/empresa', label: 'Minha organização' },
   { href: '/configuracoes', label: 'Configurações' },
 ];
 

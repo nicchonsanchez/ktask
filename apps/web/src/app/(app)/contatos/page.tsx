@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
@@ -32,10 +33,30 @@ import {
  * criação inline, edição via modal, soft delete.
  */
 export default function ContatosPage() {
-  const [filterType, setFilterType] = useState<'ALL' | ContactType>('ALL');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Inicializa filtro a partir de ?type=PERSON|COMPANY na URL (suporta
+  // /empresas redirecionando aqui com type=COMPANY).
+  const initialType: 'ALL' | ContactType = (() => {
+    const raw = searchParams.get('type');
+    return raw === 'PERSON' || raw === 'COMPANY' ? raw : 'ALL';
+  })();
+  const [filterType, setFilterType] = useState<'ALL' | ContactType>(initialType);
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // Sincroniza filtro na URL pra permitir compartilhar/refresh.
+  useEffect(() => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (filterType === 'ALL') sp.delete('type');
+    else sp.set('type', filterType);
+    const next = sp.toString();
+    const current = searchParams.toString();
+    if (next !== current) {
+      router.replace(next ? `/contatos?${next}` : '/contatos', { scroll: false });
+    }
+  }, [filterType, router, searchParams]);
 
   const listQ = useQuery({
     ...contactsQueries.list({
