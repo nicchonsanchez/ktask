@@ -10,6 +10,10 @@ export interface ImportReport {
   createdContacts: number;
   createdLabels: number;
   createdLists: number;
+  /** Doc 39: anotacoes da timeline (col 17) importadas como comentario. */
+  importedAnnotations: number;
+  /** Doc 39: respostas de formulario (col 19) importadas como comentario. */
+  importedFormResponses: number;
   warnings: string[];
   dryRun: boolean;
 }

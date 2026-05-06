@@ -60,6 +60,10 @@ export interface ImportReport {
   createdContacts: number;
   createdLabels: number;
   createdLists: number;
+  /** Doc 39: anotacoes da timeline (col 17) importadas como comentario. */
+  importedAnnotations: number;
+  /** Doc 39: respostas de formulario (col 19) importadas como comentario. */
+  importedFormResponses: number;
   warnings: string[];
   /** Modo dry-run: nada foi commitado. */
   dryRun: boolean;
@@ -347,6 +351,8 @@ export class ImporterService {
       createdContacts: 0,
       createdLabels: 0,
       createdLists: 0,
+      importedAnnotations: 0,
+      importedFormResponses: 0,
       warnings: [],
       dryRun: false,
     };
@@ -761,6 +767,8 @@ export class ImporterService {
         listId,
         title: row[HEADER_INDEX.nome] ?? '(sem nome)',
         description: descriptionDoc as unknown as Prisma.InputJsonValue,
+        // Doc 39: preserva privacidade do Ummense (col 7).
+        privacy: this.parsePrivacyUmmense(row[HEADER_INDEX.privacidade]),
         leadId: leaderId ?? userId,
         createdById: userId,
         completedById: isCompleted ? (leaderId ?? userId) : null,
@@ -892,6 +900,10 @@ export class ImporterService {
         payload: { via: 'ummense-import-v2', cardId: card.id, title: row[HEADER_INDEX.nome] },
       },
     });
+
+    // Doc 39: anotacoes (col 17) e resposta de formulario (col 19)
+    // viram comentarios pra nao perder conteudo critico.
+    await this.createImportComments(card.id, userId, this.buildImportComments(row), report);
 
     return { id: card.id, shortCode: card.shortCode!, outcome: 'created' };
   }
@@ -1032,6 +1044,8 @@ export class ImporterService {
       createdContacts: 0,
       createdLabels: 0,
       createdLists: 0,
+      importedAnnotations: 0,
+      importedFormResponses: 0,
       warnings: [],
       dryRun: body.dryRun,
     };
@@ -1345,6 +1359,8 @@ export class ImporterService {
         listId,
         title: row[HEADER_INDEX.nome] ?? '(sem nome)',
         description: descriptionDoc as unknown as Prisma.InputJsonValue,
+        // Doc 39: preserva privacidade do Ummense (col 7).
+        privacy: this.parsePrivacyUmmense(row[HEADER_INDEX.privacidade]),
         leadId: leaderId ?? userId, // fallback: importador vira lider
         createdById: userId,
         completedById: isCompleted ? (leaderId ?? userId) : null,
@@ -1480,6 +1496,10 @@ export class ImporterService {
       },
     });
 
+    // Doc 39: anotacoes (col 17) e resposta de formulario (col 19)
+    // viram comentarios pra nao perder conteudo critico.
+    await this.createImportComments(card.id, userId, this.buildImportComments(row), report);
+
     return { id: card.id, shortCode: card.shortCode!, outcome: 'created' };
   }
 
@@ -1554,5 +1574,119 @@ export class ImporterService {
       '#94A3B8',
     ];
     return colors[Math.floor(Math.random() * colors.length)]!;
+  }
+
+  /**
+   * Doc 39: mapeia col 7 "Privacidade" do Ummense pra Card.privacy.
+   * Valores observados: "private-team-edit" (>99% dos cards), "public-*"
+   * (default raro). Vazio/desconhecido -> PUBLIC.
+   */
+  private parsePrivacyUmmense(raw: string | undefined): 'PUBLIC' | 'TEAM_ONLY' {
+    const v = (raw ?? '').trim().toLowerCase();
+    if (v.startsWith('private')) return 'TEAM_ONLY';
+    return 'PUBLIC';
+  }
+
+  /**
+   * Doc 39: extrai conteudo das colunas que viram comentarios:
+   *   - col 17 Anotacoes da timeline (40% dos cards)
+   *   - col 19 Resposta de formulario (raro mas critico)
+   * Headers prefixados pra serem detectaveis em re-import (idempotencia).
+   */
+  private buildImportComments(row: string[]): Array<{
+    kind: 'annotations' | 'form';
+    body: string;
+  }> {
+    const out: Array<{ kind: 'annotations' | 'form'; body: string }> = [];
+
+    const annotacoes = (row[HEADER_INDEX.anotacoes] ?? '').trim();
+    if (annotacoes) {
+      // Ummense usa "|" como separador entre anotacoes diferentes.
+      // Quebramos em paragrafos pra manter legibilidade no comentario.
+      const blocks = annotacoes
+        .split('|')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const body = 'Anotacoes importadas do Ummense:\n\n' + blocks.map((b) => `- ${b}`).join('\n');
+      out.push({ kind: 'annotations', body });
+    }
+
+    const formResp = (row[HEADER_INDEX.respostaFormulario] ?? '').trim();
+    if (formResp) {
+      // Estrutura tipica: "Campo:Valor|Outro:Valor". Quebramos linha-a-linha
+      // pra ficar legivel.
+      const lines = formResp
+        .split('|')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const body = 'Resposta de formulario importada do Ummense:\n\n' + lines.join('\n');
+      out.push({ kind: 'form', body });
+    }
+
+    return out;
+  }
+
+  /**
+   * Doc 39: cria os comentarios derivados do CSV (anotacoes + resposta
+   * de formulario). Idempotente — pula se ja existe comentario com o
+   * mesmo header pra esse cardId (caso de re-import).
+   */
+  private async createImportComments(
+    cardId: string,
+    authorId: string,
+    items: Array<{ kind: 'annotations' | 'form'; body: string }>,
+    report: ImportReport,
+  ): Promise<void> {
+    if (items.length === 0) return;
+
+    // Lista comentarios existentes do card pra detectar headers ja usados.
+    // Body e Json (Tiptap) — checamos comparando o text dos paragrafos
+    // contra os headers conhecidos.
+    const existing = await this.prisma.comment.findMany({
+      where: { cardId, deletedAt: null },
+      select: { body: true },
+    });
+    const existingHeaders = new Set<string>();
+    for (const c of existing) {
+      const text = this.extractFirstParagraphText(c.body);
+      if (text.startsWith('Anotacoes importadas do Ummense:')) {
+        existingHeaders.add('annotations');
+      } else if (text.startsWith('Resposta de formulario importada do Ummense:')) {
+        existingHeaders.add('form');
+      }
+    }
+
+    for (const item of items) {
+      if (existingHeaders.has(item.kind)) continue;
+      // Cada linha vira um paragrafo. Linha vazia = paragrafo vazio
+      // (espaco visual entre bloco do header e blocos de conteudo).
+      const paragraphs = item.body.split('\n').map((line) => ({
+        type: 'paragraph',
+        content: line ? [{ type: 'text', text: line }] : [],
+      }));
+      const doc = { type: 'doc', content: paragraphs };
+      await this.prisma.comment.create({
+        data: {
+          cardId,
+          authorId,
+          body: doc as unknown as Prisma.InputJsonValue,
+          mentions: [],
+        },
+      });
+      if (item.kind === 'annotations') report.importedAnnotations++;
+      else report.importedFormResponses++;
+    }
+  }
+
+  /** Helper minimo: pega texto do primeiro paragrafo de um doc Tiptap. */
+  private extractFirstParagraphText(body: unknown): string {
+    if (!body || typeof body !== 'object') return '';
+    const doc = body as { content?: Array<{ content?: Array<{ text?: string }> }> };
+    const first = doc.content?.[0]?.content;
+    if (!first) return '';
+    return first
+      .map((n) => n.text ?? '')
+      .join('')
+      .trim();
   }
 }

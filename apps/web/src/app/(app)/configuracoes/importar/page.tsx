@@ -621,6 +621,8 @@ function FinalReport({ report, onRestart }: { report: ImportReport; onRestart: (
         <Stat label="Listas criadas" value={report.createdLists} />
         <Stat label="Tags criadas" value={report.createdLabels} />
         <Stat label="Contatos criados" value={report.createdContacts} />
+        <Stat label="Anotações → comentários" value={report.importedAnnotations} />
+        <Stat label="Respostas de form → comentários" value={report.importedFormResponses} />
       </dl>
 
       {report.warnings.length > 0 && (
