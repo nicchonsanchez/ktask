@@ -331,6 +331,9 @@ ganharem `CardPresence` no novo board. Plano: [31-importer-multi-fluxo.md](31-im
 - [x] `importCardWithMapping` (wizard V2): mesma lógica + suporte ao `forceCompleted` na presence nova
 - [x] `ImportReport` ganha `linkedToFlow: number` separado de `created`/`skipped`
 - [x] Frontend wizard mostra `linkedToFlow` no relatório final
+- [x] **Parent-link via col 15** (Cards Filhos por nome) — col 14 do Ummense é buggy
+- [x] **Imagens inline `storage.ummense.com`** baixadas + re-hospedadas no S3 antes de gravar a descrição
+- [ ] **PDFs e anexos formais** — bloqueado por decisão de canal: API Ummense ou manual ([doc 37](37-importer-anexos-formais.md))
 
 ---
 

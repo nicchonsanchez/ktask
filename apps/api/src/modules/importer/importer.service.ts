@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger } from '@ne
 import type { Prisma, ContactType } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { StorageService } from '@/modules/storage/storage.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 
 import type {
@@ -105,7 +106,73 @@ export interface ImportPreviewResult {
 export class ImporterService {
   private readonly logger = new Logger(ImporterService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  /**
+   * Doc 16/Imagens inline: encontra URLs https://storage.ummense.com/...
+   * no HTML, baixa cada uma, sobe pro nosso S3 e devolve o HTML com as
+   * URLs substituidas. Falha gracioso por imagem — se uma falhar, mantem
+   * a URL original (vai quebrar quando Ummense desligar, mas nao bloqueia
+   * o import).
+   *
+   * Cache local por URL evita baixar a mesma imagem 2x na mesma importacao
+   * (CSV repete imagens em multiplas descricoes ocasionalmente).
+   */
+  private async rehostUmmenseImages(
+    html: string,
+    organizationId: string,
+    cache: Map<string, string>,
+  ): Promise<string> {
+    if (!html || !this.storage.isEnabled()) return html;
+    const urls = Array.from(
+      html.matchAll(/https:\/\/storage\.ummense\.com\/[^\s"'<>]+/g),
+      (m) => m[0],
+    );
+    if (urls.length === 0) return html;
+
+    const uniqueUrls = Array.from(new Set(urls));
+    await Promise.all(
+      uniqueUrls.map(async (url) => {
+        if (cache.has(url)) return;
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+          if (!res.ok) {
+            this.logger.warn(`Rehost falhou ${res.status} pra ${url}`);
+            return;
+          }
+          const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+          // So aceita imagens — descricao Ummense embute tambem links pra
+          // outros tipos, mas pra esses o original do Ummense responde
+          // diretamente sem precisar baixar (fica como link externo).
+          if (!contentType.startsWith('image/')) return;
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (buf.length > 10 * 1024 * 1024) {
+            this.logger.warn(`Rehost pulado: imagem >10MB ${url}`);
+            return;
+          }
+          const { publicUrl } = await this.storage.putObject({
+            body: buf,
+            contentType,
+            keyPrefix: `ummense-imports/${organizationId}`,
+          });
+          cache.set(url, publicUrl);
+        } catch (err) {
+          this.logger.warn(
+            `Rehost erro pra ${url}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }),
+    );
+
+    let out = html;
+    for (const [orig, novo] of cache.entries()) {
+      out = out.split(orig).join(novo);
+    }
+    return out;
+  }
 
   // ==================================================
   // V2 Wizard: preview + execute
@@ -358,6 +425,9 @@ export class ImporterService {
     const labelsByName = new Map<string, string>();
     const contactsByName = new Map<string, string>();
     const cardIdByShortCode = new Map<string, string>();
+    // Cache de imagens Ummense rehospedadas (orig URL -> nova URL S3).
+    // Compartilhado entre cards pra evitar redownload da mesma imagem.
+    const imageCache = new Map<string, string>();
 
     // 1a passada: cria cards
     for (let i = 0; i < rows.length; i++) {
@@ -380,6 +450,7 @@ export class ImporterService {
           userByName,
           report,
           forceCompleted: completeListNames.has(listSourceName),
+          imageCache,
         });
         if (result) {
           cardIdByShortCode.set(result.shortCode, result.id);
@@ -396,36 +467,51 @@ export class ImporterService {
       }
     }
 
-    // 2a passada: vincula pais
+    // 2a passada: vincula pais via col 15 "Cards Filhos" (col 14 "Card Pai"
+    // do Ummense eh buggy — contem o proprio nome do card em vez do pai).
+    // Logica: pra cada row com cardsFilhos preenchido, lookup cada nome
+    // no cardIdByName e seta parentCardId apontando pro pai (esta row).
+    const cardIdByName = new Map<string, string>();
+    const ambiguousNames = new Set<string>();
+    for (const row of rows) {
+      const sc = row[HEADER_INDEX.identificador];
+      const name = row[HEADER_INDEX.nome]?.trim();
+      if (!sc || !name) continue;
+      const id = cardIdByShortCode.get(sc);
+      if (!id) continue;
+      if (cardIdByName.has(name)) ambiguousNames.add(name);
+      else cardIdByName.set(name, id);
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const myShortCode = row[HEADER_INDEX.identificador];
-      const parentShortCode = row[HEADER_INDEX.cardPai]?.trim();
-      if (!myShortCode || !parentShortCode) continue;
+      const childrenRaw = row[HEADER_INDEX.cardsFilhos]?.trim();
+      if (!myShortCode || !childrenRaw) continue;
       const myId = cardIdByShortCode.get(myShortCode);
       if (!myId) continue;
-      let parentId = cardIdByShortCode.get(parentShortCode);
-      if (!parentId) {
-        const existing = await this.prisma.card.findUnique({
-          where: {
-            organizationId_shortCode: {
-              organizationId: tenant.organizationId,
-              shortCode: parentShortCode,
-            },
-          },
-          select: { id: true },
-        });
-        parentId = existing?.id;
-      }
-      if (parentId) {
+      const childrenNames = childrenRaw
+        .split('|')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const childName of childrenNames) {
+        if (ambiguousNames.has(childName)) {
+          report.warnings.push(
+            `Card filho "${childName}" tem nome duplicado no import — vinculo pulado por ambiguidade.`,
+          );
+          continue;
+        }
+        const childId = cardIdByName.get(childName);
+        if (!childId) {
+          report.warnings.push(
+            `Filho "${childName}" do card "${row[HEADER_INDEX.nome]}" nao foi importado (provavelmente esta em outro fluxo nao incluido neste import).`,
+          );
+          continue;
+        }
         await this.prisma.card.update({
-          where: { id: myId },
-          data: { parentCardId: parentId },
+          where: { id: childId },
+          data: { parentCardId: myId },
         });
-      } else {
-        report.warnings.push(
-          `Card "${row[HEADER_INDEX.nome]}" referencia pai shortCode=${parentShortCode} que nao foi encontrado.`,
-        );
       }
     }
 
@@ -528,6 +614,8 @@ export class ImporterService {
     report: ImportReport;
     /** Se true, cria card com completedAt setado (coluna 'complete'). */
     forceCompleted?: boolean;
+    /** Cache de imagens Ummense ja rehospedadas (orig URL -> S3 URL). */
+    imageCache: Map<string, string>;
   }): Promise<CardImportOutcome | null> {
     const {
       row,
@@ -540,6 +628,7 @@ export class ImporterService {
       userByName,
       report,
       forceCompleted = false,
+      imageCache,
     } = args;
 
     const shortCode = row[HEADER_INDEX.identificador]?.trim();
@@ -654,7 +743,15 @@ export class ImporterService {
     });
     const position = (lastInList?.position ?? 0) + 1024;
 
-    const descriptionDoc = this.htmlToProseMirror(row[HEADER_INDEX.descricao] ?? '');
+    // Rehospeda imagens inline storage.ummense.com no nosso S3 antes de
+    // converter pra ProseMirror — assim quando Ummense desligar nao quebra.
+    const descricaoRaw = row[HEADER_INDEX.descricao] ?? '';
+    const descricaoRehosted = await this.rehostUmmenseImages(
+      descricaoRaw,
+      tenant.organizationId,
+      imageCache,
+    );
+    const descriptionDoc = this.htmlToProseMirror(descricaoRehosted);
 
     const card = await this.prisma.card.create({
       data: {
@@ -991,6 +1088,7 @@ export class ImporterService {
 
     // 1a passada: cria todos os cards SEM parent. 2a passada resolve parent.
     const cardIdByShortCode = new Map<string, string>();
+    const imageCacheLegacy = new Map<string, string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
@@ -1007,6 +1105,7 @@ export class ImporterService {
           contactsByName,
           userByNormName,
           report,
+          imageCache: imageCacheLegacy,
         });
         if (result) {
           cardIdByShortCode.set(result.shortCode, result.id);
@@ -1023,37 +1122,50 @@ export class ImporterService {
       }
     }
 
-    // 2a passada: vincular pais
+    // 2a passada: vincula pais via col 15 "Cards Filhos" (col 14 do
+    // Ummense eh buggy — repete o nome do proprio card). Resolve filho
+    // por nome dentro da mesma importacao.
+    const cardIdByName = new Map<string, string>();
+    const ambiguousNames = new Set<string>();
+    for (const row of rows) {
+      const sc = row[HEADER_INDEX.identificador];
+      const name = row[HEADER_INDEX.nome]?.trim();
+      if (!sc || !name) continue;
+      const id = cardIdByShortCode.get(sc);
+      if (!id) continue;
+      if (cardIdByName.has(name)) ambiguousNames.add(name);
+      else cardIdByName.set(name, id);
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const myShortCode = row[HEADER_INDEX.identificador];
-      const parentShortCode = row[HEADER_INDEX.cardPai]?.trim();
-      if (!myShortCode || !parentShortCode) continue;
+      const childrenRaw = row[HEADER_INDEX.cardsFilhos]?.trim();
+      if (!myShortCode || !childrenRaw) continue;
       const myId = cardIdByShortCode.get(myShortCode);
       if (!myId) continue;
-      // pai pode estar nesta importacao OU ja existir
-      let parentId = cardIdByShortCode.get(parentShortCode);
-      if (!parentId) {
-        const existing = await this.prisma.card.findUnique({
-          where: {
-            organizationId_shortCode: {
-              organizationId: tenant.organizationId,
-              shortCode: parentShortCode,
-            },
-          },
-          select: { id: true },
-        });
-        parentId = existing?.id;
-      }
-      if (parentId) {
+      const childrenNames = childrenRaw
+        .split('|')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const childName of childrenNames) {
+        if (ambiguousNames.has(childName)) {
+          report.warnings.push(
+            `Card filho "${childName}" tem nome duplicado no import — vinculo pulado por ambiguidade.`,
+          );
+          continue;
+        }
+        const childId = cardIdByName.get(childName);
+        if (!childId) {
+          report.warnings.push(
+            `Filho "${childName}" do card "${row[HEADER_INDEX.nome]}" nao foi importado (provavelmente esta em outro fluxo nao incluido neste import).`,
+          );
+          continue;
+        }
         await this.prisma.card.update({
-          where: { id: myId },
-          data: { parentCardId: parentId },
+          where: { id: childId },
+          data: { parentCardId: myId },
         });
-      } else {
-        report.warnings.push(
-          `Card "${row[HEADER_INDEX.nome]}" referencia pai shortCode=${parentShortCode} que nao foi encontrado.`,
-        );
       }
     }
 
@@ -1093,6 +1205,7 @@ export class ImporterService {
     contactsByName: Map<string, string>;
     userByNormName: Map<string, string>;
     report: ImportReport;
+    imageCache: Map<string, string>;
   }): Promise<CardImportOutcome | null> {
     const {
       row,
@@ -1104,6 +1217,7 @@ export class ImporterService {
       contactsByName,
       userByNormName,
       report,
+      imageCache,
     } = args;
 
     const shortCode = row[HEADER_INDEX.identificador]?.trim();
@@ -1216,7 +1330,12 @@ export class ImporterService {
     // Descricao: HTML cru por enquanto — convertido pra ProseMirror simples
     // (1 paragrafo com texto puro). Usuario pode reformatar depois.
     const descriptionRaw = row[HEADER_INDEX.descricao] ?? '';
-    const descriptionDoc = this.htmlToProseMirror(descriptionRaw);
+    const descriptionRehosted = await this.rehostUmmenseImages(
+      descriptionRaw,
+      tenant.organizationId,
+      imageCache,
+    );
+    const descriptionDoc = this.htmlToProseMirror(descriptionRehosted);
 
     const card = await this.prisma.card.create({
       data: {

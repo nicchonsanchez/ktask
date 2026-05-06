@@ -107,6 +107,37 @@ export class StorageService {
     }
     return `${this.publicBase}/${key}`;
   }
+
+  /**
+   * Upload server-side de buffer para o S3. Diferente de presignUpload (que
+   * delega ao cliente), aqui a propria API faz o PUT — usado quando rehostamos
+   * conteudo externo (ex: imagens inline do Ummense durante import).
+   *
+   * Gera key automatica se nao informada: `<keyPrefix>/<random>.<ext>`.
+   */
+  async putObject(params: {
+    body: Buffer | Uint8Array;
+    contentType: string;
+    keyPrefix: string;
+    key?: string;
+  }): Promise<{ key: string; publicUrl: string }> {
+    if (!this.internalClient) {
+      throw new ServiceUnavailableException('Armazenamento de arquivos não configurado.');
+    }
+    const ext = mimeToExt(params.contentType) ?? 'bin';
+    const key =
+      params.key ??
+      `${params.keyPrefix.replace(/^\/+|\/+$/g, '')}/${randomBytes(8).toString('hex')}.${ext}`;
+    await this.internalClient.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: params.body,
+        ContentType: params.contentType,
+      }),
+    );
+    return { key, publicUrl: this.publicUrlFor(key) };
+  }
 }
 
 function mimeToExt(mime: string): string | null {
