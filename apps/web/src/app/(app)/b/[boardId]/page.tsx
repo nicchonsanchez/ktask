@@ -41,6 +41,7 @@ import { CardItem, CardOverlay } from '@/components/board/card-item';
 import { ListColumn, LIST_SORT_PREFIX } from '@/components/board/list-column';
 import { CardModal } from '@/components/board/card-modal';
 import { CompletedColumn, COMPLETED_DROPPABLE_ID } from '@/components/board/completed-column';
+import { ColumnDock } from '@/components/board/column-dock';
 import { AddColumnButton } from '@/components/board/add-column-button';
 import { BoardHeader } from '@/components/board/board-header';
 import {
@@ -343,11 +344,16 @@ export default function BoardPage() {
       >
         <div className="flex-1 overflow-x-auto overflow-y-hidden">
           <div className="inline-flex h-full gap-4 p-4 sm:gap-5 sm:p-6">
-            <SortableContext
-              items={board.lists.map((l) => `${LIST_SORT_PREFIX}${l.id}`)}
-              strategy={horizontalListSortingStrategy}
-            >
-              {board.lists.map((list) => {
+            {(() => {
+              // Doc 42: separa colunas em 3 grupos pra renderizar nos
+              // docks (Backlog esquerda, Final direita) + colunas regulares
+              // no centro. Mantem ordem original dentro de cada grupo.
+              const backlogLists = board.lists.filter((l) => l.isBacklog);
+              const finalLists = board.lists.filter((l) => l.isFinalList);
+              const regularLists = board.lists.filter((l) => !l.isBacklog && !l.isFinalList);
+
+              // Renderizador compartilhado pra cada lista (com filtros + sortable).
+              const renderColumn = (list: (typeof board.lists)[number]) => {
                 const sortedCards = sortCardsForBoard(list.cards, board.cardOrdering);
                 const filteredCards = applyBoardFilters(sortedCards, filters, currentUserId);
                 const visibleCards = searchNorm
@@ -356,7 +362,6 @@ export default function BoardPage() {
                 const otherLists = board.lists.filter((l) => l.id !== list.id);
                 return (
                   <ListColumn
-                    key={list.id}
                     list={list}
                     otherLists={otherLists}
                     isAdmin={board.myRole === 'ADMIN'}
@@ -371,10 +376,35 @@ export default function BoardPage() {
                     </SortableContext>
                   </ListColumn>
                 );
-              })}
-            </SortableContext>
-            {board.myRole === 'ADMIN' && <AddColumnButton boardId={boardId} />}
-            <CompletedColumn boardId={boardId} completedCount={board.completedCount ?? 0} />
+              };
+
+              return (
+                <>
+                  <ColumnDock
+                    lists={backlogLists}
+                    kind="backlog"
+                    side="left"
+                    renderColumn={renderColumn}
+                  />
+                  <SortableContext
+                    items={regularLists.map((l) => `${LIST_SORT_PREFIX}${l.id}`)}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    {regularLists.map((list) => (
+                      <div key={list.id}>{renderColumn(list)}</div>
+                    ))}
+                  </SortableContext>
+                  {board.myRole === 'ADMIN' && <AddColumnButton boardId={boardId} />}
+                  <ColumnDock
+                    lists={finalLists}
+                    kind="final"
+                    side="right"
+                    renderColumn={renderColumn}
+                  />
+                  <CompletedColumn boardId={boardId} completedCount={board.completedCount ?? 0} />
+                </>
+              );
+            })()}
           </div>
         </div>
 
