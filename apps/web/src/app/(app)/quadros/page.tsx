@@ -6,7 +6,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Users, Layers, Loader2, Lock, Globe2, Star } from 'lucide-react';
+import {
+  Activity as ActivityIcon,
+  AlertTriangle,
+  CalendarClock,
+  Clock,
+  Globe2,
+  Layers,
+  Loader2,
+  Lock,
+  Plus,
+  Star,
+  Users,
+} from 'lucide-react';
 
 import {
   Button,
@@ -27,6 +39,8 @@ import {
   unfavoriteBoard,
   type BoardListItem,
 } from '@/lib/queries/boards';
+import { meQueries, type OrgActivityItem } from '@/lib/queries/me';
+import { UserAvatar } from '@/components/user-avatar';
 import { ApiError } from '@/lib/api-client';
 
 const CreateSchema = z.object({
@@ -37,11 +51,12 @@ type CreateInput = z.infer<typeof CreateSchema>;
 
 export default function BoardsPage() {
   const boards = useQuery(boardsQueries.all());
+  const activity = useQuery(meQueries.orgActivity(8));
   const [open, setOpen] = useState(false);
 
   return (
     <div className="container py-10">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Seus quadros</h1>
           <p className="text-fg-muted mt-1 text-sm">
@@ -83,9 +98,114 @@ export default function BoardsPage() {
         </div>
       )}
 
-      {boards.data && boards.data.length > 0 && <BoardsListing boards={boards.data} />}
+      {boards.data && boards.data.length > 0 && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <BoardsListing boards={boards.data} />
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <ActivityFeedPanel items={activity.data ?? []} loading={activity.isLoading} />
+          </aside>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Doc 41: feed lateral com a atividade recente da Org. */
+function ActivityFeedPanel({ items, loading }: { items: OrgActivityItem[]; loading: boolean }) {
+  return (
+    <section className="border-border/60 bg-bg-subtle/40 rounded-lg border p-3">
+      <h2 className="text-fg-muted mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide">
+        <ActivityIcon size={12} /> Atividade recente
+      </h2>
+      {loading && (
+        <div className="text-fg-muted flex items-center gap-2 py-4 text-xs">
+          <Loader2 size={12} className="animate-spin" /> Carregando…
+        </div>
+      )}
+      {!loading && items.length === 0 && (
+        <p className="text-fg-subtle py-4 text-center text-xs">Sem atividade recente.</p>
+      )}
+      {!loading && items.length > 0 && (
+        <ul className="flex flex-col gap-0.5">
+          {items.map((it) => (
+            <ActivityRow key={it.id} item={it} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ActivityRow({ item }: { item: OrgActivityItem }) {
+  const cardLink = item.card
+    ? `/b/${item.card.board.id}?card=${item.card.id}`
+    : item.boardId
+      ? `/b/${item.boardId}`
+      : null;
+  const verb = activityVerb(item.type, item.payload);
+  const cardLabel = item.card?.title ?? '(sem card)';
+  const boardLabel = item.card?.board.name ?? '';
+  const ago = relativeTime(item.createdAt);
+
+  const content = (
+    <div className="hover:bg-bg-muted/50 flex items-start gap-2 rounded px-2 py-1.5 transition-colors">
+      {item.actor ? (
+        <UserAvatar
+          name={item.actor.name}
+          userId={item.actor.id}
+          avatarUrl={item.actor.avatarUrl}
+          size="sm"
+        />
+      ) : (
+        <span className="bg-bg-muted text-fg-muted inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[10px]">
+          ?
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-fg text-[12px] leading-snug">
+          <span className="font-medium">{item.actor?.name ?? 'Alguém'}</span>{' '}
+          <span className="text-fg-muted">{verb}</span>{' '}
+          <span className="font-medium">{cardLabel}</span>
+        </p>
+        <p className="text-fg-subtle truncate text-[10px]">
+          {boardLabel ? `${boardLabel} · ` : ''}
+          {ago}
+        </p>
+      </div>
+    </div>
+  );
+
+  return cardLink ? <Link href={cardLink}>{content}</Link> : content;
+}
+
+function activityVerb(type: string, payload: Record<string, unknown>): string {
+  // Mapas amplos pra cobrir o que a Activity loga hoje. Fallback generico.
+  if (type === 'CARD_CREATED') return 'criou';
+  if (type === 'CARD_MOVED') return 'moveu';
+  if (type === 'CARD_COMPLETED') return 'finalizou';
+  if (type === 'CARD_REOPENED') return 'reabriu';
+  if (type === 'CARD_ARCHIVED') return 'arquivou';
+  if (type === 'COMMENT_CREATED') return 'comentou em';
+  if (type === 'CARD_UPDATED') {
+    const kind = typeof payload.kind === 'string' ? payload.kind : '';
+    if (kind.startsWith('approval.approved')) return 'aprovou';
+    if (kind.startsWith('approval.rejected')) return 'reprovou';
+    if (kind === 'privacy_changed') return 'mudou privacidade de';
+    return 'editou';
+  }
+  return 'mexeu em';
+}
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'agora';
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `há ${m}min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString('pt-BR');
 }
 
 /**
@@ -104,7 +224,7 @@ function BoardsListing({ boards }: { boards: BoardListItem[] }) {
           <h2 className="text-fg-muted mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
             <Star size={12} className="fill-warning text-warning" /> Favoritos
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {favorites.map((b) => (
               <BoardCard key={b.id} board={b} />
             ))}
@@ -168,13 +288,52 @@ function BoardCard({ board }: { board: BoardListItem }) {
         {board.description && (
           <p className="text-fg-muted line-clamp-2 text-xs">{board.description}</p>
         )}
-        <div className="text-fg-subtle mt-4 flex items-center gap-3 text-xs">
-          <span className="inline-flex items-center gap-1">
-            <Layers size={12} /> {board.cardsCount} cards
+
+        {/* Doc 41: badges de saude — atrasado / vence hoje, so aparecem
+            quando >0 pra evitar ruido visual. */}
+        {(board.overdueCount > 0 || board.dueTodayCount > 0) && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {board.overdueCount > 0 && (
+              <span
+                className="bg-danger-subtle text-danger inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                title={`${board.overdueCount} card(s) atrasados`}
+              >
+                <AlertTriangle size={10} />
+                {board.overdueCount} atrasado{board.overdueCount > 1 ? 's' : ''}
+              </span>
+            )}
+            {board.dueTodayCount > 0 && (
+              <span
+                className="bg-warning-subtle text-warning inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                title={`${board.dueTodayCount} card(s) vencem hoje`}
+              >
+                <CalendarClock size={10} />
+                {board.dueTodayCount} hoje
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="text-fg-subtle mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="inline-flex items-center gap-1" title="Cards abertos">
+            <Layers size={12} /> {board.openCardsCount}
+            {board.cardsCount > board.openCardsCount && (
+              <span className="text-fg-subtle/70">/{board.cardsCount}</span>
+            )}
           </span>
-          <span className="inline-flex items-center gap-1">
-            <Users size={12} /> {board.membersCount}
-          </span>
+          {board.membersCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Users size={12} /> {board.membersCount}
+            </span>
+          )}
+          {board.lastActivityAt && (
+            <span
+              className="inline-flex items-center gap-1"
+              title={new Date(board.lastActivityAt).toLocaleString('pt-BR')}
+            >
+              <Clock size={12} /> {relativeTime(board.lastActivityAt)}
+            </span>
+          )}
         </div>
       </Link>
       {/* Estrela favoritar — posicionada antes do icone de visibilidade

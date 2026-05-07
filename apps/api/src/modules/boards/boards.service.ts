@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import type { Board, BoardRole, BoardVisibility, CardOrdering, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { Board, BoardRole, BoardVisibility, CardOrdering } from '@prisma/client';
 import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -90,6 +91,59 @@ export class BoardsService {
       }),
     ]);
     const favSet = new Set(favorites.map((f) => f.boardId));
+    const boardIds = boards.map((b) => b.id);
+
+    // Doc 41: contadores de saude por board (cards abertos, atrasados,
+    // vence hoje) + ultima atividade. Calcula em 2 queries agregadas
+    // (em vez de N+1) usando FILTER do Postgres.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
+
+    const [cardStats, activityStats] = boardIds.length
+      ? await Promise.all([
+          this.prisma.$queryRaw<
+            Array<{
+              boardId: string;
+              open_cards: bigint;
+              overdue: bigint;
+              due_today: bigint;
+            }>
+          >`
+            SELECT c."boardId",
+              COUNT(*) FILTER (WHERE c."completedAt" IS NULL AND c."isArchived" = false) AS open_cards,
+              COUNT(*) FILTER (
+                WHERE c."completedAt" IS NULL AND c."isArchived" = false
+                  AND c."dueDate" IS NOT NULL AND c."dueDate" < ${today}
+              ) AS overdue,
+              COUNT(*) FILTER (
+                WHERE c."completedAt" IS NULL AND c."isArchived" = false
+                  AND c."dueDate" IS NOT NULL AND c."dueDate" >= ${today} AND c."dueDate" < ${tomorrow}
+              ) AS due_today
+            FROM "Card" c
+            WHERE c."boardId" IN (${Prisma.join(boardIds)})
+            GROUP BY c."boardId"
+          `,
+          this.prisma.$queryRaw<Array<{ boardId: string; last_at: Date }>>`
+            SELECT "boardId", MAX("createdAt") AS last_at
+            FROM "Activity"
+            WHERE "boardId" IN (${Prisma.join(boardIds)})
+            GROUP BY "boardId"
+          `,
+        ])
+      : [[], []];
+
+    const statsByBoard = new Map(
+      cardStats.map((r) => [
+        r.boardId,
+        {
+          openCardsCount: Number(r.open_cards),
+          overdueCount: Number(r.overdue),
+          dueTodayCount: Number(r.due_today),
+        },
+      ]),
+    );
+    const activityByBoard = new Map(activityStats.map((r) => [r.boardId, r.last_at]));
 
     return boards.map((b) => ({
       id: b.id,
@@ -104,6 +158,11 @@ export class BoardsService {
       cardsCount: b._count.cards,
       membersCount: b._count.members,
       isFavorite: favSet.has(b.id),
+      // Doc 41: pulse do board.
+      openCardsCount: statsByBoard.get(b.id)?.openCardsCount ?? 0,
+      overdueCount: statsByBoard.get(b.id)?.overdueCount ?? 0,
+      dueTodayCount: statsByBoard.get(b.id)?.dueTodayCount ?? 0,
+      lastActivityAt: activityByBoard.get(b.id)?.toISOString() ?? null,
     }));
   }
 

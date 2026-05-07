@@ -81,6 +81,23 @@ export interface CalendarResponse {
   days: CalendarDay[];
 }
 
+/** Doc 41: feed de atividade da Org pra mostrar pulso na pagina /quadros. */
+export interface OrgActivityItem {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  cardId: string | null;
+  boardId: string | null;
+  actor: { id: string; name: string; avatarUrl: string | null } | null;
+  card: {
+    id: string;
+    title: string;
+    shortCode: string | null;
+    board: { id: string; name: string; color: string | null };
+  } | null;
+}
+
 export const meQueries = {
   tasks: () => ({
     queryKey: ['me', 'tasks'] as const,
@@ -96,6 +113,10 @@ export const meQueries = {
       api.get<CalendarResponse>(
         month ? `/api/v1/me/calendar?month=${month}` : '/api/v1/me/calendar',
       ),
+  }),
+  orgActivity: (limit = 10) => ({
+    queryKey: ['me', 'org-activity', limit] as const,
+    queryFn: () => api.get<OrgActivityItem[]>(`/api/v1/me/org-activity?limit=${limit}`),
   }),
 };
 

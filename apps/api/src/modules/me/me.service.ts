@@ -389,6 +389,59 @@ export class MeService {
   }
 
   /**
+   * Doc 41: Activity feed da Org inteira, filtrado por boards acessiveis
+   * ao user. Usado na pagina /quadros pra mostrar pulso da equipe.
+   * Por isso traz `actor` (quem fez), card (alvo) e board (contexto).
+   *
+   * Bypass de role: OWNER/ADMIN/GESTOR veem tudo da Org. MEMBER/GUEST
+   * veem so de boards onde sao membros OU boards com visibility=ORGANIZATION.
+   */
+  async getOrgRecentActivity(userId: string, org: TenantContext, limit = 10) {
+    const bypass = org.role === 'OWNER' || org.role === 'ADMIN' || org.role === 'GESTOR';
+    // Activity nao tem relacao direta com Board no Prisma; filtra via
+    // boardId IN (...) calculando os acessiveis primeiro pra MEMBER/GUEST.
+    let accessibleBoardIds: string[] | null = null;
+    if (!bypass) {
+      const accessibleBoards = await this.prisma.board.findMany({
+        where: {
+          organizationId: org.organizationId,
+          isArchived: false,
+          OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
+        },
+        select: { id: true },
+      });
+      accessibleBoardIds = accessibleBoards.map((b) => b.id);
+      if (accessibleBoardIds.length === 0) return [];
+    }
+
+    return this.prisma.activity.findMany({
+      where: {
+        organizationId: org.organizationId,
+        boardId: accessibleBoardIds ? { in: accessibleBoardIds } : { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 50),
+      select: {
+        id: true,
+        type: true,
+        payload: true,
+        createdAt: true,
+        cardId: true,
+        boardId: true,
+        actor: { select: { id: true, name: true, avatarUrl: true } },
+        card: {
+          select: {
+            id: true,
+            title: true,
+            shortCode: true,
+            board: { select: { id: true, name: true, color: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
    * GET /me/calendar?month=YYYY-MM — pontos por dia do mês.
    * Por enquanto só conta tarefas (ChecklistItems com dueDate) atribuídas
    * ao user. Eventos vão entrar na Fase 2.

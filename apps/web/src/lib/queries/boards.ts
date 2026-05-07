@@ -22,6 +22,12 @@ export interface BoardListItem {
   membersCount: number;
   /** Doc 36: favorito por usuário logado. */
   isFavorite: boolean;
+  /** Doc 41: indicadores de saude. */
+  openCardsCount: number;
+  overdueCount: number;
+  dueTodayCount: number;
+  /** ISO da ultima Activity registrada nesse board. Null se sem activity. */
+  lastActivityAt: string | null;
 }
 
 export type CardPrivacy = 'PUBLIC' | 'TEAM_ONLY';

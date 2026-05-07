@@ -54,4 +54,17 @@ export class MeController {
   ) {
     return this.me.getCalendar(user.userId, org, month);
   }
+
+  @Get('org-activity')
+  @ApiOperation({
+    summary: 'Doc 41: feed de atividade da Org (filtrado por boards acessiveis)',
+  })
+  getOrgActivity(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query('limit') limit?: string,
+  ) {
+    const n = limit ? Number(limit) : 10;
+    return this.me.getOrgRecentActivity(user.userId, org, Number.isNaN(n) ? 10 : n);
+  }
 }
