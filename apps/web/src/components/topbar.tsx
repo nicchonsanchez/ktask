@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Menu, User as UserIcon, X } from 'lucide-react';
+import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, Users, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationsBell } from '@/components/notifications-bell';
 import { SearchTrigger } from '@/components/search-host';
@@ -13,14 +13,38 @@ import { TimerWidget } from '@/components/time-tracking/timer-widget';
 import { useAuthStore } from '@/stores/auth-store';
 import { logout } from '@/lib/auth';
 
-const NAV = [
+/**
+ * Topbar — IA reorganizada (doc 41).
+ *
+ * Nav primário (operacional, uso diário): Início · Quadros · Aprovações · Indicadores
+ * Nav secundário (CRM, uso semanal): dropdown "CRM" agrupando Clientes + Contatos
+ *   - "Clientes" usa rota /empresas (label renomeado pra evitar ambiguidade
+ *     com "Minha organização" — empresas-clientes vs a Kharis em si).
+ * Avatar dropdown (admin, uso esporádico): Equipe (= /empresa) · Configurações ·
+ *   Meu perfil · Sair.
+ *
+ * Mobile drawer espelha a mesma estrutura, com seções tituladas.
+ */
+
+interface NavItem {
+  href: string;
+  label: string;
+}
+
+const NAV_PRIMARY: NavItem[] = [
   { href: '/', label: 'Início' },
   { href: '/quadros', label: 'Quadros' },
   { href: '/aprovacoes', label: 'Aprovações' },
   { href: '/indicadores', label: 'Indicadores' },
+];
+
+const NAV_CRM: NavItem[] = [
+  { href: '/empresas', label: 'Clientes' },
   { href: '/contatos', label: 'Contatos' },
-  { href: '/empresas', label: 'Empresas' },
-  { href: '/empresa', label: 'Minha organização' },
+];
+
+const NAV_ACCOUNT: NavItem[] = [
+  { href: '/empresa', label: 'Equipe' },
   { href: '/configuracoes', label: 'Configurações' },
 ];
 
@@ -48,6 +72,8 @@ export function Topbar() {
       document.body.style.overflow = '';
     };
   }, [mobileOpen]);
+
+  const crmActive = NAV_CRM.some((it) => pathname.startsWith(it.href));
 
   return (
     <header className="border-border bg-bg sticky top-0 z-30 border-b">
@@ -88,7 +114,7 @@ export function Topbar() {
           </Link>
           <div className="bg-border/70 hidden h-5 w-px shrink-0 sm:block" aria-hidden />
           <nav className="hidden h-[52px] items-stretch sm:flex">
-            {NAV.map((item) => {
+            {NAV_PRIMARY.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
               return (
                 <Link
@@ -99,7 +125,6 @@ export function Topbar() {
                   }`}
                 >
                   {item.label}
-                  {/* Indicador inferior compartilhado: ativo = roxo; hover = cinza */}
                   <span
                     aria-hidden
                     className={`absolute inset-x-3 bottom-0 h-[2px] rounded-t transition-colors ${
@@ -109,6 +134,7 @@ export function Topbar() {
                 </Link>
               );
             })}
+            <CrmDropdown items={NAV_CRM} active={crmActive} pathname={pathname} />
           </nav>
         </div>
 
@@ -146,23 +172,17 @@ export function Topbar() {
               </button>
             </div>
             <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-              {NAV.map((item) => {
-                const active =
-                  item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center rounded-md px-3 py-2.5 text-sm transition-colors ${
-                      active
-                        ? 'bg-primary-subtle/40 text-primary font-medium'
-                        : 'text-fg hover:bg-bg-muted'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+              {NAV_PRIMARY.map((item) => (
+                <DrawerLink key={item.href} item={item} pathname={pathname} />
+              ))}
+              <DrawerSection label="CRM" />
+              {NAV_CRM.map((item) => (
+                <DrawerLink key={item.href} item={item} pathname={pathname} indent />
+              ))}
+              <DrawerSection label="Conta" />
+              {NAV_ACCOUNT.map((item) => (
+                <DrawerLink key={item.href} item={item} pathname={pathname} indent />
+              ))}
             </nav>
             {user && (
               <div className="border-border/60 flex items-center gap-3 border-t p-3">
@@ -194,13 +214,120 @@ export function Topbar() {
   );
 }
 
+function DrawerSection({ label }: { label: string }) {
+  return (
+    <p className="text-fg-subtle mt-3 px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider">
+      {label}
+    </p>
+  );
+}
+
+function DrawerLink({
+  item,
+  pathname,
+  indent,
+}: {
+  item: NavItem;
+  pathname: string;
+  indent?: boolean;
+}) {
+  const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+  return (
+    <Link
+      href={item.href}
+      className={`flex items-center rounded-md py-2.5 text-sm transition-colors ${
+        indent ? 'px-5' : 'px-3'
+      } ${active ? 'bg-primary-subtle/40 text-primary font-medium' : 'text-fg hover:bg-bg-muted'}`}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+function CrmDropdown({
+  items,
+  active,
+  pathname,
+}: {
+  items: NavItem[];
+  active: boolean;
+  pathname: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative flex items-stretch">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`group relative flex items-center gap-1 px-3 text-sm transition-colors ${
+          active ? 'text-primary' : 'text-fg-muted hover:text-fg'
+        }`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        CRM
+        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span
+          aria-hidden
+          className={`absolute inset-x-3 bottom-0 h-[2px] rounded-t transition-colors ${
+            active ? 'bg-primary' : 'group-hover:bg-border-strong bg-transparent'
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute left-0 top-full z-40 mt-0 flex w-44 flex-col overflow-hidden rounded-md border p-1 text-sm shadow-lg">
+          {items.map((it) => {
+            const itActive = pathname.startsWith(it.href);
+            return (
+              <Link
+                key={it.href}
+                href={it.href}
+                onClick={() => setOpen(false)}
+                className={`rounded-sm px-3 py-1.5 transition-colors ${
+                  itActive
+                    ? 'bg-primary-subtle/40 text-primary font-medium'
+                    : 'text-fg hover:bg-bg-muted'
+                }`}
+              >
+                {it.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserMenu({ onLogout }: { onLogout: () => void }) {
   const user = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
   if (!user) return null;
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -212,37 +339,69 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
         <span className="text-fg hidden max-w-[160px] truncate text-sm font-medium md:inline">
           {user.name}
         </span>
+        <ChevronDown size={13} className="text-fg-muted hidden md:inline" />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} aria-hidden />
-          <div className="border-border bg-bg absolute right-0 top-full z-40 mt-1.5 flex w-56 flex-col overflow-hidden rounded-md border p-1 text-sm shadow-lg">
-            <div className="border-border/70 border-b px-3 py-2.5">
-              <p className="text-fg truncate font-medium">{user.name}</p>
-              <p className="text-fg-muted mt-0.5 truncate text-[11px]">{user.email}</p>
-            </div>
-            <Link
-              href="/configuracoes/perfil"
-              onClick={() => setOpen(false)}
-              className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5"
-            >
-              <UserIcon size={14} />
-              Meu perfil
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onLogout();
-              }}
-              className="text-danger hover:bg-danger-subtle flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
-            >
-              <LogOut size={14} />
-              Sair
-            </button>
+        <div className="border-border bg-bg absolute right-0 top-full z-40 mt-1.5 flex w-60 flex-col overflow-hidden rounded-md border p-1 text-sm shadow-lg">
+          <div className="border-border/70 border-b px-3 py-2.5">
+            <p className="text-fg truncate font-medium">{user.name}</p>
+            <p className="text-fg-muted mt-0.5 truncate text-[11px]">{user.email}</p>
           </div>
-        </>
+          <UserMenuLink
+            href="/empresa"
+            icon={<Users size={14} />}
+            label="Equipe"
+            onClick={() => setOpen(false)}
+          />
+          <UserMenuLink
+            href="/configuracoes"
+            icon={<Settings size={14} />}
+            label="Configurações"
+            onClick={() => setOpen(false)}
+          />
+          <UserMenuLink
+            href="/configuracoes/perfil"
+            icon={<UserIcon size={14} />}
+            label="Meu perfil"
+            onClick={() => setOpen(false)}
+          />
+          <div className="border-border/70 my-1 border-t" />
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className="text-danger hover:bg-danger-subtle flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+          >
+            <LogOut size={14} />
+            Sair
+          </button>
+        </div>
       )}
     </div>
+  );
+}
+
+function UserMenuLink({
+  href,
+  icon,
+  label,
+  onClick,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5"
+    >
+      {icon}
+      {label}
+    </Link>
   );
 }

@@ -128,11 +128,10 @@ export function TimerWidget() {
 
   if (activeQuery.isLoading && !active) {
     return (
-      <div
-        ref={anchorRef}
-        className="bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs"
-      >
-        <Loader2 size={14} className="animate-spin" />
+      <div ref={anchorRef} className="relative h-9 w-9 shrink-0">
+        <div className="bg-bg-muted text-fg-muted absolute inset-0 inline-flex items-center justify-center rounded-full text-xs">
+          <Loader2 size={14} className="animate-spin" />
+        </div>
       </div>
     );
   }
@@ -140,9 +139,12 @@ export function TimerWidget() {
   if (!active) {
     const pending = startMut.isPending || startFreeMut.isPending;
     return (
-      <div ref={anchorRef} className="relative">
+      // Wrapper de tamanho fixo (h-9 w-9) reserva o espaço inline. A pílula
+      // em si é position:absolute pra que o estado expandido (hover) não
+      // empurre os elementos à direita (search, notifs, configurações).
+      <div ref={anchorRef} className="relative h-9 w-9 shrink-0">
         <div
-          className="group/timer bg-bg-muted text-fg-muted inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all sm:hover:gap-2 sm:hover:bg-emerald-600 sm:hover:pr-1 sm:hover:text-white sm:hover:shadow"
+          className="group/timer bg-bg-muted text-fg-muted absolute right-0 top-0 inline-flex h-9 items-center gap-0 rounded-full pl-1 pr-1 text-xs font-semibold transition-all sm:hover:gap-2 sm:hover:bg-emerald-600 sm:hover:pr-1 sm:hover:text-white sm:hover:shadow"
           title={
             cardInContext
               ? 'Iniciar cronômetro neste card'
@@ -180,7 +182,9 @@ export function TimerWidget() {
   }
 
   return (
-    <div ref={anchorRef} className="relative">
+    // Wrapper de tamanho fixo (h-9 w-9) reserva o slot inline. A pílula expande
+    // como overlay (position:absolute) — não empurra os irmãos à direita.
+    <div ref={anchorRef} className="relative h-9 w-9 shrink-0">
       <RunningPill
         active={active}
         forceExpanded={popoverOpen}
@@ -237,7 +241,7 @@ function RunningPill({
 
   return (
     <div
-      className={`group/running inline-flex h-9 items-center rounded-full bg-fuchsia-600 pl-1 text-white shadow-sm transition-all hover:shadow ${parentExpand}`}
+      className={`group/running absolute right-0 top-0 inline-flex h-9 items-center rounded-full bg-fuchsia-600 pl-1 text-white shadow-sm transition-all hover:shadow ${parentExpand}`}
       title={`Cronometrando: ${cardTitle}`}
     >
       <button
