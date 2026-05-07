@@ -31,6 +31,7 @@ export interface BoardListItem {
 }
 
 export type CardPrivacy = 'PUBLIC' | 'TEAM_ONLY';
+export type CardStatus = 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
 
 export interface CardListItem {
   id: string;
@@ -41,6 +42,8 @@ export interface CardListItem {
   priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   /** Doc 25: privacidade do card (cadeado mostrado no mini se nao-PUBLIC). */
   privacy: CardPrivacy;
+  /** Doc 42: status (icone no canto sup-direito do mini se nao-ACTIVE). */
+  status: CardStatus;
   dueDate: string | null;
   isArchived: boolean;
   enteredListAt: string;
@@ -66,6 +69,11 @@ export interface ListWithCards {
   position: number;
   color: string | null;
   wipLimit: number | null;
+  isArchived: boolean;
+  /** Doc 42: faixa especial direita (Finalizado). */
+  isFinalList: boolean;
+  /** Doc 42: faixa especial esquerda (Backlog). */
+  isBacklog: boolean;
   cards: CardListItem[];
 }
 

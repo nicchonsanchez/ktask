@@ -12,6 +12,8 @@ export interface CardDetail {
   priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   /** Doc 25: privacidade do card. */
   privacy: 'PUBLIC' | 'TEAM_ONLY';
+  /** Doc 42: status (ortogonal a coluna). ACTIVE = padrao. */
+  status: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
@@ -132,6 +134,8 @@ export interface UpdateCardInput {
   coverAttachmentId?: string | null;
   /** Doc 25: privacidade. */
   privacy?: 'PUBLIC' | 'TEAM_ONLY';
+  /** Doc 42: status. Mudar pra COMPLETED auto-set completedAt. */
+  status?: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
 }
 
 export function updateCard(cardId: string, input: UpdateCardInput) {

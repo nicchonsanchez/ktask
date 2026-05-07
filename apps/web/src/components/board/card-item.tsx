@@ -7,6 +7,7 @@ import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
 import { PRIORITY_LABEL, PRIORITY_COLOR, PRIORITY_SHAPE } from './priority-config';
+import { STATUS_LABEL, STATUS_VISUAL } from './status-config';
 
 function dueState(iso: string | null): {
   show: boolean;
@@ -115,6 +116,24 @@ function CardInner({ card }: { card: CardListItem }) {
             backgroundColor: `${priorityColor}33`, // alpha 0.2
           }}
         />
+      )}
+
+      {/* Doc 42: icone de status no canto sup-direito quando nao-ACTIVE.
+          Quando coexiste com diamond URGENT, sai um pouco mais pra
+          esquerda pra nao sobrepor (top-1 right-5). */}
+      {card.status !== 'ACTIVE' && (
+        <span
+          className={`absolute z-10 inline-flex size-4 items-center justify-center rounded-full ${STATUS_VISUAL[card.status].bgClass} ${STATUS_VISUAL[card.status].textClass} shadow-sm ${
+            hasPriorityDiamond ? '-top-1 right-4' : '-right-1 -top-1'
+          }`}
+          title={`Status: ${STATUS_LABEL[card.status]}`}
+          aria-label={`Status: ${STATUS_LABEL[card.status]}`}
+        >
+          {(() => {
+            const SIcon = STATUS_VISUAL[card.status].icon;
+            return <SIcon size={9} />;
+          })()}
+        </span>
       )}
 
       {/* Topo do card: capa (se houver) + barra de prioridade.

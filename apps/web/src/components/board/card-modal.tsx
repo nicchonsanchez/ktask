@@ -51,6 +51,8 @@ import { ApprovalsBlock } from './approvals-block';
 import { ContactsBlock } from './contacts-block';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER, PRIORITY_SHAPE } from './priority-config';
+import { StatusPicker } from './status-picker';
+import type { CardStatus as CardStatusValue } from './status-config';
 
 export function CardModal({ boardId }: { boardId: string }) {
   const router = useRouter();
@@ -183,6 +185,17 @@ export function CardModalContent({
     onSuccess: invalidate,
   });
 
+  // Doc 42: status do card (4 estados ortogonais a coluna).
+  const statusMut = useMutation({
+    mutationFn: (status: CardStatusValue) => updateCard(card.id, { status }),
+    onMutate: (next) => ({ prev: optimistic('status', next) }),
+    onError: (e, _v, ctx) => {
+      rollback(ctx?.prev);
+      notify.error(errorMessage(e, 'Erro ao alterar status.'));
+    },
+    onSuccess: invalidate,
+  });
+
   const dueDateMut = useMutation({
     mutationFn: (iso: string | null) => updateCard(card.id, { dueDate: iso }),
     onMutate: (iso) => ({ prev: optimistic('dueDate', iso) }),
@@ -250,6 +263,11 @@ export function CardModalContent({
       <header className="flex flex-col gap-2 px-5 pb-3 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-7 sm:pt-6">
         {/* Botões — primeiro no mobile (sm:order-2 manda pra direita no desktop) */}
         <div className="-mr-1 flex shrink-0 items-center justify-end gap-1 sm:order-2 sm:mr-0 sm:gap-1.5">
+          <StatusPicker
+            value={card.status}
+            onChange={(s) => statusMut.mutate(s)}
+            disabled={statusMut.isPending}
+          />
           <CardTimerButton cardId={card.id} />
           <DueDatePicker value={card.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
           <CardMenu
