@@ -166,26 +166,43 @@ const summary = { reordered: [], renamed: [], created: [], extraLists: [], error
             method: 'POST',
             body: JSON.stringify({ name: tcol.name, boardId: board.id }),
           });
-          // Set position
+          // Set position + flags (isFinalList, isBacklog)
           await api('/lists/' + created.id, {
             method: 'PATCH',
-            body: JSON.stringify({ position: pos }),
+            body: JSON.stringify({
+              position: pos,
+              isFinalList: tcol.isFinal,
+              isBacklog: tcol.isBacklog,
+            }),
           });
-          console.log('  + criou coluna: ' + tcol.name + ' @ pos ' + pos);
+          const flagInfo = [
+            tcol.isFinal ? 'FINAL' : null,
+            tcol.isBacklog ? 'BACKLOG' : null,
+          ].filter(Boolean).join(',');
+          console.log('  + criou coluna: ' + tcol.name + ' @ pos ' + pos + (flagInfo ? ' [' + flagInfo + ']' : ''));
           summary.reordered.push(board.name + ': criou ' + tcol.name);
         } catch (e) {
           console.log('  ERRO ao criar coluna ' + tpl.columns[i].name + ': ' + e.message);
         }
       } else {
-        // Apenas reordena (e renomeia se nome diferir em case/acento)
+        // Reordena, renomeia (se diferir) e aplica flags isFinalList/isBacklog do template
         try {
-          const patches = { position: pos };
-          if (list.name !== tpl.columns[i].name) {
-            patches.name = tpl.columns[i].name;
-            console.log('  ~ renomeia: "' + list.name + '" -> "' + tpl.columns[i].name + '"');
-            summary.renamed.push(board.name + ': "' + list.name + '" -> "' + tpl.columns[i].name + '"');
+          const tcol = tpl.columns[i];
+          const patches = {
+            position: pos,
+            isFinalList: tcol.isFinal,
+            isBacklog: tcol.isBacklog,
+          };
+          if (list.name !== tcol.name) {
+            patches.name = tcol.name;
+            console.log('  ~ renomeia: "' + list.name + '" -> "' + tcol.name + '"');
+            summary.renamed.push(board.name + ': "' + list.name + '" -> "' + tcol.name + '"');
           } else {
-            console.log('  = ' + list.name + ' @ pos ' + pos);
+            const flagInfo = [
+              tcol.isFinal ? 'FINAL' : null,
+              tcol.isBacklog ? 'BACKLOG' : null,
+            ].filter(Boolean).join(',');
+            console.log('  = ' + list.name + ' @ pos ' + pos + (flagInfo ? ' [' + flagInfo + ']' : ''));
           }
           await api('/lists/' + list.id, { method: 'PATCH', body: JSON.stringify(patches) });
         } catch (e) {

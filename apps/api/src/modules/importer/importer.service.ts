@@ -733,9 +733,20 @@ export class ImporterService {
     const dataEntrega = this.parseDateBR(row[HEADER_INDEX.dataEntrega]);
     const criadoEm = this.parseDateBR(row[HEADER_INDEX.criadoEm]);
     const finalizadoEm = this.parseDateBR(row[HEADER_INDEX.finalizadoEm]);
-    /// completed se: (a) status do CSV = 'completed' OU (b) coluna foi
-    /// mapeada como 'complete' no wizard (forceCompleted)
-    const isCompleted = forceCompleted || row[HEADER_INDEX.status]?.trim() === 'completed';
+    // Doc 42: mapeia CSV col 6 "Status" (active/waiting/canceled/completed)
+    // pra Card.status enum. forceCompleted (wizard "Marcar como Finalizado")
+    // sobrescreve pra COMPLETED.
+    const csvStatus = row[HEADER_INDEX.status]?.trim();
+    const cardStatus: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED' = forceCompleted
+      ? 'COMPLETED'
+      : csvStatus === 'completed'
+        ? 'COMPLETED'
+        : csvStatus === 'waiting'
+          ? 'WAITING'
+          : csvStatus === 'canceled'
+            ? 'CANCELED'
+            : 'ACTIVE';
+    const isCompleted = cardStatus === 'COMPLETED';
 
     // Lider via mapping
     const leaderName = row[HEADER_INDEX.lider]?.trim();
@@ -769,6 +780,8 @@ export class ImporterService {
         description: descriptionDoc as unknown as Prisma.InputJsonValue,
         // Doc 39: preserva privacidade do Ummense (col 7).
         privacy: this.parsePrivacyUmmense(row[HEADER_INDEX.privacidade]),
+        // Doc 42: status enum (ortogonal a coluna).
+        status: cardStatus,
         leadId: leaderId ?? userId,
         createdById: userId,
         completedById: isCompleted ? (leaderId ?? userId) : null,
@@ -1322,7 +1335,17 @@ export class ImporterService {
     const dataEntrega = this.parseDateBR(row[HEADER_INDEX.dataEntrega]);
     const criadoEm = this.parseDateBR(row[HEADER_INDEX.criadoEm]);
     const finalizadoEm = this.parseDateBR(row[HEADER_INDEX.finalizadoEm]);
-    const isCompleted = row[HEADER_INDEX.status]?.trim() === 'completed';
+    // Doc 42: mapeia CSV col 6 "Status" pra Card.status enum.
+    const csvStatus = row[HEADER_INDEX.status]?.trim();
+    const cardStatus: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED' =
+      csvStatus === 'completed'
+        ? 'COMPLETED'
+        : csvStatus === 'waiting'
+          ? 'WAITING'
+          : csvStatus === 'canceled'
+            ? 'CANCELED'
+            : 'ACTIVE';
+    const isCompleted = cardStatus === 'COMPLETED';
 
     // Líder
     const leaderName = row[HEADER_INDEX.lider]?.trim();
@@ -1361,6 +1384,8 @@ export class ImporterService {
         description: descriptionDoc as unknown as Prisma.InputJsonValue,
         // Doc 39: preserva privacidade do Ummense (col 7).
         privacy: this.parsePrivacyUmmense(row[HEADER_INDEX.privacidade]),
+        // Doc 42: status enum (ortogonal a coluna).
+        status: cardStatus,
         leadId: leaderId ?? userId, // fallback: importador vira lider
         createdById: userId,
         completedById: isCompleted ? (leaderId ?? userId) : null,
