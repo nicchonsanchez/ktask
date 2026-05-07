@@ -117,9 +117,10 @@ function CardInner({ card }: { card: CardListItem }) {
         />
       )}
 
-      {/* Topo do card: capa (se houver) + barra de prioridade + stripes das
-          labels. Capa sempre acima de tudo; depois prioridade; depois labels. */}
-      {(hasCover || hasPriorityBar || hasLabels) && (
+      {/* Topo do card: capa (se houver) + barra de prioridade.
+          Etiquetas saem daqui — viram pills logo abaixo do titulo (mais
+          legivel e sem competir com a sinalizacao de prioridade). */}
+      {(hasCover || hasPriorityBar) && (
         <div className="-mx-3 -mt-3 flex flex-col overflow-hidden rounded-t-lg">
           {hasCover && (
             <div className="bg-bg-muted relative h-24 w-full overflow-hidden">
@@ -133,22 +134,10 @@ function CardInner({ card }: { card: CardListItem }) {
           )}
           {hasPriorityBar && (
             <div
-              className="h-1.5"
+              className="h-2"
               style={{ backgroundColor: priorityColor as string }}
               title={`Prioridade: ${PRIORITY_LABEL[card.priority]}`}
             />
-          )}
-          {hasLabels && (
-            <div className="flex h-1">
-              {card.labels.map((l) => (
-                <div
-                  key={l.label.id}
-                  className="flex-1"
-                  style={{ backgroundColor: l.label.color }}
-                  title={l.label.name}
-                />
-              ))}
-            </div>
           )}
         </div>
       )}
@@ -165,6 +154,23 @@ function CardInner({ card }: { card: CardListItem }) {
         )}
         {card.title}
       </p>
+
+      {/* Etiquetas como pills coloridas — nome legivel, cor da etiqueta como
+          fundo. Wrapping natural quando ha varias. */}
+      {hasLabels && (
+        <div className="flex flex-wrap gap-1">
+          {card.labels.map((l) => (
+            <span
+              key={l.label.id}
+              className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none text-white"
+              style={{ backgroundColor: l.label.color }}
+              title={l.label.name}
+            >
+              {l.label.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Meta row (prazo + contadores) — discreta, só aparece se há algo */}
       {hasMetaRow && (
