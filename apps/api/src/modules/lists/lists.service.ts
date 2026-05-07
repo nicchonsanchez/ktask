@@ -20,6 +20,10 @@ interface UpdateListInput {
   icon?: string | null;
   wipLimit?: number | null;
   slaMinutes?: number | null;
+  position?: number;
+  isArchived?: boolean;
+  isFinalList?: boolean;
+  isBacklog?: boolean;
 }
 
 interface MoveListInput {

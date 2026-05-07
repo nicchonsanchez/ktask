@@ -17,6 +17,10 @@ export type CreateCardRequest = z.infer<typeof CreateCardSchema>;
 export const CardPrivacySchema = z.enum(['PUBLIC', 'TEAM_ONLY']);
 export type CardPrivacyValue = z.infer<typeof CardPrivacySchema>;
 
+/** Doc 42: 4 estados de card, ortogonal a coluna. ACTIVE default. */
+export const CardStatusSchema = z.enum(['ACTIVE', 'COMPLETED', 'WAITING', 'CANCELED']);
+export type CardStatusValue = z.infer<typeof CardStatusSchema>;
+
 export const UpdateCardSchema = z.object({
   title: z.string().min(1).max(500).trim().optional(),
   description: z.any().optional().nullable(),
@@ -30,6 +34,9 @@ export const UpdateCardSchema = z.object({
   coverAttachmentId: z.string().cuid().nullable().optional(),
   /** Doc 25: privacidade do card. */
   privacy: CardPrivacySchema.optional(),
+  /** Doc 42: status do card (ACTIVE/COMPLETED/WAITING/CANCELED). Mudar
+   *  pra COMPLETED auto-set completedAt; mudar pra outro auto-clear. */
+  status: CardStatusSchema.optional(),
 });
 export type UpdateCardRequest = z.infer<typeof UpdateCardSchema>;
 

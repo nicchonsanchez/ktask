@@ -245,6 +245,8 @@ export class BoardsService {
             boardId: board.id,
             name: 'Concluído',
             position: 3072,
+            // Doc 42: ultima lista padrao ja vem marcada como Finalizado
+            isFinalList: true,
           },
         ],
       });

@@ -17,6 +17,14 @@ export const UpdateListSchema = z.object({
   icon: z.string().max(40).nullable().optional(),
   wipLimit: z.number().int().positive().nullable().optional(),
   slaMinutes: z.number().int().positive().nullable().optional(),
+  /** Reposicionar diretamente (alternativa ao /move). */
+  position: z.number().optional(),
+  /** Arquivar/desarquivar inline (alternativa ao DELETE/restore). */
+  isArchived: z.boolean().optional(),
+  /** Doc 42: marcar coluna como Finalizado especial (faixa direita). */
+  isFinalList: z.boolean().optional(),
+  /** Doc 42: marcar coluna como Backlog (faixa esquerda). */
+  isBacklog: z.boolean().optional(),
 });
 export type UpdateListRequest = z.infer<typeof UpdateListSchema>;
 

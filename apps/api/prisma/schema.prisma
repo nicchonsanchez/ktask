@@ -410,6 +410,14 @@ model List {
   icon           String?
   wipLimit       Int?
   slaMinutes     Int?
+  /// Doc 42: coluna marcada como Finalizado/Concluido — espelho do is_final
+  /// do Ummense. UI trata como faixa especial expansivel a direita do board.
+  /// Por convencao, max 1 por board (mas o schema nao impoe).
+  isFinalList    Boolean  @default(false)
+  /// Doc 42: coluna marcada como Backlog (espelho do is_backlog do Ummense).
+  /// UI trata como faixa expansivel a esquerda. Multiplas permitidas por
+  /// board (ex: "INFORMAÇÕES" + "Backlog" podem coexistir).
+  isBacklog      Boolean  @default(false)
   isArchived     Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -435,6 +443,17 @@ enum CardPrivacy {
   TEAM_ONLY
 }
 
+/// Doc 42: status do card, ortogonal a coluna onde esta. Espelha o
+/// modelo do Ummense — um card "ACTIVE" pode estar na coluna
+/// "Finalizado" (isFinalList) e vice-versa. Status muda
+/// independentemente de drag-and-drop entre colunas.
+enum CardStatus {
+  ACTIVE     // padrao — em fluxo normal de trabalho
+  COMPLETED  // concluido (substitui o uso isolado de completedAt)
+  WAITING    // pausado, aguardando algo externo (cliente, fornecedor)
+  CANCELED   // cancelado, nao sera feito
+}
+
 model Card {
   id                String    @id @default(cuid())
   organizationId    String // denormalizado: acelera filtros e futura RLS
@@ -446,6 +465,9 @@ model Card {
   /// Doc 25: PUBLIC (default) = todos do board veem. TEAM_ONLY = so
   /// lider + CardMember veem (OWNER/ADMIN/GESTOR da Org bypass).
   privacy           CardPrivacy @default(PUBLIC)
+  /// Doc 42: status ortogonal a coluna. completedAt continua como
+  /// timestamp de "quando virou COMPLETED" (auto-set ao mudar status).
+  status            CardStatus  @default(ACTIVE)
   boardId           String
   listId            String
   title             String

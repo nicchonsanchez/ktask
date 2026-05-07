@@ -37,6 +37,9 @@ interface UpdateCardInput {
   coverAttachmentId?: string | null;
   /** Doc 25: privacidade do card. */
   privacy?: 'PUBLIC' | 'TEAM_ONLY';
+  /** Doc 42: status (4 estados). Mudar pra COMPLETED auto-set completedAt;
+   *  mudar pra outro status auto-clear. */
+  status?: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
 }
 
 interface MoveCardInput {
@@ -269,6 +272,27 @@ export class CardsService {
       });
     }
 
+    // Doc 42: status muda completedAt automaticamente. Source of truth =
+    // status. Se input traz `status` E `completedAt`, status manda.
+    let computedCompletedAt: Date | null | undefined =
+      input.completedAt !== undefined
+        ? input.completedAt
+          ? new Date(input.completedAt)
+          : null
+        : undefined;
+    let computedCompletedById: string | null | undefined = undefined;
+    if (input.status !== undefined && input.status !== card.status) {
+      if (input.status === 'COMPLETED') {
+        // Vira COMPLETED: set completedAt=now (se nao tiver) + completedById
+        computedCompletedAt = card.completedAt ?? new Date();
+        computedCompletedById = card.completedById ?? userId;
+      } else if (card.status === 'COMPLETED') {
+        // Saindo de COMPLETED: limpa completedAt
+        computedCompletedAt = null;
+        computedCompletedById = null;
+      }
+    }
+
     const updated = await this.prisma.card.update({
       where: { id: cardId },
       data: {
@@ -287,20 +311,36 @@ export class CardsService {
               ? new Date(input.dueDate)
               : null
             : undefined,
-        completedAt:
-          input.completedAt !== undefined
-            ? input.completedAt
-              ? new Date(input.completedAt)
-              : null
-            : undefined,
+        completedAt: computedCompletedAt,
+        completedById: computedCompletedById,
         estimateMinutes: input.estimateMinutes ?? undefined,
         leadId: input.leadId !== undefined ? input.leadId : undefined,
         coverAttachmentId:
           input.coverAttachmentId !== undefined ? input.coverAttachmentId : undefined,
         // Doc 25: privacidade. Activity log gerado abaixo se mudou.
         privacy: input.privacy ?? undefined,
+        // Doc 42: status. Activity log gerado abaixo se mudou.
+        status: input.status ?? undefined,
       },
     });
+
+    // Doc 42: log de mudanca de status
+    if (input.status && input.status !== card.status) {
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId: card.boardId,
+          cardId,
+          actorId: userId,
+          type: 'CARD_UPDATED',
+          payload: {
+            kind: 'status_changed',
+            from: card.status,
+            to: input.status,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     // Doc 25: log de mudanca de privacidade
     if (input.privacy && input.privacy !== card.privacy) {
