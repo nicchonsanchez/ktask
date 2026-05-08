@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDown, ArrowUp, ArrowUpDown, Lock, Unlock } from 'lucide-react';
 
-import type { BoardDetail, CardListItem, CardStatus } from '@/lib/queries/boards';
+import type { BoardDetail, CardListItem } from '@/lib/queries/boards';
 import { UserAvatar } from '@/components/user-avatar';
 import { STATUS_LABEL, STATUS_VISUAL } from './status-config';
 
