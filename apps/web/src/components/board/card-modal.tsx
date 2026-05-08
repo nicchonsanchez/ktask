@@ -14,6 +14,7 @@ import {
   Hash,
   Link as LinkIcon,
   Lock,
+  Unlock,
   MoreHorizontal,
   Paperclip,
   Tag,
@@ -476,7 +477,7 @@ export function CardModalContent({
                       }`}
                       title="Todos do fluxo veem"
                     >
-                      Público
+                      <Unlock size={10} /> Público
                     </button>
                     <button
                       type="button"
@@ -485,7 +486,7 @@ export function CardModalContent({
                       aria-pressed={card.privacy === 'TEAM_ONLY'}
                       className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
                         card.privacy === 'TEAM_ONLY'
-                          ? 'border-warning/40 bg-warning-subtle text-warning shadow-sm'
+                          ? 'border-fg/30 bg-bg-muted text-fg shadow-sm'
                           : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
                       }`}
                       title="Só líder e equipe (admin/gestor da Org sempre veem)"
@@ -938,10 +939,10 @@ function MembersInline({
         aria-label={card.privacy === 'TEAM_ONLY' ? 'Tornar público' : 'Tornar privado (só equipe)'}
         aria-pressed={card.privacy === 'TEAM_ONLY'}
         className={`hover:bg-bg-muted ml-auto inline-flex size-7 items-center justify-center rounded-md transition-colors disabled:opacity-50 ${
-          card.privacy === 'TEAM_ONLY' ? 'text-warning' : 'text-fg-muted hover:text-fg'
+          card.privacy === 'TEAM_ONLY' ? 'text-fg' : 'text-fg-subtle hover:text-fg-muted'
         }`}
       >
-        <Lock size={15} fill={card.privacy === 'TEAM_ONLY' ? 'currentColor' : 'none'} />
+        {card.privacy === 'TEAM_ONLY' ? <Lock size={15} /> : <Unlock size={15} />}
       </button>
     </div>
   );
