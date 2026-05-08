@@ -89,18 +89,65 @@ export class AdminService {
    * Stats de cards da Org logada — pra dashboard /indicadores/cards.
    * Aberto pra qualquer membro autenticado (não só ADMIN) já que são contagens
    * agregadas, não dados sensíveis. OWNER/ADMIN/GESTOR/MEMBER veem; GUEST não.
+   *
+   * Aceita filtros (from/to/boardIds/leadId/priorities) — todos opcionais.
+   * Métricas "absolutas" (WIP, atrasados, byColumn, aging) ignoram from/to —
+   * são fotos do agora. Métricas "no período" (throughput, completedInPeriod,
+   * onTimeRate, reopened) usam from/to.
    */
-  async cardsStats(tenant: TenantContext) {
+  async cardsStats(
+    tenant: TenantContext,
+    params: {
+      from?: Date;
+      to?: Date;
+      boardIds?: string[];
+      leadId?: string;
+      priorities?: Array<'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>;
+    } = {},
+  ) {
     if (tenant.role === 'GUEST') {
       throw new ForbiddenException('Convidados não veem indicadores agregados.');
     }
     const orgId = tenant.organizationId;
+    const now = new Date();
+    const from = params.from ?? new Date(now.getTime() - 30 * 24 * 60 * 60_000);
+    const to = params.to ?? now;
+    const periodMs = Math.max(1, to.getTime() - from.getTime());
+    const prevFrom = new Date(from.getTime() - periodMs);
+    const prevTo = from;
+
+    // Filtros aplicáveis em todas as queries de Card
+    const cardFilter: Prisma.CardWhereInput = { organizationId: orgId };
+    if (params.boardIds && params.boardIds.length > 0) {
+      cardFilter.boardId = { in: params.boardIds };
+    }
+    if (params.leadId) {
+      cardFilter.leadId = params.leadId;
+    }
+    if (params.priorities && params.priorities.length > 0) {
+      cardFilter.priority = { in: params.priorities };
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60_000);
     const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60_000);
+
+    // Filtros derivados pra ativos / no período
+    const activeFilter: Prisma.CardWhereInput = {
+      ...cardFilter,
+      isArchived: false,
+      completedAt: null,
+    };
+    const completedInPeriodFilter: Prisma.CardWhereInput = {
+      ...cardFilter,
+      completedAt: { gte: from, lte: to, not: null },
+    };
+    const completedInPrevFilter: Prisma.CardWhereInput = {
+      ...cardFilter,
+      completedAt: { gte: prevFrom, lte: prevTo, not: null },
+    };
 
     const [
       total,
@@ -109,84 +156,235 @@ export class AdminService {
       completedTotal,
       completedThisWeek,
       completedThisMonth,
+      completedInPeriod,
+      completedInPrevPeriod,
       overdue,
       dueToday,
       byPriority,
       byBoard,
       topLeads,
+      byLabel,
       throughput,
+      flowInOut,
+      sparkRaw,
+      leadTimeRows,
+      // Reabertura no período
+      reopenedInPeriod,
+      reopenedInPrev,
+      // Para taxa de "no prazo": cards completados no período com dueDate
+      onTimeRows,
+      // Aging buckets
+      stale7,
+      stale30,
+      stale60,
+      // Top 10 cards mais antigos sem update
+      agingSamples,
+      // WIP por coluna + última movedAt
+      byColumn,
     ] = await Promise.all([
-      this.prisma.card.count({ where: { organizationId: orgId } }),
+      this.prisma.card.count({ where: cardFilter }),
+      this.prisma.card.count({ where: activeFilter }),
+      this.prisma.card.count({ where: { ...cardFilter, isArchived: true } }),
       this.prisma.card.count({
-        where: { organizationId: orgId, isArchived: false, completedAt: null },
-      }),
-      this.prisma.card.count({ where: { organizationId: orgId, isArchived: true } }),
-      this.prisma.card.count({
-        where: { organizationId: orgId, completedAt: { not: null } },
+        where: { ...cardFilter, completedAt: { not: null } },
       }),
       this.prisma.card.count({
-        where: { organizationId: orgId, completedAt: { gte: weekAgo } },
+        where: { ...cardFilter, completedAt: { gte: weekAgo } },
       }),
       this.prisma.card.count({
-        where: { organizationId: orgId, completedAt: { gte: monthAgo } },
+        where: { ...cardFilter, completedAt: { gte: monthAgo } },
       }),
+      this.prisma.card.count({ where: completedInPeriodFilter }),
+      this.prisma.card.count({ where: completedInPrevFilter }),
       this.prisma.card.count({
         where: {
-          organizationId: orgId,
-          isArchived: false,
-          completedAt: null,
+          ...activeFilter,
           dueDate: { lt: today, not: null },
         },
       }),
       this.prisma.card.count({
         where: {
-          organizationId: orgId,
-          isArchived: false,
-          completedAt: null,
+          ...activeFilter,
           dueDate: { gte: today, lt: tomorrow },
         },
       }),
       this.prisma.card.groupBy({
         by: ['priority'],
-        where: { organizationId: orgId, isArchived: false, completedAt: null },
+        where: activeFilter,
         _count: { _all: true },
       }),
       this.prisma.card.groupBy({
         by: ['boardId'],
-        where: { organizationId: orgId, isArchived: false, completedAt: null },
+        where: activeFilter,
         _count: { _all: true },
         orderBy: { _count: { boardId: 'desc' } },
         take: 8,
       }),
       this.prisma.card.groupBy({
         by: ['leadId'],
-        where: {
-          organizationId: orgId,
-          isArchived: false,
-          completedAt: null,
-          leadId: { not: null },
-        },
+        where: { ...activeFilter, leadId: { not: null } },
         _count: { _all: true },
         orderBy: { _count: { leadId: 'desc' } },
         take: 5,
       }),
-      // Throughput: completions agrupadas por dia nos últimos 30 dias.
-      // Usa $queryRaw porque Prisma não suporta DATE_TRUNC nativo.
+      this.prisma.cardLabel.groupBy({
+        by: ['labelId'],
+        where: { card: activeFilter },
+        _count: { _all: true },
+        orderBy: { _count: { labelId: 'desc' } },
+        take: 10,
+      }),
+      // Throughput diário: completions por dia no período (limitado a 90 dias pra payload).
       this.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
         SELECT DATE_TRUNC('day', "completedAt") as day, COUNT(*)::bigint as count
         FROM "Card"
         WHERE "organizationId" = ${orgId}
-          AND "completedAt" >= ${monthAgo}
+          AND "completedAt" >= ${from}
+          AND "completedAt" <= ${to}
+          ${
+            params.boardIds && params.boardIds.length > 0
+              ? Prisma.sql`AND "boardId" IN (${Prisma.join(params.boardIds)})`
+              : Prisma.empty
+          }
         GROUP BY day
         ORDER BY day ASC
       `,
+      // Entrada vs saída por dia no período
+      this.prisma.$queryRaw<Array<{ day: Date; created: bigint; completed: bigint }>>`
+        WITH days AS (
+          SELECT generate_series(
+            DATE_TRUNC('day', ${from}::timestamp),
+            DATE_TRUNC('day', ${to}::timestamp),
+            INTERVAL '1 day'
+          ) AS day
+        ),
+        c_created AS (
+          SELECT DATE_TRUNC('day', "createdAt") d, COUNT(*)::bigint n
+          FROM "Card"
+          WHERE "organizationId" = ${orgId}
+            AND "createdAt" >= ${from}
+            AND "createdAt" <= ${to}
+            ${
+              params.boardIds && params.boardIds.length > 0
+                ? Prisma.sql`AND "boardId" IN (${Prisma.join(params.boardIds)})`
+                : Prisma.empty
+            }
+          GROUP BY d
+        ),
+        c_completed AS (
+          SELECT DATE_TRUNC('day', "completedAt") d, COUNT(*)::bigint n
+          FROM "Card"
+          WHERE "organizationId" = ${orgId}
+            AND "completedAt" >= ${from}
+            AND "completedAt" <= ${to}
+            ${
+              params.boardIds && params.boardIds.length > 0
+                ? Prisma.sql`AND "boardId" IN (${Prisma.join(params.boardIds)})`
+                : Prisma.empty
+            }
+          GROUP BY d
+        )
+        SELECT
+          days.day AS day,
+          COALESCE(c_created.n, 0) AS created,
+          COALESCE(c_completed.n, 0) AS completed
+        FROM days
+        LEFT JOIN c_created ON c_created.d = days.day
+        LEFT JOIN c_completed ON c_completed.d = days.day
+        ORDER BY days.day ASC
+      `,
+      // Sparkline: últimos 7 dias finalizados (granularidade diária).
+      this.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
+        WITH days AS (
+          SELECT generate_series(
+            DATE_TRUNC('day', NOW() - INTERVAL '6 days'),
+            DATE_TRUNC('day', NOW()),
+            INTERVAL '1 day'
+          ) AS day
+        )
+        SELECT days.day AS day,
+          COALESCE((
+            SELECT COUNT(*)::bigint FROM "Card"
+            WHERE "organizationId" = ${orgId}
+              AND DATE_TRUNC('day', "completedAt") = days.day
+          ), 0) AS count
+        FROM days
+        ORDER BY days.day ASC
+      `,
+      // Lead time: ms entre createdAt e completedAt, dos completados no período
+      this.prisma.card.findMany({
+        where: completedInPeriodFilter,
+        select: { createdAt: true, completedAt: true },
+      }),
+      // Reaberturas: Activity CARD_REOPENED no período
+      this.prisma.activity.count({
+        where: {
+          organizationId: orgId,
+          type: 'CARD_UNCOMPLETED',
+          createdAt: { gte: from, lte: to },
+          ...(params.boardIds && params.boardIds.length > 0
+            ? { boardId: { in: params.boardIds } }
+            : {}),
+        },
+      }),
+      this.prisma.activity.count({
+        where: {
+          organizationId: orgId,
+          type: 'CARD_UNCOMPLETED',
+          createdAt: { gte: prevFrom, lte: prevTo },
+          ...(params.boardIds && params.boardIds.length > 0
+            ? { boardId: { in: params.boardIds } }
+            : {}),
+        },
+      }),
+      this.prisma.card.findMany({
+        where: { ...completedInPeriodFilter, dueDate: { not: null } },
+        select: { dueDate: true, completedAt: true },
+      }),
+      this.prisma.card.count({
+        where: { ...activeFilter, updatedAt: { lt: weekAgo } },
+      }),
+      this.prisma.card.count({
+        where: {
+          ...activeFilter,
+          updatedAt: { lt: new Date(today.getTime() - 30 * 24 * 60 * 60_000) },
+        },
+      }),
+      this.prisma.card.count({
+        where: {
+          ...activeFilter,
+          updatedAt: { lt: new Date(today.getTime() - 60 * 24 * 60 * 60_000) },
+        },
+      }),
+      this.prisma.card.findMany({
+        where: { ...activeFilter, updatedAt: { lt: weekAgo } },
+        orderBy: { updatedAt: 'asc' },
+        take: 10,
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
+          board: { select: { id: true, name: true, color: true } },
+        },
+      }),
+      this.prisma.card.findMany({
+        where: activeFilter,
+        select: {
+          id: true,
+          updatedAt: true,
+          createdAt: true,
+          listId: true,
+          list: { select: { id: true, name: true, boardId: true } },
+        },
+      }),
     ]);
 
     // Resolve nomes de boards + users
     const boardIds = byBoard.map((b) => b.boardId);
     const leadIds = topLeads.map((l) => l.leadId).filter((id): id is string => Boolean(id));
+    const labelIds = byLabel.map((l) => l.labelId);
 
-    const [boards, leads] = await Promise.all([
+    const [boards, leads, labels, listsBoards] = await Promise.all([
       boardIds.length
         ? this.prisma.board.findMany({
             where: { id: { in: boardIds } },
@@ -199,9 +397,90 @@ export class AdminService {
             select: { id: true, name: true, avatarUrl: true },
           })
         : Promise.resolve([]),
+      labelIds.length
+        ? this.prisma.label.findMany({
+            where: { id: { in: labelIds } },
+            select: { id: true, name: true, color: true },
+          })
+        : Promise.resolve([]),
+      // Pra agrupar byColumn precisamos do nome do board de cada list distinta
+      Promise.resolve([] as Array<{ id: string; name: string }>),
     ]);
+    void listsBoards;
     const boardMap = new Map(boards.map((b) => [b.id, b]));
     const leadMap = new Map(leads.map((l) => [l.id, l]));
+    const labelMap = new Map(labels.map((l) => [l.id, l]));
+
+    // Lead time stats (em dias)
+    const leadTimeDays = leadTimeRows
+      .filter((c) => c.completedAt)
+      .map((c) => (c.completedAt!.getTime() - c.createdAt.getTime()) / 86_400_000);
+    const leadTimeAvg = leadTimeDays.length
+      ? leadTimeDays.reduce((a, b) => a + b, 0) / leadTimeDays.length
+      : 0;
+    const sortedLt = [...leadTimeDays].sort((a, b) => a - b);
+    const leadTimeMedian = sortedLt.length ? sortedLt[Math.floor(sortedLt.length / 2)]! : 0;
+    const leadTimeP95 = sortedLt.length
+      ? sortedLt[Math.min(sortedLt.length - 1, Math.floor(sortedLt.length * 0.95))]!
+      : 0;
+
+    // Taxa "no prazo": completedAt <= dueDate
+    const onTimeCount = onTimeRows.filter(
+      (c) => c.completedAt && c.dueDate && c.completedAt.getTime() <= c.dueDate.getTime(),
+    ).length;
+    const onTimeDenom = onTimeRows.length;
+    const onTimeRate = onTimeDenom > 0 ? onTimeCount / onTimeDenom : null;
+
+    // Tempo médio "desde createdAt" pra cards atualmente em cada lista (proxy
+    // de "tempo na coluna atual" — sem snapshot de movements).
+    const byColumnAgg = new Map<
+      string,
+      { listId: string; listName: string; boardId: string; wip: number; sumDays: number }
+    >();
+    const NOW = Date.now();
+    for (const c of byColumn) {
+      const k = c.list.id;
+      const cur =
+        byColumnAgg.get(k) ??
+        ({
+          listId: c.list.id,
+          listName: c.list.name,
+          boardId: c.list.boardId,
+          wip: 0,
+          sumDays: 0,
+        } as const);
+      const days = (NOW - c.createdAt.getTime()) / 86_400_000;
+      byColumnAgg.set(k, { ...cur, wip: cur.wip + 1, sumDays: cur.sumDays + days });
+    }
+    const boardNamesNeeded = new Set<string>();
+    for (const v of byColumnAgg.values()) boardNamesNeeded.add(v.boardId);
+    const extraBoards = boardNamesNeeded.size
+      ? await this.prisma.board.findMany({
+          where: { id: { in: Array.from(boardNamesNeeded) } },
+          select: { id: true, name: true, color: true },
+        })
+      : [];
+    const extraBoardMap = new Map(extraBoards.map((b) => [b.id, b]));
+
+    const byColumnOut = Array.from(byColumnAgg.values())
+      .map((v) => ({
+        list: { id: v.listId, name: v.listName, boardId: v.boardId },
+        board: extraBoardMap.get(v.boardId) ?? null,
+        wip: v.wip,
+        avgDaysInColumn: v.wip ? v.sumDays / v.wip : 0,
+      }))
+      .sort((a, b) => b.wip - a.wip)
+      .slice(0, 12);
+
+    // Sparkline normalizado (7 valores de count diário)
+    const sparkThroughput = sparkRaw.map((r) => Number(r.count));
+    while (sparkThroughput.length < 7) sparkThroughput.unshift(0);
+
+    // Deltas vs período anterior
+    function pct(curr: number, prev: number): number {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return Math.round(((curr - prev) / prev) * 100);
+    }
 
     return {
       summary: {
@@ -211,9 +490,44 @@ export class AdminService {
         completedTotal,
         completedThisWeek,
         completedThisMonth,
+        completedInPeriod,
+        wip: active,
         overdue,
         dueToday,
+        reopenedInPeriod,
+        onTimeRate,
+        onTimeNumerator: onTimeCount,
+        onTimeDenominator: onTimeDenom,
       },
+      period: { from: from.toISOString(), to: to.toISOString() },
+      delta: {
+        throughput: pct(completedInPeriod, completedInPrevPeriod),
+        reopened: pct(reopenedInPeriod, reopenedInPrev),
+      },
+      sparkline: {
+        throughput: sparkThroughput.slice(-7),
+      },
+      leadTime: {
+        avgDays: Math.round(leadTimeAvg * 10) / 10,
+        medianDays: Math.round(leadTimeMedian * 10) / 10,
+        p95Days: Math.round(leadTimeP95 * 10) / 10,
+        sampleSize: leadTimeDays.length,
+      },
+      aging: {
+        buckets: { stale7, stale30, stale60 },
+        samples: agingSamples.map((c) => ({
+          id: c.id,
+          title: c.title,
+          board: c.board,
+          lastUpdateDays: Math.floor((NOW - c.updatedAt.getTime()) / 86_400_000),
+        })),
+      },
+      byColumn: byColumnOut,
+      flowInOut: flowInOut.map((r) => ({
+        day: r.day.toISOString(),
+        created: Number(r.created),
+        completed: Number(r.completed),
+      })),
       byPriority: byPriority.map((p) => ({
         priority: p.priority,
         count: p._count._all,
@@ -226,6 +540,10 @@ export class AdminService {
           icon: null,
         },
         count: b._count._all,
+      })),
+      byLabel: byLabel.map((l) => ({
+        label: labelMap.get(l.labelId) ?? { id: l.labelId, name: 'Desconhecido', color: '#888' },
+        count: l._count._all,
       })),
       topLeads: topLeads.map((l) => ({
         user: l.leadId

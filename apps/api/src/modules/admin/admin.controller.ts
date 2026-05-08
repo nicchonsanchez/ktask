@@ -24,8 +24,44 @@ export class AdminController {
 
   @Get('stats/cards')
   @ApiOperation({ summary: 'Stats agregados de cards da Org (todos exceto GUEST)' })
-  cardsStats(@CurrentOrg() org: TenantContext) {
-    return this.service.cardsStats(org);
+  cardsStats(
+    @CurrentOrg() org: TenantContext,
+    @Query('from') fromStr?: string,
+    @Query('to') toStr?: string,
+    @Query('boardIds') boardIdsStr?: string,
+    @Query('leadId') leadId?: string,
+    @Query('priorities') prioritiesStr?: string,
+  ) {
+    const now = new Date();
+    const from = fromStr ? new Date(fromStr) : new Date(now.getTime() - 30 * 24 * 60 * 60_000);
+    const to = toStr ? new Date(toStr) : now;
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw new BadRequestException('from/to devem ser datas ISO válidas.');
+    }
+    if (from > to) {
+      throw new BadRequestException('from precisa ser anterior a to.');
+    }
+    const boardIds = boardIdsStr
+      ? boardIdsStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    const priorities = prioritiesStr
+      ? prioritiesStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s): s is 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' =>
+            ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(s),
+          )
+      : undefined;
+    return this.service.cardsStats(org, {
+      from,
+      to,
+      boardIds,
+      leadId: leadId || undefined,
+      priorities,
+    });
   }
 
   @Get('stats/tasks')

@@ -2,6 +2,14 @@ import { api } from '@/lib/api-client';
 
 export type Priority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
+export interface CardsStatsParams {
+  from?: string;
+  to?: string;
+  boardIds?: string[];
+  leadId?: string;
+  priorities?: Priority[];
+}
+
 export interface CardsStats {
   summary: {
     total: number;
@@ -10,12 +18,52 @@ export interface CardsStats {
     completedTotal: number;
     completedThisWeek: number;
     completedThisMonth: number;
+    completedInPeriod: number;
+    wip: number;
     overdue: number;
     dueToday: number;
+    reopenedInPeriod: number;
+    onTimeRate: number | null;
+    onTimeNumerator: number;
+    onTimeDenominator: number;
   };
+  period: { from: string; to: string };
+  delta: {
+    throughput: number;
+    reopened: number;
+  };
+  sparkline: {
+    throughput: number[];
+  };
+  leadTime: {
+    avgDays: number;
+    medianDays: number;
+    p95Days: number;
+    sampleSize: number;
+  };
+  aging: {
+    buckets: { stale7: number; stale30: number; stale60: number };
+    samples: Array<{
+      id: string;
+      title: string;
+      board: { id: string; name: string; color: string | null } | null;
+      lastUpdateDays: number;
+    }>;
+  };
+  byColumn: Array<{
+    list: { id: string; name: string; boardId: string };
+    board: { id: string; name: string; color: string | null } | null;
+    wip: number;
+    avgDaysInColumn: number;
+  }>;
+  flowInOut: Array<{ day: string; created: number; completed: number }>;
   byPriority: Array<{ priority: Priority; count: number }>;
   byBoard: Array<{
     board: { id: string; name: string; color: string | null; icon: string | null };
+    count: number;
+  }>;
+  byLabel: Array<{
+    label: { id: string; name: string; color: string };
     count: number;
   }>;
   topLeads: Array<{
@@ -68,10 +116,21 @@ export interface CompaniesStats {
   };
 }
 
+function serializeCardsParams(params: CardsStatsParams): string {
+  const sp = new URLSearchParams();
+  if (params.from) sp.set('from', params.from);
+  if (params.to) sp.set('to', params.to);
+  if (params.boardIds?.length) sp.set('boardIds', params.boardIds.join(','));
+  if (params.leadId) sp.set('leadId', params.leadId);
+  if (params.priorities?.length) sp.set('priorities', params.priorities.join(','));
+  const qs = sp.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const indicatorsQueries = {
-  cards: () => ({
-    queryKey: ['indicators', 'cards'] as const,
-    queryFn: () => api.get<CardsStats>('/api/v1/admin/stats/cards'),
+  cards: (params: CardsStatsParams = {}) => ({
+    queryKey: ['indicators', 'cards', params] as const,
+    queryFn: () => api.get<CardsStats>(`/api/v1/admin/stats/cards${serializeCardsParams(params)}`),
   }),
   tasks: () => ({
     queryKey: ['indicators', 'tasks'] as const,
