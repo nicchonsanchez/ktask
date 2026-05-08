@@ -18,10 +18,10 @@ const PAGE_SIZE = 50;
 // e uma localizacao no board, nao um status. Labels vem do STATUS_LABEL
 // centralizado em status-config.ts (single source of truth).
 const STATUS_CLASS: Record<CardStatus, string> = {
-  ACTIVE: 'bg-bg-muted text-fg-muted',
+  ACTIVE: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
   COMPLETED: 'bg-success-subtle text-success',
   WAITING: 'bg-warning-subtle text-warning',
-  CANCELED: 'bg-danger-subtle text-danger',
+  CANCELED: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-500/20 dark:text-zinc-300',
 };
 
 interface RowItem {
