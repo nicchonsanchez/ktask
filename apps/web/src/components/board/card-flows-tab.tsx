@@ -90,11 +90,13 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
   const confirm = useConfirm();
   const notify = useNotify();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Doc 42: a regua mostra so colunas regulares (sem isFinalList).
-  // A bolinha do check no fim representa o estado "Finalizado" — fica
-  // verde quando o card esta numa coluna isFinalList=true.
-  const lists = flow.board.lists.filter((l) => !l.isFinalList);
+  // Doc 42: a regua mostra so colunas regulares (sem isBacklog/isFinalList).
+  // - Icone History a esquerda representa o Backlog (filled quando esta nele)
+  // - Bolinha do check a direita representa o Finalizado (filled quando esta nele)
+  const lists = flow.board.lists.filter((l) => !l.isBacklog && !l.isFinalList);
+  const backlogList = flow.board.lists.find((l) => l.isBacklog);
   const finalList = flow.board.lists.find((l) => l.isFinalList);
+  const isOnBacklog = Boolean(backlogList && flow.listId === backlogList.id);
   const isOnFinalList = Boolean(finalList && flow.listId === finalList.id);
   const currentIdx = lists.findIndex((l) => l.id === flow.listId);
 
@@ -207,13 +209,34 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
       </div>
 
       <div className="flex items-stretch overflow-hidden rounded-md">
-        <div
-          className={`flex shrink-0 items-center justify-center px-3 ${
-            isOnFinalList ? 'bg-accent text-bg' : 'bg-primary text-primary-fg'
+        {/* Bolinha do Backlog. Click move o card pra coluna isBacklog do
+            board (se existir). Verde quando esta no Finalizado, roxo
+            quando esta no Backlog ou alem, cinza desabilitado. */}
+        <button
+          type="button"
+          disabled={!backlogList || moveMut.isPending || isOnBacklog}
+          onClick={() => {
+            if (backlogList && !isOnBacklog) moveMut.mutate(backlogList.id);
+          }}
+          title={
+            !backlogList
+              ? 'Este fluxo nao tem coluna Backlog'
+              : isOnBacklog
+                ? 'Card esta no Backlog'
+                : `Mover para ${backlogList.name}`
+          }
+          className={`flex shrink-0 items-center justify-center px-3 transition-colors ${
+            isOnFinalList
+              ? 'bg-accent text-bg'
+              : backlogList
+                ? isOnBacklog
+                  ? 'bg-primary text-primary-fg'
+                  : 'bg-primary/70 text-primary-fg hover:bg-primary cursor-pointer'
+                : 'bg-bg-muted text-fg-muted cursor-not-allowed opacity-50'
           }`}
         >
           <History size={14} />
-        </div>
+        </button>
 
         <div className="flex flex-1">
           {lists.map((l, idx) => {
