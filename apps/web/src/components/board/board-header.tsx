@@ -23,6 +23,7 @@ import { BoardMemberPicker } from './board-member-picker';
 import { BoardSettingsDialog } from './board-settings-dialog';
 import { ArchivedDrawer } from './archived-drawer';
 import { BoardFilterPopover, type BoardFilters } from './board-filter-popover';
+import { BoardViewTabs, type BoardView } from './board-view-tabs';
 
 const STACK_LIMIT = 4;
 
@@ -33,6 +34,8 @@ export function BoardHeader({
   filters,
   onFiltersChange,
   onlineUserIds = [],
+  view,
+  onViewChange,
 }: {
   board: BoardDetail;
   search: string;
@@ -40,6 +43,8 @@ export function BoardHeader({
   filters: BoardFilters;
   onFiltersChange: (next: BoardFilters) => void;
   onlineUserIds?: string[];
+  view: BoardView;
+  onViewChange: (next: BoardView) => void;
 }) {
   const onlineSet = new Set(onlineUserIds);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -96,14 +101,15 @@ export function BoardHeader({
   return (
     <>
       <div className="border-border bg-bg flex items-center gap-3 border-b px-6 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <span
             aria-hidden
             className="text-fg-muted inline-flex size-7 shrink-0 items-center justify-center"
           >
             <Layout size={18} />
           </span>
-          <h1 className="truncate text-base font-semibold">{board.name}</h1>
+          <h1 className="min-w-0 truncate text-base font-semibold">{board.name}</h1>
+          <BoardViewTabs view={view} onChange={onViewChange} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">

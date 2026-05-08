@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -42,6 +42,8 @@ import { CardModal } from '@/components/board/card-modal';
 import { ColumnDock } from '@/components/board/column-dock';
 import { AddColumnButton } from '@/components/board/add-column-button';
 import { BoardHeader } from '@/components/board/board-header';
+import { BoardTableView } from '@/components/board/board-table-view';
+import type { BoardView } from '@/components/board/board-view-tabs';
 import {
   applyBoardFilters,
   EMPTY_FILTERS,
@@ -56,6 +58,16 @@ export default function BoardPage() {
   const boardId = params.boardId;
   const boardQuery = useQuery(boardsQueries.detail(boardId));
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view: BoardView = searchParams.get('view') === 'tabela' ? 'tabela' : 'quadro';
+  function handleViewChange(next: BoardView) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'quadro') params.delete('view');
+    else params.set('view', next);
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : '?');
+  }
   const [activeCard, setActiveCard] = useState<CardListItem | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
@@ -294,6 +306,8 @@ export default function BoardPage() {
         filters={filters}
         onFiltersChange={setFilters}
         onlineUserIds={onlineUserIds}
+        view={view}
+        onViewChange={handleViewChange}
       />
 
       {connectionState !== 'connected' && (
@@ -308,80 +322,84 @@ export default function BoardPage() {
         </div>
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="inline-flex h-full gap-4 p-4 sm:gap-5 sm:p-6">
-            {(() => {
-              // Doc 42: separa colunas em 3 grupos pra renderizar nos
-              // docks (Backlog esquerda, Final direita) + colunas regulares
-              // no centro. Mantem ordem original dentro de cada grupo.
-              const backlogLists = board.lists.filter((l) => l.isBacklog);
-              const finalLists = board.lists.filter((l) => l.isFinalList);
-              const regularLists = board.lists.filter((l) => !l.isBacklog && !l.isFinalList);
+      {view === 'tabela' ? (
+        <BoardTableView board={board} search={search} />
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex-1 overflow-x-auto overflow-y-hidden">
+            <div className="inline-flex h-full gap-4 p-4 sm:gap-5 sm:p-6">
+              {(() => {
+                // Doc 42: separa colunas em 3 grupos pra renderizar nos
+                // docks (Backlog esquerda, Final direita) + colunas regulares
+                // no centro. Mantem ordem original dentro de cada grupo.
+                const backlogLists = board.lists.filter((l) => l.isBacklog);
+                const finalLists = board.lists.filter((l) => l.isFinalList);
+                const regularLists = board.lists.filter((l) => !l.isBacklog && !l.isFinalList);
 
-              // Renderizador compartilhado pra cada lista (com filtros + sortable).
-              const renderColumn = (list: (typeof board.lists)[number]) => {
-                const sortedCards = sortCardsForBoard(list.cards, board.cardOrdering);
-                const filteredCards = applyBoardFilters(sortedCards, filters, currentUserId);
-                const visibleCards = searchNorm
-                  ? filteredCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
-                  : filteredCards;
-                const otherLists = board.lists.filter((l) => l.id !== list.id);
-                return (
-                  <ListColumn
-                    list={list}
-                    otherLists={otherLists}
-                    isAdmin={board.myRole === 'ADMIN'}
-                  >
-                    <SortableContext
-                      items={visibleCards.map((c) => c.id)}
-                      strategy={verticalListSortingStrategy}
+                // Renderizador compartilhado pra cada lista (com filtros + sortable).
+                const renderColumn = (list: (typeof board.lists)[number]) => {
+                  const sortedCards = sortCardsForBoard(list.cards, board.cardOrdering);
+                  const filteredCards = applyBoardFilters(sortedCards, filters, currentUserId);
+                  const visibleCards = searchNorm
+                    ? filteredCards.filter((c) => c.title.toLowerCase().includes(searchNorm))
+                    : filteredCards;
+                  const otherLists = board.lists.filter((l) => l.id !== list.id);
+                  return (
+                    <ListColumn
+                      list={list}
+                      otherLists={otherLists}
+                      isAdmin={board.myRole === 'ADMIN'}
                     >
-                      {visibleCards.map((card) => (
-                        <CardItem key={card.id} card={card} />
+                      <SortableContext
+                        items={visibleCards.map((c) => c.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {visibleCards.map((card) => (
+                          <CardItem key={card.id} card={card} />
+                        ))}
+                      </SortableContext>
+                    </ListColumn>
+                  );
+                };
+
+                return (
+                  <>
+                    <ColumnDock
+                      lists={backlogLists}
+                      kind="backlog"
+                      side="left"
+                      renderColumn={renderColumn}
+                    />
+                    <SortableContext
+                      items={regularLists.map((l) => `${LIST_SORT_PREFIX}${l.id}`)}
+                      strategy={horizontalListSortingStrategy}
+                    >
+                      {regularLists.map((list) => (
+                        <div key={list.id}>{renderColumn(list)}</div>
                       ))}
                     </SortableContext>
-                  </ListColumn>
+                    {board.myRole === 'ADMIN' && <AddColumnButton boardId={boardId} />}
+                    <ColumnDock
+                      lists={finalLists}
+                      kind="final"
+                      side="right"
+                      renderColumn={renderColumn}
+                    />
+                  </>
                 );
-              };
-
-              return (
-                <>
-                  <ColumnDock
-                    lists={backlogLists}
-                    kind="backlog"
-                    side="left"
-                    renderColumn={renderColumn}
-                  />
-                  <SortableContext
-                    items={regularLists.map((l) => `${LIST_SORT_PREFIX}${l.id}`)}
-                    strategy={horizontalListSortingStrategy}
-                  >
-                    {regularLists.map((list) => (
-                      <div key={list.id}>{renderColumn(list)}</div>
-                    ))}
-                  </SortableContext>
-                  {board.myRole === 'ADMIN' && <AddColumnButton boardId={boardId} />}
-                  <ColumnDock
-                    lists={finalLists}
-                    kind="final"
-                    side="right"
-                    renderColumn={renderColumn}
-                  />
-                </>
-              );
-            })()}
+              })()}
+            </div>
           </div>
-        </div>
 
-        <DragOverlay>{activeCard && <CardOverlay card={activeCard} />}</DragOverlay>
-      </DndContext>
+          <DragOverlay>{activeCard && <CardOverlay card={activeCard} />}</DragOverlay>
+        </DndContext>
+      )}
 
       <Suspense fallback={null}>
         <CardModal boardId={boardId} />
