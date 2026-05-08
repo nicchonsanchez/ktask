@@ -90,8 +90,12 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
   const confirm = useConfirm();
   const notify = useNotify();
   const [menuOpen, setMenuOpen] = useState(false);
-  const lists = flow.board.lists;
-  const isCompleted = Boolean(flow.completedAt);
+  // Doc 42: a regua mostra so colunas regulares (sem isFinalList).
+  // A bolinha do check no fim representa o estado "Finalizado" — fica
+  // verde quando o card esta numa coluna isFinalList=true.
+  const lists = flow.board.lists.filter((l) => !l.isFinalList);
+  const finalList = flow.board.lists.find((l) => l.isFinalList);
+  const isOnFinalList = Boolean(finalList && flow.listId === finalList.id);
   const currentIdx = lists.findIndex((l) => l.id === flow.listId);
 
   // Move por fluxo (iteração 2): funciona em qualquer presença, não só a primária.
@@ -203,16 +207,30 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
       </div>
 
       <div className="flex items-stretch overflow-hidden rounded-md">
-        <div className="bg-primary text-primary-fg flex shrink-0 items-center justify-center px-3">
+        <div
+          className={`flex shrink-0 items-center justify-center px-3 ${
+            isOnFinalList ? 'bg-success text-primary-fg' : 'bg-primary text-primary-fg'
+          }`}
+        >
           <History size={14} />
         </div>
 
         <div className="flex flex-1">
           {lists.map((l, idx) => {
-            const isCurrent = l.id === flow.listId && !isCompleted;
-            const isFilled = !isCompleted && currentIdx >= 0 && idx <= currentIdx;
+            const isCurrent = !isOnFinalList && l.id === flow.listId;
+            // Cinza pras colunas alem da atual; preenchido (roxo ou verde)
+            // pras anteriores e a atual. Quando esta na isFinalList, todas
+            // as colunas anteriores ficam verdes.
+            const isFilled = isOnFinalList || (currentIdx >= 0 && idx <= currentIdx);
             const pending = moveMut.isPending && moveMut.variables === l.id;
             const canClick = !isCurrent && !moveMut.isPending;
+            const filledColor = isOnFinalList
+              ? isCurrent
+                ? 'bg-success text-primary-fg'
+                : 'bg-success/70 text-primary-fg hover:bg-success'
+              : isCurrent
+                ? 'bg-primary text-primary-fg'
+                : 'bg-primary/70 text-primary-fg hover:bg-primary';
             return (
               <button
                 key={l.id}
@@ -223,11 +241,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
                 disabled={!canClick}
                 title={isCurrent ? `Coluna atual: ${l.name}` : `Mover para ${l.name}`}
                 className={`group/col relative flex flex-1 items-center justify-center px-3 py-2 text-center text-[11px] font-medium transition-colors ${
-                  isFilled
-                    ? isCurrent
-                      ? 'bg-primary text-primary-fg'
-                      : 'bg-primary/70 text-primary-fg hover:bg-primary'
-                    : 'bg-bg-muted text-fg-muted'
+                  isFilled ? filledColor : 'bg-bg-muted text-fg-muted'
                 } ${canClick ? 'hover:bg-primary-subtle hover:text-primary cursor-pointer' : 'cursor-default'}`}
               >
                 <span className="line-clamp-1">{l.name}</span>
@@ -237,14 +251,32 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
           })}
         </div>
 
-        <div
-          className={`flex shrink-0 items-center justify-center px-3 ${
-            isCompleted ? 'bg-accent text-bg' : 'bg-bg-muted text-fg-muted'
+        {/* Bolinha verde do "Finalizado". Click move o card pra coluna
+            isFinalList do board (se existir). Cinza quando nao esta nela,
+            verde quando esta. */}
+        <button
+          type="button"
+          disabled={!finalList || moveMut.isPending || isOnFinalList}
+          onClick={() => {
+            if (finalList && !isOnFinalList) moveMut.mutate(finalList.id);
+          }}
+          title={
+            !finalList
+              ? 'Este fluxo nao tem coluna Finalizado'
+              : isOnFinalList
+                ? 'Card esta na coluna Finalizado'
+                : `Mover para ${finalList.name}`
+          }
+          className={`flex shrink-0 items-center justify-center px-3 transition-colors ${
+            isOnFinalList
+              ? 'bg-success text-primary-fg'
+              : finalList
+                ? 'bg-bg-muted text-fg-muted hover:bg-success-subtle hover:text-success cursor-pointer'
+                : 'bg-bg-muted text-fg-muted cursor-not-allowed opacity-50'
           }`}
-          title={isCompleted ? 'Finalizado neste fluxo' : 'Não finalizado'}
         >
           <CheckCircle2 size={14} />
-        </div>
+        </button>
       </div>
     </div>
   );

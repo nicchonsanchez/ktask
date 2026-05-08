@@ -1525,7 +1525,15 @@ export class CardsService {
             lists: {
               where: { isArchived: false },
               orderBy: { position: 'asc' },
-              select: { id: true, name: true, position: true },
+              // Doc 42: inclui flags pra UI da regua filtrar isFinalList
+              // (representado pela bolinha do check no fim).
+              select: {
+                id: true,
+                name: true,
+                position: true,
+                isFinalList: true,
+                isBacklog: true,
+              },
             },
           },
         },

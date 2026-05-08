@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
+  Check,
   Globe,
   Layout,
   Link as LinkIcon,
@@ -290,36 +291,72 @@ function VisibilityButton({ board }: { board: BoardDetail }) {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-1">
-        <button
-          type="button"
+        <VisibilityOption
+          icon={<Globe size={15} />}
+          label="Público"
+          description="Todos da organização podem acessar o fluxo."
+          selected={isPublic}
+          disabled={updateMut.isPending}
           onClick={() => updateMut.mutate('ORGANIZATION')}
+        />
+        <VisibilityOption
+          icon={<Lock size={15} />}
+          label="Secreto"
+          description="Somente membros adicionados ao fluxo podem acessar."
+          selected={!isPublic}
           disabled={updateMut.isPending}
-          className="hover:bg-bg-muted flex w-full items-start gap-2.5 rounded-sm px-2 py-2 text-left"
-        >
-          <Globe size={15} className="text-fg-muted mt-0.5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Público</p>
-            <p className="text-fg-muted text-[11px]">Todos da organização podem acessar o fluxo.</p>
-          </div>
-          {isPublic && <span className="text-primary text-[11px] font-medium">atual</span>}
-        </button>
-        <button
-          type="button"
           onClick={() => updateMut.mutate('PRIVATE')}
-          disabled={updateMut.isPending}
-          className="hover:bg-bg-muted flex w-full items-start gap-2.5 rounded-sm px-2 py-2 text-left"
-        >
-          <Lock size={15} className="text-fg-muted mt-0.5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Secreto</p>
-            <p className="text-fg-muted text-[11px]">
-              Somente membros adicionados ao fluxo podem acessar.
-            </p>
-          </div>
-          {!isPublic && <span className="text-primary text-[11px] font-medium">atual</span>}
-        </button>
+        />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function VisibilityOption({
+  icon,
+  label,
+  description,
+  selected,
+  disabled,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={`relative flex w-full items-start gap-2.5 rounded-sm py-2 pl-3 pr-2 text-left transition-colors disabled:opacity-60 ${
+        selected ? 'bg-primary-subtle/40 ring-primary/20 ring-1' : 'hover:bg-bg-muted'
+      }`}
+    >
+      {selected && (
+        <span aria-hidden className="bg-primary absolute inset-y-1 left-0 w-0.5 rounded-r" />
+      )}
+      <span className={`mt-0.5 shrink-0 ${selected ? 'text-primary' : 'text-fg-muted'}`}>
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-medium ${selected ? 'text-primary' : 'text-fg'}`}>{label}</p>
+        <p className="text-fg-muted text-[11px]">{description}</p>
+      </div>
+      {selected && (
+        <span
+          className="bg-primary text-primary-fg mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full"
+          aria-label="Atual"
+          title="Atual"
+        >
+          <Check size={11} strokeWidth={3} />
+        </span>
+      )}
+    </button>
   );
 }
 

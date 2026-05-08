@@ -82,7 +82,14 @@ export interface CardFlow {
       role: 'ADMIN' | 'EDITOR' | 'COMMENTER' | 'VIEWER';
       user: { id: string; name: string; avatarUrl: string | null };
     }>;
-    lists: Array<{ id: string; name: string; position: number }>;
+    lists: Array<{
+      id: string;
+      name: string;
+      position: number;
+      /** Doc 42: marca pra UI esconder na regua + tratar como destino do check verde. */
+      isFinalList: boolean;
+      isBacklog: boolean;
+    }>;
   };
   list: { id: string; name: string };
 }
