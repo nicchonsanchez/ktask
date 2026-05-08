@@ -3,6 +3,7 @@ import type { Prisma, ContactType } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
+import { ListsService } from '@/modules/lists/lists.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 
 import type {
@@ -113,6 +114,7 @@ export class ImporterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly listsService: ListsService,
   ) {}
 
   /**
@@ -523,6 +525,11 @@ export class ImporterService {
 
     // Persiste mapeamentos novos pra reuso
     await this.persistMappings(tenant.organizationId, body);
+
+    // Garante que o board tenha a coluna Finalizado (isFinalList=true) no fim.
+    // Importer nao seta essa flag em nenhuma das listas que cria/encontra,
+    // entao boards importados ficavam sem a coluna especial.
+    await this.listsService.ensureFinalList(board.id, tenant.organizationId);
 
     return report;
   }

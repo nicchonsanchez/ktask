@@ -78,6 +78,48 @@ export class ListsService {
     return list;
   }
 
+  /**
+   * Garante que o board tenha exatamente 1 lista com isFinalList=true. Se
+   * nenhuma existir, cria uma "Finalizado" no fim do board (maior position).
+   * Idempotente: chamar de novo num board que ja tem nao faz nada.
+   *
+   * Usado:
+   *   - Backfill em boards existentes (endpoint admin)
+   *   - No fim de cada importacao (importer)
+   *   - Como recovery se alguem deletar a coluna direto via DB
+   *
+   * Nao recebe userId/tenant — e infraestrutura interna idempotente.
+   */
+  async ensureFinalList(
+    boardId: string,
+    organizationId: string,
+  ): Promise<{ listId: string; created: boolean }> {
+    const existing = await this.prisma.list.findFirst({
+      where: { boardId, isFinalList: true, isArchived: false },
+      select: { id: true },
+    });
+    if (existing) return { listId: existing.id, created: false };
+
+    const last = await this.prisma.list.findFirst({
+      where: { boardId, isArchived: false },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const position = computeInsertPosition(last?.position ?? null, null);
+
+    const created = await this.prisma.list.create({
+      data: {
+        organizationId,
+        boardId,
+        name: 'Finalizado',
+        position,
+        isFinalList: true,
+      },
+      select: { id: true },
+    });
+    return { listId: created.id, created: true };
+  }
+
   async update(userId: string, tenant: TenantContext, listId: string, input: UpdateListInput) {
     const list = await this.getOneOrThrow(listId);
     await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
@@ -149,6 +191,26 @@ export class ListsService {
   ) {
     const list = await this.getOneOrThrow(listId);
     await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
+
+    // Invariante: cada board precisa ter exatamente 1 coluna isFinalList=true.
+    // Bloqueia arquivar se for a unica do board — operador precisa marcar
+    // outra coluna como Finalizado primeiro (PATCH list isFinalList=true
+    // dispara o swap idempotente que desmarca esta).
+    if (list.isFinalList) {
+      const otherFinal = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isFinalList: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherFinal === 0) {
+        throw new NotFoundException(
+          'Esta é a coluna Finalizado do fluxo. Marque outra coluna como Finalizado antes de arquivar esta.',
+        );
+      }
+    }
 
     const cards = await this.prisma.card.findMany({
       where: { listId, isArchived: false },

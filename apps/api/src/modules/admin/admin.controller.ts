@@ -1,9 +1,10 @@
-import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { TenantGuard } from '@/common/tenant/tenant.guard';
 import { CurrentOrg } from '@/common/tenant/current-org.decorator';
 import type { TenantContext } from '@/common/tenant/tenant.types';
+import { ListsService } from '@/modules/lists/lists.service';
 
 import { AdminService } from './admin.service';
 
@@ -12,7 +13,19 @@ import { AdminService } from './admin.service';
 @UseGuards(TenantGuard)
 @Controller({ path: 'admin', version: '1' })
 export class AdminController {
-  constructor(private readonly service: AdminService) {}
+  constructor(
+    private readonly service: AdminService,
+    private readonly lists: ListsService,
+  ) {}
+
+  @Post('boards/ensure-final-lists')
+  @ApiOperation({
+    summary:
+      'Backfill: garante que todo board da Org tenha 1 coluna isFinalList=true. Idempotente.',
+  })
+  ensureFinalLists(@CurrentOrg() org: TenantContext) {
+    return this.service.ensureFinalListsAcrossOrg(org, this.lists);
+  }
 
   @Get('stats/time-tracking')
   @ApiOperation({

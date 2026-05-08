@@ -826,4 +826,41 @@ export class AdminService {
       throw new ForbiddenException('Apenas OWNER ou ADMIN da organização pode ver stats.');
     }
   }
+
+  /**
+   * Backfill: garante que todos os boards (nao arquivados) da Org tenham
+   * uma coluna isFinalList=true. Idempotente — boards que ja tem nao mudam.
+   * Usado pra normalizar boards antigos (importados ou pre-doc-42) que
+   * nasceram sem a coluna especial.
+   *
+   * Importa ListsService como argumento pra evitar circular dependency
+   * (Admin <-> Lists). Chamado pelo controller que ja tem ambos injetados.
+   */
+  async ensureFinalListsAcrossOrg(
+    tenant: TenantContext,
+    lists: {
+      ensureFinalList: (
+        boardId: string,
+        orgId: string,
+      ) => Promise<{ listId: string; created: boolean }>;
+    },
+  ) {
+    this.assertAdmin(tenant);
+    const orgId = tenant.organizationId;
+    const boards = await this.prisma.board.findMany({
+      where: { organizationId: orgId, isArchived: false },
+      select: { id: true, name: true },
+    });
+    const results = [];
+    for (const b of boards) {
+      const r = await lists.ensureFinalList(b.id, orgId);
+      results.push({ boardId: b.id, name: b.name, created: r.created });
+    }
+    return {
+      total: boards.length,
+      created: results.filter((r) => r.created).length,
+      alreadyHad: results.filter((r) => !r.created).length,
+      details: results,
+    };
+  }
 }
