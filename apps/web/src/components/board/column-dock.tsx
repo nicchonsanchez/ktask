@@ -5,7 +5,8 @@
 // ficam num dock estreito a esquerda e "Finalizado" num dock estreito
 // a direita. Click expande inline mostrando as colunas como normais.
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Inbox, CheckCircle2 } from 'lucide-react';
 
 import type { ListWithCards } from '@/lib/queries/boards';
@@ -48,6 +49,18 @@ export function ColumnDock({
   renderColumn: (list: ListWithCards) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // Droppable do estado colapsado: quando um card e arrastado por cima do
+  // dock, ele auto-expande pra revelar as colunas reais (que sao droppables
+  // de verdade). User solta o card na coluna que quiser dentro do dock.
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `dock:${kind}`,
+    data: { type: 'dock', kind },
+    disabled: open,
+  });
+  useEffect(() => {
+    if (isOver && !open) setOpen(true);
+  }, [isOver, open]);
+
   if (lists.length === 0) return null;
 
   const Icon = DOCK_ICON[kind];
@@ -57,16 +70,18 @@ export function ColumnDock({
     side === 'left' ? (open ? ChevronLeft : ChevronRight) : open ? ChevronRight : ChevronLeft;
 
   if (!open) {
-    // Colapsado: largura fixa igual a uma coluna normal — sem expand/collapse
-    // no hover (decisao do operador, doc 42 ajuste). Click em qualquer parte
+    // Colapsado: largura fixa igual a uma coluna normal. Click ou drag-over
     // expande pra mostrar as colunas reais como ListColumn.
     return (
       <button
         type="button"
+        ref={setDropRef}
         onClick={() => setOpen(true)}
         title={`${DOCK_LABEL[kind]} — ${lists.length} coluna${lists.length === 1 ? '' : 's'}, ${totalCards} card${totalCards === 1 ? '' : 's'}. Clique pra expandir.`}
         aria-label={`Expandir ${DOCK_LABEL[kind]}`}
-        className={`dark:border-border/40 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg py-3 shadow-sm transition-shadow hover:shadow-md sm:w-[280px] dark:border ${tone.bg}`}
+        className={`dark:border-border/40 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg py-3 shadow-sm transition-shadow hover:shadow-md sm:w-[280px] dark:border ${tone.bg} ${
+          isOver ? 'ring-primary/40 ring-2' : ''
+        }`}
       >
         <div
           className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone.accent} ${tone.icon}`}
