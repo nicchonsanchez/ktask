@@ -227,7 +227,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
           }
           className={`flex shrink-0 items-center justify-center px-3 transition-colors ${
             isOnFinalList
-              ? 'bg-accent text-bg'
+              ? 'bg-[#0daa7c] text-white'
               : backlogList
                 ? isOnBacklog
                   ? 'bg-primary text-primary-fg'
@@ -249,8 +249,8 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
             const canClick = !isCurrent && !moveMut.isPending;
             const filledColor = isOnFinalList
               ? isCurrent
-                ? 'bg-accent text-bg'
-                : 'bg-accent/70 text-bg hover:bg-accent'
+                ? 'bg-[#0daa7c] text-white'
+                : 'bg-[#0daa7c]/80 text-white hover:bg-[#0daa7c]'
               : isCurrent
                 ? 'bg-primary text-primary-fg'
                 : 'bg-primary/70 text-primary-fg hover:bg-primary';
@@ -292,9 +292,9 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
           }
           className={`flex shrink-0 items-center justify-center px-3 transition-colors ${
             isOnFinalList
-              ? 'bg-accent text-bg'
+              ? 'bg-[#0daa7c] text-white'
               : finalList
-                ? 'bg-bg-muted text-fg-muted hover:bg-accent/30 hover:text-accent cursor-pointer'
+                ? 'bg-bg-muted text-fg-muted cursor-pointer hover:bg-[#0daa7c]/20 hover:text-[#0daa7c]'
                 : 'bg-bg-muted text-fg-muted cursor-not-allowed opacity-50'
           }`}
         >
