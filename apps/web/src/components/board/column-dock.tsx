@@ -24,9 +24,12 @@ const DOCK_ICON = {
   final: CheckCircle2,
 };
 
+// Dock usa o mesmo bg-bg das ListColumn pra manter consistencia visual
+// (operador, ajuste pos-tonal-layering). Tom (verde/cinza) fica reservado
+// pro icone — fundo branco no light, dark segue tokens automaticamente.
 const DOCK_TONE = {
-  backlog: { bg: 'bg-bg-muted/40', icon: 'text-fg-muted', accent: 'bg-fg-muted/15' },
-  final: { bg: 'bg-success-subtle/30', icon: 'text-success', accent: 'bg-success/15' },
+  backlog: { bg: 'bg-bg', icon: 'text-fg-muted', accent: 'bg-fg-muted/15' },
+  final: { bg: 'bg-bg', icon: 'text-success', accent: 'bg-success/15' },
 };
 
 /**
