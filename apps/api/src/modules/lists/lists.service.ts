@@ -82,9 +82,17 @@ export class ListsService {
     const list = await this.getOneOrThrow(listId);
     await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
-    const updated = await this.prisma.list.update({
-      where: { id: listId },
-      data: input,
+    // Invariante: no máximo 1 lista com isFinalList=true por board (Finalizado é
+    // *a* coluna, não uma categoria). Se o caller setar true, desmarca a
+    // anterior antes de aplicar — swap idempotente, na mesma transação.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (input.isFinalList === true) {
+        await tx.list.updateMany({
+          where: { boardId: list.boardId, isFinalList: true, id: { not: listId } },
+          data: { isFinalList: false },
+        });
+      }
+      return tx.list.update({ where: { id: listId }, data: input });
     });
 
     await this.prisma.activity.create({

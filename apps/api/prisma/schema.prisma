@@ -412,7 +412,9 @@ model List {
   slaMinutes     Int?
   /// Doc 42: coluna marcada como Finalizado/Concluido — espelho do is_final
   /// do Ummense. UI trata como faixa especial expansivel a direita do board.
-  /// Por convencao, max 1 por board (mas o schema nao impoe).
+  /// MAX 1 por board (constraint via partial unique index custom — migration
+  /// 20260508120000_unique_final_list_per_board). ListsService faz swap
+  /// idempotente no update pra preservar a invariante.
   isFinalList    Boolean  @default(false)
   /// Doc 42: coluna marcada como Backlog (espelho do is_backlog do Ummense).
   /// UI trata como faixa expansivel a esquerda. Multiplas permitidas por
