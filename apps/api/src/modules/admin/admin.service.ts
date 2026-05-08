@@ -843,6 +843,10 @@ export class AdminService {
         boardId: string,
         orgId: string,
       ) => Promise<{ listId: string; created: boolean }>;
+      ensureBacklogList: (
+        boardId: string,
+        orgId: string,
+      ) => Promise<{ listId: string; created: boolean }>;
     },
   ) {
     this.assertAdmin(tenant);
@@ -853,13 +857,19 @@ export class AdminService {
     });
     const results = [];
     for (const b of boards) {
-      const r = await lists.ensureFinalList(b.id, orgId);
-      results.push({ boardId: b.id, name: b.name, created: r.created });
+      const final = await lists.ensureFinalList(b.id, orgId);
+      const backlog = await lists.ensureBacklogList(b.id, orgId);
+      results.push({
+        boardId: b.id,
+        name: b.name,
+        finalCreated: final.created,
+        backlogCreated: backlog.created,
+      });
     }
     return {
       total: boards.length,
-      created: results.filter((r) => r.created).length,
-      alreadyHad: results.filter((r) => !r.created).length,
+      finalCreated: results.filter((r) => r.finalCreated).length,
+      backlogCreated: results.filter((r) => r.backlogCreated).length,
       details: results,
     };
   }

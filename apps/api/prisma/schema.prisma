@@ -417,8 +417,9 @@ model List {
   /// idempotente no update pra preservar a invariante.
   isFinalList    Boolean  @default(false)
   /// Doc 42: coluna marcada como Backlog (espelho do is_backlog do Ummense).
-  /// UI trata como faixa expansivel a esquerda. Multiplas permitidas por
-  /// board (ex: "INFORMAÇÕES" + "Backlog" podem coexistir).
+  /// UI trata como faixa expansivel a esquerda. MIN 1 por board (ListsService
+  /// ensureBacklogList + bloqueio no archive da ultima). Multiplas permitidas
+  /// — caso de uso "INFORMAÇÕES" + "Backlog" coexistindo.
   isBacklog      Boolean  @default(false)
   isArchived     Boolean  @default(false)
   createdAt      DateTime @default(now())

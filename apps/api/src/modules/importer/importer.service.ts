@@ -526,10 +526,11 @@ export class ImporterService {
     // Persiste mapeamentos novos pra reuso
     await this.persistMappings(tenant.organizationId, body);
 
-    // Garante que o board tenha a coluna Finalizado (isFinalList=true) no fim.
-    // Importer nao seta essa flag em nenhuma das listas que cria/encontra,
-    // entao boards importados ficavam sem a coluna especial.
+    // Garante as colunas obrigatorias do board: Finalizado (no fim) e
+    // Backlog (no inicio). Importer nao seta nenhuma das flags em listas
+    // que cria/encontra, entao precisa do ensure no fim.
     await this.listsService.ensureFinalList(board.id, tenant.organizationId);
+    await this.listsService.ensureBacklogList(board.id, tenant.organizationId);
 
     return report;
   }

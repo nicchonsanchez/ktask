@@ -225,9 +225,17 @@ export class BoardsService {
         },
       });
 
-      // Listas default
+      // Listas default. Doc 42: cada board precisa nascer com 1 lista
+      // isBacklog=true (no inicio) e 1 isFinalList=true (no fim).
       await tx.list.createMany({
         data: [
+          {
+            organizationId: tenant.organizationId,
+            boardId: board.id,
+            name: 'Backlog',
+            position: 512,
+            isBacklog: true,
+          },
           {
             organizationId: tenant.organizationId,
             boardId: board.id,
@@ -245,7 +253,6 @@ export class BoardsService {
             boardId: board.id,
             name: 'Concluído',
             position: 3072,
-            // Doc 42: ultima lista padrao ja vem marcada como Finalizado
             isFinalList: true,
           },
         ],

@@ -107,13 +107,57 @@ export class ListsService {
     });
     const position = computeInsertPosition(last?.position ?? null, null);
 
+    return this.createListWithFlag(boardId, organizationId, 'Finalizado', position, {
+      isFinalList: true,
+    });
+  }
+
+  /**
+   * Garante que o board tenha pelo menos 1 lista com isBacklog=true. Se
+   * nenhuma existir, cria uma "Backlog" no inicio do board (menor position).
+   * Idempotente.
+   *
+   * Diferenca pra ensureFinalList: nao impomos max 1 — caso de uso
+   * 'Entrada' + 'Informacoes' coexistindo continua valido (sem partial
+   * unique no DB). So garantimos que >= 1.
+   */
+  async ensureBacklogList(
+    boardId: string,
+    organizationId: string,
+  ): Promise<{ listId: string; created: boolean }> {
+    const existing = await this.prisma.list.findFirst({
+      where: { boardId, isBacklog: true, isArchived: false },
+      select: { id: true },
+    });
+    if (existing) return { listId: existing.id, created: false };
+
+    const first = await this.prisma.list.findFirst({
+      where: { boardId, isArchived: false },
+      orderBy: { position: 'asc' },
+      select: { position: true },
+    });
+    const position = computeInsertPosition(null, first?.position ?? null);
+
+    return this.createListWithFlag(boardId, organizationId, 'Backlog', position, {
+      isBacklog: true,
+    });
+  }
+
+  private async createListWithFlag(
+    boardId: string,
+    organizationId: string,
+    name: string,
+    position: number,
+    flags: { isFinalList?: boolean; isBacklog?: boolean },
+  ): Promise<{ listId: string; created: boolean }> {
     const created = await this.prisma.list.create({
       data: {
         organizationId,
         boardId,
-        name: 'Finalizado',
+        name,
         position,
-        isFinalList: true,
+        isFinalList: flags.isFinalList ?? false,
+        isBacklog: flags.isBacklog ?? false,
       },
       select: { id: true },
     });
@@ -208,6 +252,25 @@ export class ListsService {
       if (otherFinal === 0) {
         throw new NotFoundException(
           'Esta é a coluna Finalizado do fluxo. Marque outra coluna como Finalizado antes de arquivar esta.',
+        );
+      }
+    }
+
+    // Mesma invariante pro Backlog — todo board precisa ter >= 1
+    // isBacklog=true. Se for a unica, bloqueia ate operador marcar
+    // outra coluna como Backlog (PATCH list isBacklog=true).
+    if (list.isBacklog) {
+      const otherBacklog = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isBacklog: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherBacklog === 0) {
+        throw new NotFoundException(
+          'Esta é a única coluna Backlog do fluxo. Marque outra coluna como Backlog antes de arquivar esta.',
         );
       }
     }
