@@ -209,7 +209,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
       <div className="flex items-stretch overflow-hidden rounded-md">
         <div
           className={`flex shrink-0 items-center justify-center px-3 ${
-            isOnFinalList ? 'bg-success text-primary-fg' : 'bg-primary text-primary-fg'
+            isOnFinalList ? 'bg-accent text-bg' : 'bg-primary text-primary-fg'
           }`}
         >
           <History size={14} />
@@ -226,8 +226,8 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
             const canClick = !isCurrent && !moveMut.isPending;
             const filledColor = isOnFinalList
               ? isCurrent
-                ? 'bg-success text-primary-fg'
-                : 'bg-success/70 text-primary-fg hover:bg-success'
+                ? 'bg-accent text-bg'
+                : 'bg-accent/70 text-bg hover:bg-accent'
               : isCurrent
                 ? 'bg-primary text-primary-fg'
                 : 'bg-primary/70 text-primary-fg hover:bg-primary';
@@ -242,7 +242,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
                 title={isCurrent ? `Coluna atual: ${l.name}` : `Mover para ${l.name}`}
                 className={`group/col relative flex flex-1 items-center justify-center px-3 py-2 text-center text-[11px] font-medium transition-colors ${
                   isFilled ? filledColor : 'bg-bg-muted text-fg-muted'
-                } ${canClick ? 'hover:bg-primary-subtle hover:text-primary cursor-pointer' : 'cursor-default'}`}
+                } ${canClick ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
               >
                 <span className="line-clamp-1">{l.name}</span>
                 {pending && <Loader2 size={10} className="ml-1.5 animate-spin" />}
@@ -253,7 +253,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
 
         {/* Bolinha verde do "Finalizado". Click move o card pra coluna
             isFinalList do board (se existir). Cinza quando nao esta nela,
-            verde quando esta. */}
+            verde (accent) quando esta. */}
         <button
           type="button"
           disabled={!finalList || moveMut.isPending || isOnFinalList}
@@ -269,9 +269,9 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
           }
           className={`flex shrink-0 items-center justify-center px-3 transition-colors ${
             isOnFinalList
-              ? 'bg-success text-primary-fg'
+              ? 'bg-accent text-bg'
               : finalList
-                ? 'bg-bg-muted text-fg-muted hover:bg-success-subtle hover:text-success cursor-pointer'
+                ? 'bg-bg-muted text-fg-muted hover:bg-accent/30 hover:text-accent cursor-pointer'
                 : 'bg-bg-muted text-fg-muted cursor-not-allowed opacity-50'
           }`}
         >
