@@ -73,7 +73,9 @@ export function CardItem({ card }: { card: CardListItem }) {
       }}
       role="button"
       tabIndex={0}
-      className="bg-bg cursor-pointer rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-shadow hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1]"
+      className={`bg-bg cursor-pointer rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-all hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1] ${
+        card.status === 'CANCELED' ? 'opacity-60 hover:opacity-100' : ''
+      }`}
     >
       <CardInner card={card} />
     </div>
@@ -118,20 +120,22 @@ function CardInner({ card }: { card: CardListItem }) {
         />
       )}
 
-      {/* Doc 42: icone de status no canto sup-direito quando nao-ACTIVE.
-          Quando coexiste com diamond URGENT, sai um pouco mais pra
-          esquerda pra nao sobrepor (top-1 right-5). */}
+      {/* Doc 42: badge de status no canto sup-direito quando nao-ACTIVE.
+          Solido (bg saturado + icone branco) espelhando o Ummense.
+          Quando coexiste com diamond URGENT, sai mais pra esquerda
+          pra nao sobrepor. Fica DENTRO do card (sem -top/-right
+          negativos) — visual mais limpo, igual referencia. */}
       {card.status !== 'ACTIVE' && (
         <span
-          className={`absolute z-10 inline-flex size-4 items-center justify-center rounded-full ${STATUS_VISUAL[card.status].bgClass} ${STATUS_VISUAL[card.status].textClass} shadow-sm ${
-            hasPriorityDiamond ? '-top-1 right-4' : '-right-1 -top-1'
+          className={`absolute z-10 inline-flex size-6 items-center justify-center rounded-md shadow-sm ${STATUS_VISUAL[card.status].solidClass} ${
+            hasPriorityDiamond ? 'right-5 top-0' : 'right-0 top-0'
           }`}
           title={`Status: ${STATUS_LABEL[card.status]}`}
           aria-label={`Status: ${STATUS_LABEL[card.status]}`}
         >
           {(() => {
             const SIcon = STATUS_VISUAL[card.status].icon;
-            return <SIcon size={9} />;
+            return <SIcon size={13} strokeWidth={2.5} />;
           })()}
         </span>
       )}

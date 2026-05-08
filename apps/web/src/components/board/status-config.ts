@@ -17,10 +17,13 @@ export const STATUS_ORDER: CardStatus[] = ['ACTIVE', 'COMPLETED', 'WAITING', 'CA
 
 interface StatusVisual {
   icon: LucideIcon;
-  /** Classe Tailwind pra cor de texto/icone. */
+  /** Classe Tailwind pra cor de texto/icone (variante sutil). */
   textClass: string;
-  /** Classe Tailwind pra fundo do badge/pill. */
+  /** Classe Tailwind pra fundo do badge/pill (variante sutil). */
   bgClass: string;
+  /** Variante solida: fundo saturado + texto branco. Usada no badge
+   *  do card no kanban (canto sup-direito), espelhando o Ummense. */
+  solidClass: string;
   /** Tooltip explicativo. */
   hint: string;
 }
@@ -33,24 +36,28 @@ export const STATUS_VISUAL: Record<CardStatus, StatusVisual> = {
     icon: Activity,
     textClass: 'text-blue-700 dark:text-blue-300',
     bgClass: 'bg-blue-100 dark:bg-blue-500/15',
+    solidClass: 'bg-blue-500 text-white',
     hint: 'Em fluxo normal de trabalho',
   },
   COMPLETED: {
     icon: Check,
     textClass: 'text-emerald-700 dark:text-emerald-300',
     bgClass: 'bg-emerald-100 dark:bg-emerald-500/15',
+    solidClass: 'bg-emerald-500 text-white',
     hint: 'Concluído. Saiu do fluxo ativo.',
   },
   WAITING: {
     icon: Pause,
     textClass: 'text-warning',
     bgClass: 'bg-warning-subtle',
+    solidClass: 'bg-amber-400 text-white',
     hint: 'Aguardando algo externo (cliente, fornecedor, decisão).',
   },
   CANCELED: {
     icon: Ban,
     textClass: 'text-zinc-700 dark:text-zinc-300',
     bgClass: 'bg-zinc-200 dark:bg-zinc-500/20',
+    solidClass: 'bg-zinc-500 text-white',
     hint: 'Cancelado. Não será feito.',
   },
 };
