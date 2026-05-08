@@ -19,7 +19,7 @@ const PAGE_SIZE = 50;
 // centralizado em status-config.ts (single source of truth).
 const STATUS_CLASS: Record<CardStatus, string> = {
   ACTIVE: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-  COMPLETED: 'bg-success-subtle text-success',
+  COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   WAITING: 'bg-warning-subtle text-warning',
   CANCELED: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-500/20 dark:text-zinc-300',
 };
