@@ -76,7 +76,7 @@ export function Topbar() {
   const crmActive = NAV_CRM.some((it) => pathname.startsWith(it.href));
 
   return (
-    <header className="border-border bg-bg sticky top-0 z-30 border-b">
+    <header className="bg-bg sticky top-0 z-30">
       <div className="container flex h-[52px] items-center justify-between gap-2 sm:gap-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           {/* Hamburger (so mobile) */}

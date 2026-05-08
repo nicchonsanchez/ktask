@@ -30,7 +30,7 @@ export function AddColumnButton({ boardId }: { boardId: string }) {
       <button
         type="button"
         onClick={() => setDraft('')}
-        className="group/addcol bg-bg/60 text-fg-muted hover:bg-bg hover:text-primary border-border/60 hover:border-primary/50 flex h-fit w-[280px] shrink-0 items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium transition-colors"
+        className="group/addcol text-fg-muted hover:bg-bg hover:text-primary flex h-fit w-[280px] shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
       >
         <Plus size={16} className="transition-transform group-hover/addcol:rotate-90" />
         Adicionar coluna

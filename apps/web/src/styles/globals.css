@@ -9,11 +9,17 @@
  */
 @layer base {
   :root {
-    /* 🌞 Light */
+    /* 🌞 Light
+     *
+     * Tonal layering: bg-subtle agora e o "canvas" perceptivelmente mais
+     * escuro pra colunas/cards (em bg-bg branco) emergirem sem precisar
+     * de borda. Diferenca subiu de 2% pra 5% (96 vs 100) — visivel sem
+     * ser pesada.
+     */
     --bg: 0 0% 100%;
-    --bg-subtle: 240 5% 98%;
-    --bg-muted: 240 5% 96%;
-    --bg-emphasis: 240 5% 90%;
+    --bg-subtle: 240 6% 96%;
+    --bg-muted: 240 5% 93%;
+    --bg-emphasis: 240 5% 88%;
 
     --border: 240 6% 90%;
     --border-strong: 240 5% 84%;

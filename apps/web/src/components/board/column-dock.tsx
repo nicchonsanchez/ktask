@@ -66,7 +66,7 @@ export function ColumnDock({
         onClick={() => setOpen(true)}
         title={`${DOCK_LABEL[kind]} — ${lists.length} coluna${lists.length === 1 ? '' : 's'}, ${totalCards} card${totalCards === 1 ? '' : 's'}. Clique pra expandir.`}
         aria-label={`Expandir ${DOCK_LABEL[kind]}`}
-        className={`border-border/60 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border py-3 shadow-sm transition-shadow hover:shadow-md sm:w-[280px] ${tone.bg}`}
+        className={`dark:border-border/40 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg py-3 shadow-sm transition-shadow hover:shadow-md sm:w-[280px] dark:border ${tone.bg}`}
       >
         <div
           className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone.accent} ${tone.icon}`}
@@ -88,9 +88,7 @@ export function ColumnDock({
 
   // Expandido: header compacto + colunas em linha
   return (
-    <div
-      className={`flex h-full shrink-0 flex-row gap-3 rounded-lg border border-dashed p-2 ${tone.bg} border-fg-muted/30`}
-    >
+    <div className={`flex h-full shrink-0 flex-row gap-3 rounded-lg p-2 ${tone.bg}`}>
       <button
         type="button"
         onClick={() => setOpen(false)}
