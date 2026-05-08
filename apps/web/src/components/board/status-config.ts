@@ -25,17 +25,20 @@ interface StatusVisual {
   hint: string;
 }
 
+// Cada status tem uma cor sutil propria pra distinguir visualmente.
+// Tokens 'success' nao existem no design system — usamos Tailwind nativos
+// (blue/emerald/zinc) onde nao tem token. warning/danger sao tokens.
 export const STATUS_VISUAL: Record<CardStatus, StatusVisual> = {
   ACTIVE: {
     icon: Activity,
-    textClass: 'text-fg-muted',
-    bgClass: 'bg-bg-muted',
+    textClass: 'text-blue-700 dark:text-blue-300',
+    bgClass: 'bg-blue-100 dark:bg-blue-500/15',
     hint: 'Em fluxo normal de trabalho',
   },
   COMPLETED: {
     icon: Check,
-    textClass: 'text-success',
-    bgClass: 'bg-success-subtle',
+    textClass: 'text-emerald-700 dark:text-emerald-300',
+    bgClass: 'bg-emerald-100 dark:bg-emerald-500/15',
     hint: 'Concluído. Saiu do fluxo ativo.',
   },
   WAITING: {
@@ -46,8 +49,8 @@ export const STATUS_VISUAL: Record<CardStatus, StatusVisual> = {
   },
   CANCELED: {
     icon: Ban,
-    textClass: 'text-danger',
-    bgClass: 'bg-danger-subtle',
+    textClass: 'text-zinc-700 dark:text-zinc-300',
+    bgClass: 'bg-zinc-200 dark:bg-zinc-500/20',
     hint: 'Cancelado. Não será feito.',
   },
 };

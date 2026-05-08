@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Lock, Unlock } from 'lucide-react';
 
 import type { BoardDetail, CardListItem, CardStatus } from '@/lib/queries/boards';
 import { UserAvatar } from '@/components/user-avatar';
-import { STATUS_LABEL } from './status-config';
+import { STATUS_LABEL, STATUS_VISUAL } from './status-config';
 
 type SortKey = 'status' | 'title' | 'lead' | 'list' | 'dueDate' | 'updatedAt';
 type SortDir = 'asc' | 'desc';
@@ -15,14 +15,8 @@ const PAGE_SIZE = 50;
 
 // Status sao 4 valores fixos do card — independente da coluna em que ele
 // esteja. NAO confundir com a coluna 'Finalizado' (isFinalList=true), que
-// e uma localizacao no board, nao um status. Labels vem do STATUS_LABEL
-// centralizado em status-config.ts (single source of truth).
-const STATUS_CLASS: Record<CardStatus, string> = {
-  ACTIVE: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-  COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  WAITING: 'bg-warning-subtle text-warning',
-  CANCELED: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-500/20 dark:text-zinc-300',
-};
+// e uma localizacao no board, nao um status. Labels e cores vem do
+// STATUS_LABEL/STATUS_VISUAL centralizados em status-config.ts.
 
 interface RowItem {
   card: CardListItem;
@@ -254,7 +248,7 @@ function Row({
   onClick: () => void;
 }) {
   const statusLabel = STATUS_LABEL[card.status];
-  const statusClass = STATUS_CLASS[card.status];
+  const statusVisual = STATUS_VISUAL[card.status];
   const visibleMembers = card.members.slice(0, 4);
   const overflow = Math.max(0, card.members.length - 4);
   const dueLabel = card.dueDate
@@ -274,7 +268,7 @@ function Row({
     >
       <td className="px-3 py-2">
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass}`}
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusVisual.bgClass} ${statusVisual.textClass}`}
         >
           {statusLabel}
         </span>
