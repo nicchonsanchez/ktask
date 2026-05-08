@@ -284,7 +284,10 @@ export class BoardsService {
               cardPresences: {
                 where: {
                   removedAt: null,
-                  completedAt: null,
+                  // Doc 42: removeu o filtro `completedAt: null` — agora cards
+                  // finalizados aparecem na coluna onde estao (geralmente a
+                  // isFinalList). O drawer virtual sumiu, FINALIZADO real e
+                  // o unico lugar.
                   // Doc 25: filtra cards privados que o user nao pode ver.
                   card: { isArchived: false, ...cardVisibilityWhere(userId, tenant.role) },
                 },

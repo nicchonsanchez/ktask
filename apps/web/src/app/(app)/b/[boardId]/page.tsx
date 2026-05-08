@@ -30,7 +30,6 @@ import { Loader2 } from 'lucide-react';
 
 import {
   boardsQueries,
-  completeCard,
   moveList,
   sortCardsForBoard,
   type BoardDetail,
@@ -40,7 +39,6 @@ import { moveCardInFlow } from '@/lib/queries/cards';
 import { CardItem, CardOverlay } from '@/components/board/card-item';
 import { ListColumn, LIST_SORT_PREFIX } from '@/components/board/list-column';
 import { CardModal } from '@/components/board/card-modal';
-import { CompletedColumn, COMPLETED_DROPPABLE_ID } from '@/components/board/completed-column';
 import { ColumnDock } from '@/components/board/column-dock';
 import { AddColumnButton } from '@/components/board/add-column-button';
 import { BoardHeader } from '@/components/board/board-header';
@@ -141,9 +139,6 @@ export default function BoardPage() {
     // Drag de coluna não afeta listas de cards; reorder é tratado em handleDragEnd
     if (isListDrag(activeId)) return;
 
-    // Drop em coluna "Finalizado" é tratado só no handleDragEnd (não move card entre listas)
-    if (rawOverId === COMPLETED_DROPPABLE_ID) return;
-
     // Normaliza: se o over.id veio como "col:<listId>", usa só o listId
     const overId = normalizeOverForCard(rawOverId);
 
@@ -216,32 +211,10 @@ export default function BoardPage() {
     // Pra drag de card, normaliza o overId (tira "col:" se veio do sortable da coluna)
     const overId = normalizeOverForCard(rawOverId);
 
-    // Drop na coluna virtual "Finalizado" = finalizar card
-    if (overId === COMPLETED_DROPPABLE_ID) {
-      // Remove otimisticamente da lista atual e incrementa contagem
-      queryClient.setQueryData<BoardDetail>(boardsQueries.detail(boardId).queryKey, (prev) => {
-        if (!prev) return prev;
-        const next = structuredClone(prev);
-        for (const l of next.lists) {
-          const idx = l.cards.findIndex((c) => c.id === activeId);
-          if (idx >= 0) {
-            l.cards.splice(idx, 1);
-            break;
-          }
-        }
-        next.completedCount = (next.completedCount ?? 0) + 1;
-        return next;
-      });
-      try {
-        await completeCard(activeId);
-        queryClient.invalidateQueries({ queryKey: ['boards', boardId, 'completed'] });
-      } catch (err) {
-        const msg = err instanceof ApiError ? err.message : 'Erro ao finalizar card.';
-        console.error('[board] complete failed:', msg);
-        queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
-      }
-      return;
-    }
+    // Doc 42: drag pra "finalizar" agora e drag pra coluna isFinalList
+    // (faixa direita do board). Sem dropzone virtual; tratamento normal de
+    // move-between-lists abaixo. Pra mudar status sem mover, use o picker
+    // de status no card modal.
 
     const activeListId = cardIdToListId.get(activeId);
     if (!activeListId) return;
@@ -401,7 +374,6 @@ export default function BoardPage() {
                     side="right"
                     renderColumn={renderColumn}
                   />
-                  <CompletedColumn boardId={boardId} completedCount={board.completedCount ?? 0} />
                 </>
               );
             })()}
