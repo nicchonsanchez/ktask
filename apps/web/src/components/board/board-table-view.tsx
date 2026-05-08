@@ -6,17 +6,22 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Lock, Unlock } from 'lucide-react';
 
 import type { BoardDetail, CardListItem, CardStatus } from '@/lib/queries/boards';
 import { UserAvatar } from '@/components/user-avatar';
+import { STATUS_LABEL } from './status-config';
 
 type SortKey = 'status' | 'title' | 'lead' | 'list' | 'dueDate' | 'updatedAt';
 type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 50;
 
-const STATUS_VISUAL: Record<CardStatus, { label: string; className: string }> = {
-  ACTIVE: { label: 'Ativo', className: 'bg-bg-muted text-fg-muted' },
-  COMPLETED: { label: 'Finalizado', className: 'bg-success-subtle text-success' },
-  WAITING: { label: 'Aguardando', className: 'bg-warning-subtle text-warning' },
-  CANCELED: { label: 'Cancelado', className: 'bg-danger-subtle text-danger' },
+// Status sao 4 valores fixos do card — independente da coluna em que ele
+// esteja. NAO confundir com a coluna 'Finalizado' (isFinalList=true), que
+// e uma localizacao no board, nao um status. Labels vem do STATUS_LABEL
+// centralizado em status-config.ts (single source of truth).
+const STATUS_CLASS: Record<CardStatus, string> = {
+  ACTIVE: 'bg-bg-muted text-fg-muted',
+  COMPLETED: 'bg-success-subtle text-success',
+  WAITING: 'bg-warning-subtle text-warning',
+  CANCELED: 'bg-danger-subtle text-danger',
 };
 
 interface RowItem {
@@ -248,7 +253,8 @@ function Row({
   lead: { id: string; name: string; avatarUrl: string | null } | null;
   onClick: () => void;
 }) {
-  const status = STATUS_VISUAL[card.status];
+  const statusLabel = STATUS_LABEL[card.status];
+  const statusClass = STATUS_CLASS[card.status];
   const visibleMembers = card.members.slice(0, 4);
   const overflow = Math.max(0, card.members.length - 4);
   const dueLabel = card.dueDate
@@ -268,9 +274,9 @@ function Row({
     >
       <td className="px-3 py-2">
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${status.className}`}
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass}`}
         >
-          {status.label}
+          {statusLabel}
         </span>
       </td>
       <td className="px-3 py-2">
