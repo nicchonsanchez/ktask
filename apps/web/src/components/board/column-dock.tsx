@@ -82,9 +82,9 @@ export function ColumnDock({
         onClick={() => setOpen(true)}
         title={`${DOCK_LABEL[kind]} — ${lists.length} coluna${lists.length === 1 ? '' : 's'}, ${totalCards} card${totalCards === 1 ? '' : 's'}. Clique pra expandir.`}
         aria-label={`Expandir ${DOCK_LABEL[kind]}`}
-        className={`dark:border-border/40 flex h-full w-[100px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg py-3 shadow-sm transition-shadow hover:shadow-md dark:border ${tone.bg} ${
-          isOver ? 'ring-primary/40 ring-2' : ''
-        }`}
+        className={`dark:border-border/40 flex h-full shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg py-3 shadow-sm transition-shadow hover:shadow-md dark:border ${tone.bg} ${
+          kind === 'backlog' ? 'w-[100px]' : 'w-[85vw] max-w-[300px] sm:w-[280px]'
+        } ${isOver ? 'ring-primary/40 ring-2' : ''}`}
       >
         <div
           className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone.accent} ${tone.icon}`}
