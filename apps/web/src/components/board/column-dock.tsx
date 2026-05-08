@@ -57,29 +57,31 @@ export function ColumnDock({
     side === 'left' ? (open ? ChevronLeft : ChevronRight) : open ? ChevronRight : ChevronLeft;
 
   if (!open) {
-    // Colapsado: faixa estreita ~56px com icone + label vertical + contador
+    // Colapsado: largura fixa igual a uma coluna normal — sem expand/collapse
+    // no hover (decisao do operador, doc 42 ajuste). Click em qualquer parte
+    // expande pra mostrar as colunas reais como ListColumn.
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
         title={`${DOCK_LABEL[kind]} — ${lists.length} coluna${lists.length === 1 ? '' : 's'}, ${totalCards} card${totalCards === 1 ? '' : 's'}. Clique pra expandir.`}
         aria-label={`Expandir ${DOCK_LABEL[kind]}`}
-        className={`group/dock border-border/60 flex h-full w-14 shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border py-3 shadow-sm transition-all duration-200 hover:w-32 hover:shadow-md ${tone.bg}`}
+        className={`border-border/60 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border py-3 shadow-sm transition-shadow hover:shadow-md sm:w-[280px] ${tone.bg}`}
       >
         <div
           className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone.accent} ${tone.icon}`}
         >
           <Icon size={18} />
         </div>
-        <span
-          className={`text-fg-muted hidden text-[11px] font-semibold uppercase tracking-wide group-hover/dock:block`}
-        >
+        <span className="text-fg-muted text-[11px] font-semibold uppercase tracking-wide">
           {DOCK_LABEL[kind]}
         </span>
-        <span className={`text-fg text-xs font-semibold tabular-nums`}>{totalCards}</span>
-        <span className={`text-fg-subtle hidden text-[10px] group-hover/dock:block`} aria-hidden>
-          {lists.length} coluna{lists.length === 1 ? '' : 's'}
-        </span>
+        <span className="text-fg text-base font-semibold tabular-nums">{totalCards}</span>
+        {lists.length > 1 && (
+          <span className="text-fg-subtle text-[10px]" aria-hidden>
+            {lists.length} colunas
+          </span>
+        )}
       </button>
     );
   }
