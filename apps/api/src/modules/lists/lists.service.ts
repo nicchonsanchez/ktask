@@ -168,6 +168,40 @@ export class ListsService {
     const list = await this.getOneOrThrow(listId);
     await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
 
+    // Invariante: cada board precisa ter >= 1 isFinalList ativa. Se este
+    // for a única e o caller estiver tentando desligar a flag (ou arquivar),
+    // bloqueia ate operador marcar outra coluna primeiro.
+    if (list.isFinalList && (input.isFinalList === false || input.isArchived === true)) {
+      const otherFinal = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isFinalList: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherFinal === 0) {
+        throw new NotFoundException(
+          'Esta é a única coluna Finalizado do fluxo. Marque outra coluna como Finalizado antes de desligar a flag.',
+        );
+      }
+    }
+    if (list.isBacklog && (input.isBacklog === false || input.isArchived === true)) {
+      const otherBacklog = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isBacklog: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherBacklog === 0) {
+        throw new NotFoundException(
+          'Esta é a única coluna Backlog do fluxo. Marque outra coluna como Backlog antes de desligar a flag.',
+        );
+      }
+    }
+
     // Invariante: no máximo 1 lista com isFinalList=true por board (Finalizado é
     // *a* coluna, não uma categoria). Se o caller setar true, desmarca a
     // anterior antes de aplicar — swap idempotente, na mesma transação.

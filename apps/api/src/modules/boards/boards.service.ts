@@ -38,6 +38,66 @@ export class BoardsService {
   ) {}
 
   /**
+   * Garante que toda board servida pelo detail tenha pelo menos 1 Backlog
+   * e 1 Finalizado ativos. Idempotente — checa em memoria; so emite INSERT
+   * quando alguma das duas falta. Cobre boards corrompidos por imports
+   * direto-no-SQL ou bypass historico antes do guard de update/archive.
+   */
+  private async healSpecialLists(
+    boardId: string,
+    organizationId: string,
+    lists: Array<{
+      isBacklog: boolean;
+      isFinalList: boolean;
+      isArchived: boolean;
+      position: number;
+    }>,
+  ) {
+    const active = lists.filter((l) => !l.isArchived);
+    const hasBacklog = active.some((l) => l.isBacklog);
+    const hasFinal = active.some((l) => l.isFinalList);
+    if (hasBacklog && hasFinal) return [];
+
+    const minPos = active.reduce(
+      (acc, l) => (acc === null || l.position < acc ? l.position : acc),
+      null as number | null,
+    );
+    const maxPos = active.reduce(
+      (acc, l) => (acc === null || l.position > acc ? l.position : acc),
+      null as number | null,
+    );
+
+    const created = [] as Array<Awaited<ReturnType<typeof this.prisma.list.create>>>;
+    if (!hasBacklog) {
+      created.push(
+        await this.prisma.list.create({
+          data: {
+            organizationId,
+            boardId,
+            name: 'Backlog',
+            position: minPos !== null ? minPos / 2 : 1024,
+            isBacklog: true,
+          },
+        }),
+      );
+    }
+    if (!hasFinal) {
+      created.push(
+        await this.prisma.list.create({
+          data: {
+            organizationId,
+            boardId,
+            name: 'Finalizado',
+            position: maxPos !== null ? maxPos + 1024 : 1024,
+            isFinalList: true,
+          },
+        }),
+      );
+    }
+    return created;
+  }
+
+  /**
    * Hidrata `coverImageUrl` em cards do listing — a coluna do Prisma traz
    * só `cover.storageKey` (FK pra Attachment); pra renderizar imagem no
    * frontend, calculamos a URL pública aqui.
@@ -344,6 +404,25 @@ export class BoardsService {
       }),
     ]);
     if (!board) return null;
+
+    // Self-healing das colunas especiais (Backlog/Finalizado): se um
+    // import direto via SQL ou bug deixou o board sem alguma das duas,
+    // criamos aqui antes de servir. Idempotente — bate em memoria nos
+    // lists ja carregados; so emite INSERT se faltar de fato.
+    const healed = await this.healSpecialLists(board.id, board.organizationId, board.lists);
+    if (healed.length > 0) {
+      // Anexa as listas recem-criadas ao board.lists em memoria, com
+      // shape compativel (cardPresences vazio). Evita reload do board
+      // por questao de 1-2 INSERTs.
+      type ListInBoard = (typeof board.lists)[number];
+      for (const created of healed) {
+        board.lists.push({
+          ...created,
+          cardPresences: [],
+        } as unknown as ListInBoard);
+      }
+      board.lists.sort((a, b) => a.position - b.position);
+    }
 
     // Transforma list.cardPresences[] em list.cards[] mantendo o contrato
     // antigo da API. Sobrescreve listId/position/completedAt/completedById
