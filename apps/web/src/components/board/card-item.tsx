@@ -120,14 +120,13 @@ function CardInner({ card }: { card: CardListItem }) {
         />
       )}
 
-      {/* Doc 42: badge de status no canto sup-direito quando nao-ACTIVE.
-          Solido (bg saturado + icone branco) espelhando o Ummense.
-          Quando coexiste com diamond URGENT, sai mais pra esquerda
-          pra nao sobrepor. Fica DENTRO do card (sem -top/-right
-          negativos) — visual mais limpo, igual referencia. */}
+      {/* Badge de status no canto sup-direito quando nao-ACTIVE.
+          Variante SUTIL (bg-{cor}-subtle + icone colorido), tamanho
+          reduzido (size-5) — operador apontou que solido grande
+          competia com o titulo do card. */}
       {card.status !== 'ACTIVE' && (
         <span
-          className={`absolute z-10 inline-flex size-6 items-center justify-center rounded-md shadow-sm ${STATUS_VISUAL[card.status].solidClass} ${
+          className={`absolute z-10 inline-flex size-5 items-center justify-center rounded shadow-sm ${STATUS_VISUAL[card.status].bgClass} ${STATUS_VISUAL[card.status].textClass} ${
             hasPriorityDiamond ? 'right-5 top-0' : 'right-0 top-0'
           }`}
           title={`Status: ${STATUS_LABEL[card.status]}`}
@@ -135,7 +134,7 @@ function CardInner({ card }: { card: CardListItem }) {
         >
           {(() => {
             const SIcon = STATUS_VISUAL[card.status].icon;
-            return <SIcon size={13} strokeWidth={2.5} />;
+            return <SIcon size={11} strokeWidth={2.25} />;
           })()}
         </span>
       )}
@@ -166,8 +165,14 @@ function CardInner({ card }: { card: CardListItem }) {
       )}
 
       {/* Título — destaque máximo. shortCode fica só no modal pra não
-          poluir o mini (especialmente IDs longos importados do Ummense). */}
-      <p className="text-fg line-clamp-3 text-sm font-medium leading-snug">
+          poluir o mini (especialmente IDs longos importados do Ummense).
+          pr-7 quando ha badge de status nao-ACTIVE pra evitar texto
+          colidir com o badge no canto sup-direito. */}
+      <p
+        className={`text-fg line-clamp-3 text-sm font-medium leading-snug ${
+          card.status !== 'ACTIVE' ? 'pr-7' : ''
+        }`}
+      >
         {card.privacy === 'TEAM_ONLY' && (
           <Lock
             size={11}
