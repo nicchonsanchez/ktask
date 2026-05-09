@@ -8,6 +8,7 @@ import { TokenService } from '@/common/crypto/token.service';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { UsersService } from '@/modules/users/users.service';
 import { InvitationsService } from '@/modules/organizations/invitations.service';
+import { MailService } from '@/modules/mail/mail.service';
 
 type MockedUser = {
   id: string;
@@ -96,6 +97,15 @@ describe('AuthService', () => {
           provide: InvitationsService,
           useValue: {
             previewByRawToken: jest.fn(),
+          },
+        },
+        // Doc 43: AuthService passou a depender de MailService para o
+        // fluxo de recuperacao de senha. Mock vazio cobre os testes
+        // existentes que nao chamam essa rota.
+        {
+          provide: MailService,
+          useValue: {
+            sendPasswordResetEmail: jest.fn(),
           },
         },
       ],
