@@ -39,7 +39,8 @@ export interface CardListItem {
   shortCode: string | null;
   title: string;
   position: number;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  /** Cor decorativa livre (substituiu Priority). null = sem cor. */
+  cardColor: string | null;
   /** Doc 25: privacidade do card (cadeado mostrado no mini se nao-PUBLIC). */
   privacy: CardPrivacy;
   /** Doc 42: status (icone no canto sup-direito do mini se nao-ACTIVE). */
@@ -104,7 +105,7 @@ export interface BoardDetail {
 export interface CompletedCardItem {
   id: string;
   title: string;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  cardColor: string | null;
   dueDate: string | null;
   completedAt: string;
   list: { id: string; name: string; isArchived: boolean };
@@ -228,7 +229,17 @@ export function createList(input: { boardId: string; name: string }) {
   return api.post<{ id: string; name: string; position: number }>('/api/v1/lists', input);
 }
 
-export function updateList(listId: string, input: { name?: string; color?: string | null }) {
+export function updateList(
+  listId: string,
+  input: {
+    name?: string;
+    color?: string | null;
+    /** Doc 42: faixa esquerda (Backlog). */
+    isBacklog?: boolean;
+    /** Doc 42: faixa direita (Finalizado). */
+    isFinalList?: boolean;
+  },
+) {
   return api.patch(`/api/v1/lists/${listId}`, input);
 }
 
@@ -262,7 +273,7 @@ export function restoreCard(cardId: string) {
 export interface ArchivedCard {
   id: string;
   title: string;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  cardColor: string | null;
   dueDate: string | null;
   updatedAt: string;
   list: { id: string; name: string; isArchived: boolean };

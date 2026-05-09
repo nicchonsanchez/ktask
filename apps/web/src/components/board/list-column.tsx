@@ -6,7 +6,16 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Bot, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react';
+import {
+  Archive,
+  Bot,
+  CheckCircle2,
+  GripVertical,
+  Inbox,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+} from 'lucide-react';
 
 import { Button } from '@ktask/ui';
 import {
@@ -63,6 +72,19 @@ export function ListColumn({
 
   const renameMut = useMutation({
     mutationFn: (newName: string) => updateList(list.id, { name: newName }),
+    onSuccess: invalidate,
+  });
+
+  // Doc 42: toggle Backlog (esquerda) e Finalizado (direita). Mutuamente
+  // exclusivos — ativar um desativa o outro automaticamente.
+  const toggleBacklogMut = useMutation({
+    mutationFn: (next: boolean) =>
+      updateList(list.id, { isBacklog: next, ...(next ? { isFinalList: false } : {}) }),
+    onSuccess: invalidate,
+  });
+  const toggleFinalMut = useMutation({
+    mutationFn: (next: boolean) =>
+      updateList(list.id, { isFinalList: next, ...(next ? { isBacklog: false } : {}) }),
     onSuccess: invalidate,
   });
 
@@ -186,7 +208,11 @@ export function ListColumn({
         )}
         {isAdmin && (
           <ListMenu
+            isBacklog={list.isBacklog}
+            isFinalList={list.isFinalList}
             onRename={() => setEditingName(true)}
+            onToggleBacklog={() => toggleBacklogMut.mutate(!list.isBacklog)}
+            onToggleFinal={() => toggleFinalMut.mutate(!list.isFinalList)}
             onArchive={async () => {
               // Coluna vazia: confirmação simples. Coluna com cards: dialog
               // dedicado pra escolher mover ou arquivar junto.
@@ -291,7 +317,21 @@ export function ListColumn({
   );
 }
 
-function ListMenu({ onRename, onArchive }: { onRename: () => void; onArchive: () => void }) {
+function ListMenu({
+  onRename,
+  onArchive,
+  onToggleBacklog,
+  onToggleFinal,
+  isBacklog,
+  isFinalList,
+}: {
+  onRename: () => void;
+  onArchive: () => void;
+  onToggleBacklog: () => void;
+  onToggleFinal: () => void;
+  isBacklog: boolean;
+  isFinalList: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -328,6 +368,37 @@ function ListMenu({ onRename, onArchive }: { onRename: () => void; onArchive: ()
           >
             <Pencil size={13} />
             Renomear
+          </button>
+          <div className="border-border/70 my-1 border-t" />
+          {/* Doc 42: toggle Backlog (esquerda) / Finalizado (direita).
+              Mutuamente exclusivos — ativar um desativa o outro. */}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onToggleBacklog();
+            }}
+            className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+            title="Coloca a coluna na faixa estreita expansivel a esquerda do board"
+          >
+            <Inbox size={13} />
+            <span className="flex-1">{isBacklog ? 'Tirar de Backlog' : 'Marcar como Backlog'}</span>
+            {isBacklog && <span className="text-fg-subtle text-[10px]">ativo</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onToggleFinal();
+            }}
+            className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+            title="Coloca a coluna na faixa estreita expansivel a direita do board"
+          >
+            <CheckCircle2 size={13} />
+            <span className="flex-1">
+              {isFinalList ? 'Tirar de Finalizado' : 'Marcar como Finalizado'}
+            </span>
+            {isFinalList && <span className="text-fg-subtle text-[10px]">ativo</span>}
           </button>
           <div className="border-border/70 my-1 border-t" />
           <button
