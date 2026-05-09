@@ -6,6 +6,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { env } from '@/config/env';
 import { UsersModule } from '@/modules/users/users.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
+import { MailModule } from '@/modules/mail/mail.module';
 
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
@@ -16,6 +17,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
   imports: [
     forwardRef(() => UsersModule),
     OrganizationsModule,
+    MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: env.JWT_ACCESS_SECRET,

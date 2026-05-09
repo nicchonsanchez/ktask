@@ -145,6 +145,72 @@ export class MailService implements OnModuleInit, OnModuleDestroy {
       text,
     });
   }
+
+  /**
+   * Doc 43: email com link tokenizado pra resetar senha. TTL 1h, single-use.
+   */
+  async sendPasswordReset(params: {
+    to: string;
+    name: string;
+    resetUrl: string;
+    expiresAt: Date;
+  }): Promise<boolean> {
+    const { to, name, resetUrl, expiresAt } = params;
+    const expiresStr = expiresAt.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Redefinir senha — KTask</title></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f4f4f5; margin:0; padding:24px;">
+  <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:8px; padding:32px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+      <div style="width:40px; height:40px; background:#6D28D9; color:#fff; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:18px;">K</div>
+      <h1 style="margin:0; font-size:18px; color:#111;">Redefinir sua senha</h1>
+    </div>
+    <p style="color:#333; line-height:1.6; margin:0 0 16px;">
+      Olá, <strong>${escapeHtml(name)}</strong>.
+    </p>
+    <p style="color:#555; line-height:1.6; margin:0 0 24px;">
+      Recebemos um pedido pra redefinir a senha da sua conta KTask. Se foi você, clique no botão abaixo. O link vale até <strong>${expiresStr}</strong>.
+    </p>
+    <p style="text-align:center; margin:0 0 24px;">
+      <a href="${resetUrl}" style="display:inline-block; background:#6D28D9; color:#fff; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Redefinir senha</a>
+    </p>
+    <p style="color:#888; font-size:12px; line-height:1.5; margin:0 0 8px;">
+      Ou copie e cole este link no navegador:<br>
+      <a href="${resetUrl}" style="color:#6D28D9; word-break:break-all;">${resetUrl}</a>
+    </p>
+    <p style="color:#888; font-size:12px; margin:24px 0 0;">
+      Se você não pediu, pode ignorar este email — sua senha continua a mesma.
+    </p>
+  </div>
+</body>
+</html>`.trim();
+
+    const text = [
+      `Olá ${name},`,
+      '',
+      'Recebemos um pedido pra redefinir a senha da sua conta KTask.',
+      'Se foi você, abra o link abaixo (vale até ' + expiresStr + '):',
+      '',
+      resetUrl,
+      '',
+      'Se não pediu, ignore este email — sua senha continua a mesma.',
+    ].join('\n');
+
+    return this.send({
+      to,
+      subject: 'Redefinir sua senha do KTask',
+      html,
+      text,
+    });
+  }
 }
 
 function escapeHtml(s: string): string {

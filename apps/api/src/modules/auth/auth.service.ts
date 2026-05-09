@@ -14,6 +14,7 @@ import { PasswordService } from '@/common/crypto/password.service';
 import { TokenService } from '@/common/crypto/token.service';
 import { UsersService, type PublicUser } from '@/modules/users/users.service';
 import { InvitationsService } from '@/modules/organizations/invitations.service';
+import { MailService } from '@/modules/mail/mail.service';
 
 import type { JwtAccessPayload, LoginResult } from './auth.types';
 
@@ -74,6 +75,7 @@ export class AuthService {
     private readonly password: PasswordService,
     private readonly tokens: TokenService,
     private readonly invitations: InvitationsService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -297,6 +299,102 @@ export class AuthService {
     // Revoga todas as sessões exceto possivelmente a atual — seguro assumir
     // que o user vai re-logar se desejar. Revoga todas pra simplificar.
     await this.prisma.session.deleteMany({ where: { userId } });
+    return { ok: true };
+  }
+
+  // -----------------------------------------------------------------
+  // Doc 43: recuperacao de senha por email
+  // -----------------------------------------------------------------
+
+  /**
+   * Cria token de reset (1h TTL) e dispara email pro user. Sempre retorna
+   * sucesso, mesmo se email nao existir — anti-enumeracao.
+   *
+   * Rate-limit no controller (3 requests por 15min por IP).
+   */
+  async forgotPassword(params: { email: string; ip?: string; userAgent?: string }) {
+    const email = params.email.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    // Anti-enumeracao: comportamento identico pra existente vs nao-existente.
+    if (!user || user.deletedAt) {
+      this.logger.log(`[forgotPassword] no-op pra ${email} (sem user ativo)`);
+      return { ok: true };
+    }
+    if (user.suspendedAt) {
+      this.logger.log(`[forgotPassword] no-op pra ${email} (suspenso)`);
+      return { ok: true };
+    }
+
+    const rawToken = this.tokens.generate();
+    const tokenHash = this.tokens.hash(rawToken);
+    const expiresAt = new Date(Date.now() + 60 * 60_000); // 1h
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        requestIp: params.ip ?? null,
+        userAgent: params.userAgent ?? null,
+      },
+    });
+
+    const resetUrl = `${env.APP_URL.replace(/\/$/, '')}/redefinir-senha/${rawToken}`;
+    // Fire-and-forget — se SMTP cair, log mas nao quebra o request.
+    this.mail
+      .sendPasswordReset({ to: user.email, name: user.name, resetUrl, expiresAt })
+      .catch((err) => {
+        this.logger.error(`[forgotPassword] mail failed pra ${user.email}: ${err.message}`);
+      });
+
+    return { ok: true };
+  }
+
+  /**
+   * Valida token + troca senha. Marca token usado, revoga todas as sessoes
+   * (forca relogin) e zera tentativas falhas / lock.
+   */
+  async resetPassword(params: { token: string; newPassword: string }) {
+    const { token, newPassword } = params;
+    const tokenHash = this.tokens.hash(token);
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+    if (!record) {
+      throw new BadRequestException('Link inválido ou expirado.');
+    }
+    if (record.usedAt) {
+      throw new BadRequestException('Este link já foi usado. Solicite um novo.');
+    }
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException('Link expirado. Solicite um novo.');
+    }
+    if (record.user.deletedAt || record.user.suspendedAt) {
+      throw new BadRequestException('Conta indisponível.');
+    }
+
+    const newHash = await this.password.hash(newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          passwordHash: newHash,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastFailedAt: null,
+        },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      // Revoga todas as sessoes — forca relogin pra todos os devices.
+      this.prisma.session.deleteMany({ where: { userId: record.userId } }),
+    ]);
+
+    this.logger.log(`[resetPassword] senha redefinida pra ${record.user.email}`);
     return { ok: true };
   }
 

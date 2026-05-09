@@ -245,8 +245,29 @@ model User {
   approvalsReverted      CardApproval[]         @relation("ApprovalReverter")
   approvalReviews        CardApprovalReviewer[] @relation("CardApprovalReviewer")
   messageTemplates       MessageTemplate[]
+  passwordResetTokens    PasswordResetToken[]
 
   @@index([email])
+}
+
+/// Doc 43: token de recuperacao de senha. Gerado quando user pede
+/// reset; expira em 1h; single-use (usedAt). Token raw vai pro email,
+/// hash sha256 fica no DB.
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  /// IP e UA de quem solicitou — auditoria + detectar abuso.
+  requestIp  String?
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Organization {

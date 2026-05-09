@@ -30,6 +30,18 @@ const SignupFromInviteSchema = z.object({
 });
 type SignupFromInviteRequest = z.infer<typeof SignupFromInviteSchema>;
 
+// Doc 43: recuperacao de senha
+const ForgotPasswordSchema = z.object({
+  email: z.string().email().max(255),
+});
+type ForgotPasswordRequest = z.infer<typeof ForgotPasswordSchema>;
+
+const ResetPasswordSchema = z.object({
+  token: z.string().min(10),
+  newPassword: z.string().min(8).max(200),
+});
+type ResetPasswordRequest = z.infer<typeof ResetPasswordSchema>;
+
 const REFRESH_COOKIE_NAME = 'ktask_refresh';
 
 function cookieOptions(expires?: Date) {
@@ -99,6 +111,33 @@ export class AuthController {
       accessToken: result.accessToken,
       user: result.user,
     };
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 900_000, limit: 3 } })
+  @ApiOperation({ summary: 'Doc 43: solicita link de redefinicao de senha por email' })
+  async forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordSchema)) body: ForgotPasswordRequest,
+    @Req() req: Request,
+  ) {
+    return this.auth.forgotPassword({
+      email: body.email,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] ?? undefined,
+    });
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 900_000, limit: 5 } })
+  @ApiOperation({ summary: 'Doc 43: redefine senha com token recebido por email' })
+  async resetPassword(
+    @Body(new ZodValidationPipe(ResetPasswordSchema)) body: ResetPasswordRequest,
+  ) {
+    return this.auth.resetPassword({ token: body.token, newPassword: body.newPassword });
   }
 
   @Public()
