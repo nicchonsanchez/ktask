@@ -830,7 +830,7 @@ export class ApprovalsService {
                 id: true,
                 title: true,
                 description: true,
-                priority: true,
+                cardColor: true,
                 startDate: true,
                 dueDate: true,
                 completedAt: true,

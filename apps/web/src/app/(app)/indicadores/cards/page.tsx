@@ -17,28 +17,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
-import { indicatorsQueries, type CardsStatsParams, type Priority } from '@/lib/queries/indicators';
+import { indicatorsQueries, type CardsStatsParams } from '@/lib/queries/indicators';
 import { boardsQueries } from '@/lib/queries/boards';
 import { orgMembersQuery } from '@/lib/queries/cards';
 import { UserAvatar } from '@/components/user-avatar';
-
-const PRIORITY_LABEL: Record<Priority, string> = {
-  NONE: 'Sem prioridade',
-  LOW: 'Baixa',
-  MEDIUM: 'Média',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-};
-
-const PRIORITY_COLOR: Record<Priority, string> = {
-  NONE: 'bg-fg-muted/50',
-  LOW: 'bg-slate-400',
-  MEDIUM: 'bg-yellow-500',
-  HIGH: 'bg-red-500',
-  URGENT: 'bg-red-500',
-};
-
-const PRIORITY_ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW', 'NONE'];
 
 type RangeKey = '7d' | '30d' | '90d' | '12m';
 
@@ -53,7 +35,6 @@ export default function IndicadoresCardsPage() {
   const [range, setRange] = useState<RangeKey>('30d');
   const [boardIds, setBoardIds] = useState<string[]>([]);
   const [leadId, setLeadId] = useState<string>('');
-  const [priorities, setPriorities] = useState<Priority[]>([]);
 
   const params: CardsStatsParams = useMemo(() => {
     const r = rangeFromKey(range);
@@ -62,9 +43,8 @@ export default function IndicadoresCardsPage() {
       to: r.to,
       boardIds: boardIds.length ? boardIds : undefined,
       leadId: leadId || undefined,
-      priorities: priorities.length ? priorities : undefined,
     };
-  }, [range, boardIds, leadId, priorities]);
+  }, [range, boardIds, leadId]);
 
   const { data, isLoading, isError } = useQuery(indicatorsQueries.cards(params));
   const boardsQ = useQuery(boardsQueries.all());
@@ -91,7 +71,6 @@ export default function IndicadoresCardsPage() {
     aging,
     byColumn,
     flowInOut,
-    byPriority,
     byBoard,
     byLabel,
     topLeads,
@@ -99,7 +78,6 @@ export default function IndicadoresCardsPage() {
     sparkline,
   } = data;
 
-  const totalActiveByPriority = byPriority.reduce((acc, p) => acc + p.count, 0) || 1;
   const maxBoardCount = Math.max(...byBoard.map((b) => b.count), 1);
   const maxLabelCount = Math.max(...byLabel.map((l) => l.count), 1);
   const maxColumnWip = Math.max(...byColumn.map((c) => c.wip), 1);
@@ -116,8 +94,6 @@ export default function IndicadoresCardsPage() {
         members={membersQ.data ?? []}
         leadId={leadId}
         onLeadIdChange={setLeadId}
-        priorities={priorities}
-        onPrioritiesChange={setPriorities}
       />
 
       {/* KPIs */}
@@ -270,41 +246,6 @@ export default function IndicadoresCardsPage() {
 
       {/* Distribuições */}
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {/* Por prioridade */}
-        <div className="border-border/60 bg-bg flex flex-col gap-3 rounded-lg border p-4">
-          <header className="flex items-center justify-between">
-            <h2 className="text-fg text-sm font-semibold">Por prioridade</h2>
-            <span className="text-fg-muted text-xs">{summary.active} ativos</span>
-          </header>
-          <div className="flex flex-col gap-2">
-            {PRIORITY_ORDER.map((p) => {
-              const item = byPriority.find((b) => b.priority === p);
-              const count = item?.count ?? 0;
-              const pct = Math.round((count / totalActiveByPriority) * 100);
-              return (
-                <div key={p} className="flex items-center gap-3 text-xs">
-                  <span className="w-32 shrink-0 truncate" title={PRIORITY_LABEL[p]}>
-                    <span
-                      aria-hidden
-                      className={`mr-2 inline-block size-2 rounded-full ${PRIORITY_COLOR[p]}`}
-                    />
-                    {PRIORITY_LABEL[p]}
-                  </span>
-                  <div className="bg-bg-muted relative h-2 flex-1 overflow-hidden rounded-full">
-                    <div
-                      className={`h-full ${PRIORITY_COLOR[p]} transition-all`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-fg-muted w-16 shrink-0 text-right tabular-nums">
-                    {count} <span className="text-fg-subtle">({pct}%)</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Por fluxo */}
         <div className="border-border/60 bg-bg flex flex-col gap-3 rounded-lg border p-4">
           <h2 className="text-fg text-sm font-semibold">Cards ativos por fluxo</h2>
@@ -430,8 +371,6 @@ function FilterBar({
   members,
   leadId,
   onLeadIdChange,
-  priorities,
-  onPrioritiesChange,
 }: {
   range: RangeKey;
   onRangeChange: (r: RangeKey) => void;
@@ -441,14 +380,7 @@ function FilterBar({
   members: Array<{ userId: string; user: { id: string; name: string } }>;
   leadId: string;
   onLeadIdChange: (id: string) => void;
-  priorities: Priority[];
-  onPrioritiesChange: (p: Priority[]) => void;
 }) {
-  function togglePriority(p: Priority) {
-    onPrioritiesChange(
-      priorities.includes(p) ? priorities.filter((x) => x !== p) : [...priorities, p],
-    );
-  }
   return (
     <div className="border-border/60 bg-bg sticky top-[52px] z-10 -mx-4 flex flex-wrap items-center gap-2 border-b px-4 py-2 sm:-mx-0 sm:rounded-md sm:border">
       <div className="bg-bg-muted inline-flex items-center rounded-md p-0.5">
@@ -494,36 +426,12 @@ function FilterBar({
           </option>
         ))}
       </select>
-      <div className="flex flex-wrap gap-1">
-        {PRIORITY_ORDER.map((p) => {
-          const on = priorities.includes(p);
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => togglePriority(p)}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
-                on
-                  ? 'border-primary text-fg bg-primary-subtle/40'
-                  : 'border-border/60 text-fg-muted hover:border-border-strong'
-              }`}
-            >
-              <span
-                aria-hidden
-                className={`inline-block size-1.5 rounded-full ${PRIORITY_COLOR[p]}`}
-              />
-              {PRIORITY_LABEL[p]}
-            </button>
-          );
-        })}
-      </div>
-      {(boardIds.length > 0 || leadId || priorities.length > 0) && (
+      {(boardIds.length > 0 || leadId) && (
         <button
           type="button"
           onClick={() => {
             onBoardIdsChange([]);
             onLeadIdChange('');
-            onPrioritiesChange([]);
           }}
           className="text-fg-muted hover:text-fg ml-auto text-[11px]"
         >

@@ -1,7 +1,7 @@
 'use client';
 
 import { Filter, Plus, Trash2 } from 'lucide-react';
-import type { AutomationCondition, Priority } from '@/lib/queries/automations';
+import type { AutomationCondition } from '@/lib/queries/automations';
 import type { Label } from '@/lib/queries/labels';
 
 interface OrgMember {
@@ -11,7 +11,6 @@ interface OrgMember {
 
 const FIELDS: Array<{ value: AutomationCondition['field']; label: string }> = [
   { value: 'tags', label: 'Tags' },
-  { value: 'priority', label: 'Prioridade' },
   { value: 'lead', label: 'Líder do card' },
   { value: 'dueDate', label: 'Prazo' },
 ];
@@ -21,13 +20,6 @@ const TAG_OPS: Array<{ value: string; label: string }> = [
   { value: 'notContainsAny', label: 'Não contém nenhuma das tags' },
   { value: 'containsAll', label: 'Contém todas as tags' },
   { value: 'notContainsAll', label: 'Não contém todas as tags' },
-];
-
-const PRIORITY_OPS: Array<{ value: string; label: string }> = [
-  { value: 'is', label: 'É' },
-  { value: 'isNot', label: 'Não é' },
-  { value: 'isAny', label: 'É qualquer uma de' },
-  { value: 'isNotAny', label: 'Não é nenhuma de' },
 ];
 
 const LEAD_OPS: Array<{ value: string; label: string }> = [
@@ -46,15 +38,6 @@ const DUEDATE_OPS: Array<{ value: string; label: string; needsValue?: boolean }>
   { value: 'hasDueDate', label: 'Tem prazo definido' },
   { value: 'noDueDate', label: 'Não tem prazo' },
 ];
-
-const PRIORITY_LABELS: Record<Priority, string> = {
-  NONE: 'Sem prioridade',
-  LOW: 'Baixa',
-  MEDIUM: 'Média',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-};
-const PRIORITIES: Priority[] = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 /**
  * Builder das condicoes (AND) de uma automacao. Cada linha tem field +
@@ -141,7 +124,6 @@ function ConditionRow({
 }) {
   function changeField(field: AutomationCondition['field']) {
     if (field === 'tags') onChange({ field, operator: 'containsAny', value: [] });
-    if (field === 'priority') onChange({ field, operator: 'isAny', value: [] });
     if (field === 'lead') onChange({ field, operator: 'isAny', value: [] });
     if (field === 'dueDate') onChange({ field, operator: 'overdue' });
   }
@@ -198,15 +180,6 @@ function ConditionRow({
         />
       )}
 
-      {condition.field === 'priority' && (
-        <MultiCheckList
-          items={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))}
-          selected={condition.value}
-          onChange={(value) => onChange({ ...condition, value: value as Priority[] })}
-          placeholder="Selecione prioridades…"
-        />
-      )}
-
       {condition.field === 'lead' &&
         condition.operator !== 'isSet' &&
         condition.operator !== 'isNotSet' && (
@@ -238,7 +211,6 @@ function ConditionRow({
 
 function opsFor(field: AutomationCondition['field']) {
   if (field === 'tags') return TAG_OPS;
-  if (field === 'priority') return PRIORITY_OPS;
   if (field === 'lead') return LEAD_OPS;
   return DUEDATE_OPS;
 }

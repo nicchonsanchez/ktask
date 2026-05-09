@@ -6,7 +6,6 @@ import {
 
 function card(overrides: Partial<CardForConditions> = {}): CardForConditions {
   return {
-    priority: 'MEDIUM',
     leadId: null,
     dueDate: null,
     labels: [],
@@ -78,38 +77,6 @@ describe('evaluateConditions', () => {
     });
   });
 
-  describe('priority', () => {
-    it('is: matches exact', () => {
-      const cond: AutomationCondition = {
-        field: 'priority',
-        operator: 'is',
-        value: ['HIGH'],
-      };
-      expect(evaluateConditions(card({ priority: 'HIGH' }), [cond])).toBe(true);
-      expect(evaluateConditions(card({ priority: 'MEDIUM' }), [cond])).toBe(false);
-    });
-
-    it('isAny: matches any in list', () => {
-      const cond: AutomationCondition = {
-        field: 'priority',
-        operator: 'isAny',
-        value: ['HIGH', 'URGENT'],
-      };
-      expect(evaluateConditions(card({ priority: 'URGENT' }), [cond])).toBe(true);
-      expect(evaluateConditions(card({ priority: 'LOW' }), [cond])).toBe(false);
-    });
-
-    it('isNotAny: matches none in list', () => {
-      const cond: AutomationCondition = {
-        field: 'priority',
-        operator: 'isNotAny',
-        value: ['HIGH', 'URGENT'],
-      };
-      expect(evaluateConditions(card({ priority: 'LOW' }), [cond])).toBe(true);
-      expect(evaluateConditions(card({ priority: 'HIGH' }), [cond])).toBe(false);
-    });
-  });
-
   describe('lead', () => {
     it('isSet: true so se tem lead', () => {
       const cond: AutomationCondition = { field: 'lead', operator: 'isSet' };
@@ -162,18 +129,18 @@ describe('evaluateConditions', () => {
 
   describe('AND combinacao', () => {
     it('todas precisam passar', () => {
-      const c = card({ priority: 'HIGH', labels: [{ labelId: 'l1' }] });
+      const c = card({ leadId: 'u1', labels: [{ labelId: 'l1' }] });
       const conds: AutomationCondition[] = [
-        { field: 'priority', operator: 'is', value: ['HIGH'] },
+        { field: 'lead', operator: 'is', value: ['u1'] },
         { field: 'tags', operator: 'containsAny', value: ['l1'] },
       ];
       expect(evaluateConditions(c, conds)).toBe(true);
     });
 
     it('uma falha derruba o conjunto', () => {
-      const c = card({ priority: 'HIGH', labels: [{ labelId: 'l1' }] });
+      const c = card({ leadId: 'u1', labels: [{ labelId: 'l1' }] });
       const conds: AutomationCondition[] = [
-        { field: 'priority', operator: 'is', value: ['HIGH'] },
+        { field: 'lead', operator: 'is', value: ['u1'] },
         { field: 'tags', operator: 'containsAny', value: ['l9'] }, // nao tem
       ];
       expect(evaluateConditions(c, conds)).toBe(false);

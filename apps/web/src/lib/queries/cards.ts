@@ -9,7 +9,8 @@ export interface CardDetail {
   listId: string;
   title: string;
   description: unknown | null;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  /** Cor decorativa livre (substituiu Priority). null = sem cor. */
+  cardColor: string | null;
   /** Doc 25: privacidade do card. */
   privacy: 'PUBLIC' | 'TEAM_ONLY';
   /** Doc 42: status (ortogonal a coluna). ACTIVE = padrao. */
@@ -132,7 +133,7 @@ export function moveCardInFlow(
 export interface UpdateCardInput {
   title?: string;
   description?: unknown | null;
-  priority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  cardColor?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
   completedAt?: string | null;
@@ -186,7 +187,7 @@ export interface FamilyCard {
   boardId: string;
   listId: string;
   parentCardId: string | null;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  cardColor: string | null;
   dueDate: string | null;
   completedAt: string | null;
   updatedAt: string;

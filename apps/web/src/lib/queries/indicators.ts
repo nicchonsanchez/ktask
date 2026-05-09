@@ -7,7 +7,6 @@ export interface CardsStatsParams {
   to?: string;
   boardIds?: string[];
   leadId?: string;
-  priorities?: Priority[];
 }
 
 export interface CardsStats {
@@ -57,7 +56,6 @@ export interface CardsStats {
     avgDaysInColumn: number;
   }>;
   flowInOut: Array<{ day: string; created: number; completed: number }>;
-  byPriority: Array<{ priority: Priority; count: number }>;
   byBoard: Array<{
     board: { id: string; name: string; color: string | null; icon: string | null };
     count: number;
@@ -122,7 +120,6 @@ function serializeCardsParams(params: CardsStatsParams): string {
   if (params.to) sp.set('to', params.to);
   if (params.boardIds?.length) sp.set('boardIds', params.boardIds.join(','));
   if (params.leadId) sp.set('leadId', params.leadId);
-  if (params.priorities?.length) sp.set('priorities', params.priorities.join(','));
   const qs = sp.toString();
   return qs ? `?${qs}` : '';
 }

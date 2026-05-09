@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { Priority, Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
@@ -20,7 +20,7 @@ interface CreateCardInput {
   listId: string;
   title: string;
   description?: Prisma.InputJsonValue | null;
-  priority?: Priority;
+  cardColor?: string | null;
   dueDate?: string | null;
   startDate?: string | null;
 }
@@ -28,7 +28,7 @@ interface CreateCardInput {
 interface UpdateCardInput {
   title?: string;
   description?: Prisma.InputJsonValue | null;
-  priority?: Priority;
+  cardColor?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
   completedAt?: string | null;
@@ -93,7 +93,7 @@ export class CardsService {
           listId: input.listId,
           title: input.title,
           description: (input.description ?? undefined) as Prisma.InputJsonValue | undefined,
-          priority: input.priority ?? 'NONE',
+          cardColor: input.cardColor ?? null,
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
           startDate: input.startDate ? new Date(input.startDate) : null,
           position,
@@ -298,7 +298,7 @@ export class CardsService {
       data: {
         title: input.title,
         description: (input.description ?? undefined) as Prisma.InputJsonValue | undefined,
-        priority: input.priority,
+        cardColor: input.cardColor !== undefined ? input.cardColor : undefined,
         startDate:
           input.startDate !== undefined
             ? input.startDate
@@ -408,9 +408,9 @@ export class CardsService {
       if (input.description !== undefined) {
         changed.push('description');
       }
-      if (input.priority !== undefined && input.priority !== card.priority) {
-        changed.push('priority');
-        changes.priority = { from: card.priority, to: input.priority };
+      if (input.cardColor !== undefined && input.cardColor !== card.cardColor) {
+        changed.push('cardColor');
+        changes.cardColor = { from: card.cardColor, to: input.cardColor };
       }
       const newDue = input.dueDate ? new Date(input.dueDate).toISOString() : null;
       const oldDue = card.dueDate ? card.dueDate.toISOString() : null;
@@ -812,7 +812,7 @@ export class CardsService {
               options.copyDescription !== false
                 ? ((source.description ?? undefined) as Prisma.InputJsonValue | undefined)
                 : undefined,
-            priority: source.priority,
+            cardColor: source.cardColor,
             startDate: options.copyDueDate !== false ? source.startDate : null,
             dueDate: options.copyDueDate !== false ? source.dueDate : null,
             estimateMinutes: source.estimateMinutes,
@@ -1088,7 +1088,7 @@ export class CardsService {
           listId: destListId,
           title: input.title,
           description: finalDescription,
-          priority: parent.priority,
+          cardColor: parent.cardColor,
           startDate: input.copyDueDate ? parent.startDate : null,
           dueDate: input.copyDueDate ? parent.dueDate : null,
           parentCardId: parentId,

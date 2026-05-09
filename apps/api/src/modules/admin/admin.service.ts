@@ -90,7 +90,7 @@ export class AdminService {
    * Aberto pra qualquer membro autenticado (não só ADMIN) já que são contagens
    * agregadas, não dados sensíveis. OWNER/ADMIN/GESTOR/MEMBER veem; GUEST não.
    *
-   * Aceita filtros (from/to/boardIds/leadId/priorities) — todos opcionais.
+   * Aceita filtros (from/to/boardIds/leadId) — todos opcionais.
    * Métricas "absolutas" (WIP, atrasados, byColumn, aging) ignoram from/to —
    * são fotos do agora. Métricas "no período" (throughput, completedInPeriod,
    * onTimeRate, reopened) usam from/to.
@@ -102,7 +102,6 @@ export class AdminService {
       to?: Date;
       boardIds?: string[];
       leadId?: string;
-      priorities?: Array<'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>;
     } = {},
   ) {
     if (tenant.role === 'GUEST') {
@@ -123,9 +122,6 @@ export class AdminService {
     }
     if (params.leadId) {
       cardFilter.leadId = params.leadId;
-    }
-    if (params.priorities && params.priorities.length > 0) {
-      cardFilter.priority = { in: params.priorities };
     }
 
     const today = new Date();
@@ -160,7 +156,6 @@ export class AdminService {
       completedInPrevPeriod,
       overdue,
       dueToday,
-      byPriority,
       byBoard,
       topLeads,
       byLabel,
@@ -207,11 +202,6 @@ export class AdminService {
           ...activeFilter,
           dueDate: { gte: today, lt: tomorrow },
         },
-      }),
-      this.prisma.card.groupBy({
-        by: ['priority'],
-        where: activeFilter,
-        _count: { _all: true },
       }),
       this.prisma.card.groupBy({
         by: ['boardId'],
@@ -527,10 +517,6 @@ export class AdminService {
         day: r.day.toISOString(),
         created: Number(r.created),
         completed: Number(r.completed),
-      })),
-      byPriority: byPriority.map((p) => ({
-        priority: p.priority,
-        count: p._count._all,
       })),
       byBoard: byBoard.map((b) => ({
         board: boardMap.get(b.boardId) ?? {

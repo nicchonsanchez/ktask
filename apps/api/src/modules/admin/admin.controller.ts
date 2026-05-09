@@ -43,7 +43,6 @@ export class AdminController {
     @Query('to') toStr?: string,
     @Query('boardIds') boardIdsStr?: string,
     @Query('leadId') leadId?: string,
-    @Query('priorities') prioritiesStr?: string,
   ) {
     const now = new Date();
     const from = fromStr ? new Date(fromStr) : new Date(now.getTime() - 30 * 24 * 60 * 60_000);
@@ -60,20 +59,11 @@ export class AdminController {
           .map((s) => s.trim())
           .filter(Boolean)
       : undefined;
-    const priorities = prioritiesStr
-      ? prioritiesStr
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s): s is 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' =>
-            ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(s),
-          )
-      : undefined;
     return this.service.cardsStats(org, {
       from,
       to,
       boardIds,
       leadId: leadId || undefined,
-      priorities,
     });
   }
 

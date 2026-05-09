@@ -497,7 +497,12 @@ model Card {
   title             String
   description       Json? // ProseMirror / Tiptap JSON (MVP usa subset simples)
   position          Float
-  priority          Priority  @default(NONE)
+  /// Cor decorativa escolhida pelo user (1 de 8 valores: slate, rose,
+  /// orange, amber, emerald, sky, violet, pink) ou null pra "sem cor".
+  /// Substituiu o sistema de Priority do card (V2 do design 2026-05-08):
+  /// agrupamento visual livre em vez de escala semantica de urgencia.
+  /// ChecklistItem.priority continua existindo (escala real pra Home).
+  cardColor         String?
   coverAttachmentId String?
   startDate         DateTime?
   dueDate           DateTime?

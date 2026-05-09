@@ -125,7 +125,7 @@ export interface PublicApprovalView {
       id: string;
       title: string;
       description: unknown;
-      priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+      cardColor: string | null;
       startDate: string | null;
       dueDate: string | null;
       completedAt: string | null;

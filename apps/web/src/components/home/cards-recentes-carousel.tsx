@@ -131,18 +131,22 @@ export function CardsRecentesCarousel({
   );
 }
 
-const PRIORITY_COLOR: Record<RecentCardItem['card']['priority'], string | null> = {
-  NONE: null,
-  LOW: '#06B6D4',
-  MEDIUM: '#F59E0B',
-  HIGH: '#F97316',
-  URGENT: '#EF4444',
+/** Cor solida da decoracao do card (substituiu Priority). null = sem cor. */
+const CARD_COLOR_HEX: Record<string, string> = {
+  slate: '#64748B',
+  rose: '#F43F5E',
+  orange: '#F97316',
+  amber: '#F59E0B',
+  emerald: '#10B981',
+  sky: '#0EA5E9',
+  violet: '#8B5CF6',
+  pink: '#EC4899',
 };
 
 function RecentCardItemCard({ item }: { item: RecentCardItem }) {
   const { card } = item;
   const href = `/b/${card.board.id}?card=${card.id}`;
-  const priorityColor = PRIORITY_COLOR[card.priority];
+  const colorHex = card.cardColor ? (CARD_COLOR_HEX[card.cardColor] ?? null) : null;
   return (
     <Link
       href={href}
@@ -175,12 +179,12 @@ function RecentCardItemCard({ item }: { item: RecentCardItem }) {
 
       <p className="text-fg-muted text-[11px]">{card.board.name}</p>
 
-      {/* Faixa de prioridade na borda inferior */}
-      {priorityColor && (
+      {/* Faixa decorativa (cor do card) na borda inferior */}
+      {colorHex && (
         <span
           aria-hidden
           className="absolute inset-x-0 bottom-0 h-1.5"
-          style={{ backgroundColor: priorityColor }}
+          style={{ backgroundColor: colorHex }}
         />
       )}
     </Link>

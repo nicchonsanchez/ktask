@@ -1,12 +1,27 @@
 import { z } from 'zod';
 
+/** ChecklistItem.priority continua usando esse enum. Card.priority foi
+ *  removido (substituido por cardColor decorativo). */
 export const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+
+/** 8 cores decorativas livres do card (substituiram priority do card). */
+export const CardColorSchema = z.enum([
+  'slate',
+  'rose',
+  'orange',
+  'amber',
+  'emerald',
+  'sky',
+  'violet',
+  'pink',
+]);
+export type CardColor = z.infer<typeof CardColorSchema>;
 
 export const CreateCardSchema = z.object({
   listId: z.string().cuid(),
   title: z.string().min(1).max(500).trim(),
   description: z.any().optional().nullable(),
-  priority: PrioritySchema.optional(),
+  cardColor: CardColorSchema.nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
 });
@@ -24,7 +39,7 @@ export type CardStatusValue = z.infer<typeof CardStatusSchema>;
 export const UpdateCardSchema = z.object({
   title: z.string().min(1).max(500).trim().optional(),
   description: z.any().optional().nullable(),
-  priority: PrioritySchema.optional(),
+  cardColor: CardColorSchema.nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),

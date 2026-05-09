@@ -331,13 +331,6 @@ function CardSummary({ approval }: { approval: PublicApprovalView['approval'] })
 
 function MetaRow({ card }: { card: PublicApprovalView['approval']['card'] }) {
   const meta: React.ReactNode[] = [];
-  if (card.priority && card.priority !== 'NONE') {
-    meta.push(
-      <span key="prio" className={`text-[11px] font-medium ${priorityColor(card.priority)}`}>
-        {priorityLabel(card.priority)}
-      </span>,
-    );
-  }
   if (card.startDate) {
     meta.push(
       <span key="start" className="text-fg-muted text-[11px]">
@@ -563,30 +556,6 @@ function ActivityItem({ activity }: { activity: PublicApprovalActivity }) {
   );
 }
 
-function priorityColor(p: string): string {
-  switch (p) {
-    case 'URGENT':
-      return 'text-danger';
-    case 'HIGH':
-      return 'text-warning';
-    case 'MEDIUM':
-      return 'text-primary';
-    case 'LOW':
-      return 'text-fg-muted';
-    default:
-      return 'text-fg-muted';
-  }
-}
-function priorityLabel(p: string): string {
-  return (
-    {
-      URGENT: 'Urgente',
-      HIGH: 'Alta',
-      MEDIUM: 'Média',
-      LOW: 'Baixa',
-    }[p] ?? p
-  );
-}
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR');
 }

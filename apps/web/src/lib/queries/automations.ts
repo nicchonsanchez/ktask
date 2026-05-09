@@ -31,18 +31,11 @@ export type AutomationActionType =
 
 export type AutomationRunStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 
-export type Priority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-
 export type AutomationCondition =
   | {
       field: 'tags';
       operator: 'containsAny' | 'notContainsAny' | 'containsAll' | 'notContainsAll';
       value: string[];
-    }
-  | {
-      field: 'priority';
-      operator: 'is' | 'isNot' | 'isAny' | 'isNotAny';
-      value: Priority[];
     }
   | {
       field: 'lead';

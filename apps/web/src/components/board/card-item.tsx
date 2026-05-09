@@ -6,7 +6,7 @@ import { Calendar, MessageSquare, CheckSquare, Paperclip, ShieldCheck, Lock } fr
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import type { CardListItem } from '@/lib/queries/boards';
-import { PRIORITY_LABEL, PRIORITY_COLOR, PRIORITY_SHAPE } from './priority-config';
+import { CARD_COLOR_BG, isCardColor } from './card-color-config';
 import { STATUS_LABEL, STATUS_VISUAL } from './status-config';
 
 function dueState(iso: string | null): {
@@ -53,6 +53,8 @@ export function CardItem({ card }: { card: CardListItem }) {
     router.push(`/b/${routeParams.boardId}?${next.toString()}`, { scroll: false });
   }
 
+  const bgClass = isCardColor(card.cardColor) ? CARD_COLOR_BG[card.cardColor] : 'bg-bg';
+
   return (
     <div
       ref={setNodeRef}
@@ -73,7 +75,7 @@ export function CardItem({ card }: { card: CardListItem }) {
       }}
       role="button"
       tabIndex={0}
-      className={`bg-bg cursor-pointer rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-all hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1] ${
+      className={`${bgClass} cursor-pointer rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-all hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1] ${
         card.status === 'CANCELED' ? 'opacity-60 hover:opacity-100' : ''
       }`}
     >
@@ -83,8 +85,11 @@ export function CardItem({ card }: { card: CardListItem }) {
 }
 
 export function CardOverlay({ card }: { card: CardListItem }) {
+  const bgClass = isCardColor(card.cardColor) ? CARD_COLOR_BG[card.cardColor] : 'bg-bg';
   return (
-    <div className="bg-bg cursor-grabbing rounded-lg p-3 shadow-[0_8px_24px_rgba(15,15,20,0.18)] ring-1 ring-black/10 dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] dark:ring-white/10">
+    <div
+      className={`${bgClass} cursor-grabbing rounded-lg p-3 shadow-[0_8px_24px_rgba(15,15,20,0.18)] ring-1 ring-black/10 dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] dark:ring-white/10`}
+    >
       <CardInner card={card} />
     </div>
   );
@@ -93,10 +98,6 @@ export function CardOverlay({ card }: { card: CardListItem }) {
 function CardInner({ card }: { card: CardListItem }) {
   const hasLabels = card.labels.length > 0;
   const due = dueState(card.dueDate);
-  const priorityColor = PRIORITY_COLOR[card.priority];
-  const priorityShape = PRIORITY_SHAPE[card.priority];
-  const hasPriorityBar = priorityShape === 'stripe' && priorityColor !== null;
-  const hasPriorityDiamond = priorityShape === 'diamond' && priorityColor !== null;
   const hasCover = Boolean(card.coverImageUrl);
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;
@@ -106,29 +107,13 @@ function CardInner({ card }: { card: CardListItem }) {
 
   return (
     <div className="relative flex flex-col gap-2.5">
-      {/* URGENT: losango no canto sup-direito sobreposto ao card.
-          Forma diferente da stripe — sinalizador robusto a daltonismo. */}
-      {hasPriorityDiamond && (
-        <span
-          aria-label="Prioridade: Urgente"
-          title="Urgente"
-          className="absolute -right-1 -top-1 z-10 size-3.5 rotate-45 border-[1.5px] shadow-sm"
-          style={{
-            borderColor: priorityColor as string,
-            backgroundColor: `${priorityColor}33`, // alpha 0.2
-          }}
-        />
-      )}
-
       {/* Badge de status no canto sup-direito quando nao-ACTIVE.
           Variante SUTIL (bg-{cor}-subtle + icone colorido), tamanho
           reduzido (size-5) — operador apontou que solido grande
           competia com o titulo do card. */}
       {card.status !== 'ACTIVE' && (
         <span
-          className={`absolute z-10 inline-flex size-5 items-center justify-center rounded shadow-sm ${STATUS_VISUAL[card.status].bgClass} ${STATUS_VISUAL[card.status].textClass} ${
-            hasPriorityDiamond ? 'right-5 top-0' : 'right-0 top-0'
-          }`}
+          className={`absolute right-0 top-0 z-10 inline-flex size-5 items-center justify-center rounded shadow-sm ${STATUS_VISUAL[card.status].bgClass} ${STATUS_VISUAL[card.status].textClass}`}
           title={`Status: ${STATUS_LABEL[card.status]}`}
           aria-label={`Status: ${STATUS_LABEL[card.status]}`}
         >
@@ -139,28 +124,17 @@ function CardInner({ card }: { card: CardListItem }) {
         </span>
       )}
 
-      {/* Topo do card: capa (se houver) + barra de prioridade.
-          Etiquetas saem daqui — viram pills logo abaixo do titulo (mais
-          legivel e sem competir com a sinalizacao de prioridade). */}
-      {(hasCover || hasPriorityBar) && (
+      {/* Capa (se houver). Etiquetas viram pills abaixo do titulo. */}
+      {hasCover && (
         <div className="-mx-3 -mt-3 flex flex-col overflow-hidden rounded-t-lg">
-          {hasCover && (
-            <div className="bg-bg-muted relative h-24 w-full overflow-hidden">
-              <img
-                src={card.coverImageUrl as string}
-                alt=""
-                className="size-full object-cover"
-                loading="lazy"
-              />
-            </div>
-          )}
-          {hasPriorityBar && (
-            <div
-              className="h-2"
-              style={{ backgroundColor: priorityColor as string }}
-              title={`Prioridade: ${PRIORITY_LABEL[card.priority]}`}
+          <div className="bg-bg-muted relative h-24 w-full overflow-hidden">
+            <img
+              src={card.coverImageUrl as string}
+              alt=""
+              className="size-full object-cover"
+              loading="lazy"
             />
-          )}
+          </div>
         </div>
       )}
 

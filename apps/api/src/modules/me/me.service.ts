@@ -92,7 +92,7 @@ export class MeService {
               id: true,
               title: true,
               boardId: true,
-              priority: true,
+              cardColor: true,
               list: { select: { id: true, name: true } },
               board: { select: { id: true, name: true, color: true } },
             },
@@ -249,7 +249,7 @@ export class MeService {
           select: {
             id: true,
             title: true,
-            priority: true,
+            cardColor: true,
             dueDate: true,
             list: { select: { id: true, name: true } },
             board: { select: { id: true, name: true, color: true, visibility: true } },

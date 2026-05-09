@@ -51,7 +51,12 @@ import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
 import { ContactsBlock } from './contacts-block';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
-import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER, PRIORITY_SHAPE } from './priority-config';
+import {
+  CARD_COLOR_LABEL,
+  CARD_COLOR_ORDER,
+  CARD_COLOR_SWATCH,
+  type CardColor,
+} from './card-color-config';
 import { StatusPicker } from './status-picker';
 import type { CardStatus as CardStatusValue } from './status-config';
 
@@ -165,12 +170,12 @@ export function CardModalContent({
     onSuccess: invalidate,
   });
 
-  const priorityMut = useMutation({
-    mutationFn: (priority: CardDetail['priority']) => updateCard(card.id, { priority }),
-    onMutate: (next) => ({ prev: optimistic('priority', next) }),
+  const cardColorMut = useMutation({
+    mutationFn: (cardColor: CardColor | null) => updateCard(card.id, { cardColor }),
+    onMutate: (next) => ({ prev: optimistic('cardColor', next) }),
     onError: (e, _v, ctx) => {
       rollback(ctx?.prev);
-      notify.error(errorMessage(e, 'Erro ao alterar prioridade.'));
+      notify.error(errorMessage(e, 'Erro ao alterar a cor do card.'));
     },
     onSuccess: invalidate,
   });
@@ -414,51 +419,50 @@ export function CardModalContent({
                   />
                 </Block>
 
-                {/* Detalhes (prioridade) */}
-                <Block icon={<ChevronsUp size={14} />} label="Detalhes">
-                  <div className="flex flex-col gap-2">
-                    <p className="text-fg-muted text-[11px]">Prioridade</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {PRIORITY_ORDER.map((value) => {
-                        const active = card.priority === value;
-                        const color = PRIORITY_COLOR[value];
-                        const label = PRIORITY_LABEL[value];
-                        const shape = PRIORITY_SHAPE[value];
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => priorityMut.mutate(value)}
-                            disabled={priorityMut.isPending}
-                            className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                              active
-                                ? 'border-fg/20 bg-bg text-fg shadow-sm'
-                                : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
-                            }`}
-                            aria-pressed={active}
-                            title={label}
-                          >
-                            {shape === 'diamond' && color ? (
-                              <span
-                                aria-hidden
-                                className="inline-block size-2.5 rotate-45 border-[1.5px]"
-                                style={{
-                                  borderColor: color,
-                                  backgroundColor: `${color}33`,
-                                }}
-                              />
-                            ) : (
-                              <span
-                                aria-hidden
-                                className={`inline-block size-2.5 rounded-full ${color ? '' : 'border-border-strong border'}`}
-                                style={color ? { backgroundColor: color } : undefined}
-                              />
-                            )}
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                {/* Cor decorativa do card. Substituiu o sistema de Priority. */}
+                <Block icon={<ChevronsUp size={14} />} label="Cor do card">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => cardColorMut.mutate(null)}
+                      disabled={cardColorMut.isPending}
+                      aria-pressed={!card.cardColor}
+                      title="Sem cor"
+                      className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                        !card.cardColor
+                          ? 'border-fg/40 shadow-sm'
+                          : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className="block size-3.5 rounded-full border border-dashed border-current opacity-60"
+                      />
+                    </button>
+                    {CARD_COLOR_ORDER.map((value) => {
+                      const active = card.cardColor === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => cardColorMut.mutate(value)}
+                          disabled={cardColorMut.isPending}
+                          aria-pressed={active}
+                          title={CARD_COLOR_LABEL[value]}
+                          className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                            active
+                              ? 'border-fg/40 shadow-sm'
+                              : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
+                          }`}
+                        >
+                          <span
+                            aria-hidden
+                            className="block size-4 rounded-full"
+                            style={{ backgroundColor: CARD_COLOR_SWATCH[value] }}
+                          />
+                        </button>
+                      );
+                    })}
                   </div>
                 </Block>
 

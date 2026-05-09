@@ -495,14 +495,6 @@ function iconFor(action: AutomationActionType) {
   return <Icon size={13} />;
 }
 
-const PRIORITY_PT: Record<string, string> = {
-  NONE: 'Sem prioridade',
-  LOW: 'Baixa',
-  MEDIUM: 'Média',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-};
-
 function summarizeConditions(conditions: AutomationCondition[], lookups: RowLookups): string {
   return conditions.map((c) => summarizeOne(c, lookups)).join(' • ');
 }
@@ -521,11 +513,6 @@ function summarizeOne(c: AutomationCondition, lookups: RowLookups): string {
             ? 'tem todas'
             : 'não tem todas';
     return `${op}: ${names}`;
-  }
-  if (c.field === 'priority') {
-    const names = c.value.map((p) => PRIORITY_PT[p] ?? p).join(', ');
-    const op = c.operator === 'is' || c.operator === 'isAny' ? 'prioridade é' : 'prioridade não é';
-    return `${op} ${names}`;
   }
   if (c.field === 'lead') {
     if (c.operator === 'isSet') return 'tem líder';

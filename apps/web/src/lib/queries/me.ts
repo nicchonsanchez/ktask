@@ -11,7 +11,7 @@ export interface MeTaskCardSummary {
   id: string;
   title: string;
   boardId: string;
-  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  cardColor: string | null;
   list: { id: string; name: string };
   board: { id: string; name: string; color: string | null };
 }
@@ -56,7 +56,7 @@ export interface RecentCardItem {
   card: {
     id: string;
     title: string;
-    priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    cardColor: string | null;
     dueDate: string | null;
     list: { id: string; name: string };
     board: {

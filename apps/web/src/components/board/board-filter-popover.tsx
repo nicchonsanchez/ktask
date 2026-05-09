@@ -6,13 +6,19 @@ import { Building2, Filter, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@ktask/ui';
 import type { BoardDetail, CardListItem } from '@/lib/queries/boards';
 import { UserAvatar } from '@/components/user-avatar';
+import {
+  CARD_COLOR_LABEL,
+  CARD_COLOR_ORDER,
+  CARD_COLOR_SWATCH,
+  type CardColor,
+} from './card-color-config';
 
-export type Priority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type DueFilter = 'all' | 'today' | 'week' | 'overdue' | 'none';
 
 export interface BoardFilters {
   onlyMine: boolean;
-  priorities: Priority[];
+  /** Cores decorativas selecionadas (substituiu Priority). */
+  cardColors: CardColor[];
   labelIds: string[];
   /** Cards onde alguma destas pessoas e lider OU esta na equipe. */
   userIds: string[];
@@ -23,7 +29,7 @@ export interface BoardFilters {
 
 export const EMPTY_FILTERS: BoardFilters = {
   onlyMine: false,
-  priorities: [],
+  cardColors: [],
   labelIds: [],
   userIds: [],
   companyIds: [],
@@ -33,21 +39,13 @@ export const EMPTY_FILTERS: BoardFilters = {
 export function activeFilterCount(f: BoardFilters): number {
   let n = 0;
   if (f.onlyMine) n++;
-  if (f.priorities.length > 0) n++;
+  if (f.cardColors.length > 0) n++;
   if (f.labelIds.length > 0) n++;
   if (f.userIds.length > 0) n++;
   if (f.companyIds.length > 0) n++;
   if (f.due !== 'all') n++;
   return n;
 }
-
-const PRIORITIES: Array<{ value: Priority; label: string; color: string }> = [
-  { value: 'URGENT', label: 'Urgente', color: 'bg-red-500' },
-  { value: 'HIGH', label: 'Alta', color: 'bg-orange-500' },
-  { value: 'MEDIUM', label: 'Média', color: 'bg-amber-400' },
-  { value: 'LOW', label: 'Baixa', color: 'bg-blue-400' },
-  { value: 'NONE', label: 'Sem prioridade', color: 'bg-fg-muted/50' },
-];
 
 const DUE_OPTIONS: Array<{ value: DueFilter; label: string }> = [
   { value: 'all', label: 'Todos' },
@@ -69,11 +67,11 @@ export function BoardFilterPopover({
   const count = activeFilterCount(filters);
   const id = useId();
 
-  function togglePriority(p: Priority) {
-    const next = filters.priorities.includes(p)
-      ? filters.priorities.filter((x) => x !== p)
-      : [...filters.priorities, p];
-    onFiltersChange({ ...filters, priorities: next });
+  function toggleCardColor(c: CardColor) {
+    const next = filters.cardColors.includes(c)
+      ? filters.cardColors.filter((x) => x !== c)
+      : [...filters.cardColors, c];
+    onFiltersChange({ ...filters, cardColors: next });
   }
 
   function toggleLabel(labelId: string) {
@@ -168,14 +166,14 @@ export function BoardFilterPopover({
 
           <section>
             <p className="text-fg-muted mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide">
-              Prioridade
+              Cor do card
             </p>
             <div className="flex flex-col gap-0.5">
-              {PRIORITIES.map((p) => {
-                const checked = filters.priorities.includes(p.value);
+              {CARD_COLOR_ORDER.map((value) => {
+                const checked = filters.cardColors.includes(value);
                 return (
                   <label
-                    key={p.value}
+                    key={value}
                     className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 ${
                       checked ? 'bg-primary-subtle/30' : 'hover:bg-bg-muted'
                     }`}
@@ -183,11 +181,15 @@ export function BoardFilterPopover({
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => togglePriority(p.value)}
+                      onChange={() => toggleCardColor(value)}
                       className="accent-primary"
                     />
-                    <span aria-hidden className={`size-2.5 rounded-full ${p.color}`} />
-                    <span className="text-fg text-[12px]">{p.label}</span>
+                    <span
+                      aria-hidden
+                      className="size-3 rounded-full"
+                      style={{ backgroundColor: CARD_COLOR_SWATCH[value] }}
+                    />
+                    <span className="text-fg text-[12px]">{CARD_COLOR_LABEL[value]}</span>
                   </label>
                 );
               })}
@@ -348,8 +350,9 @@ export function applyBoardFilters(
       if (!isMember && !isLead) return false;
     }
 
-    if (filters.priorities.length > 0 && !filters.priorities.includes(c.priority)) {
-      return false;
+    if (filters.cardColors.length > 0) {
+      if (!c.cardColor) return false;
+      if (!filters.cardColors.includes(c.cardColor as CardColor)) return false;
     }
 
     if (filters.labelIds.length > 0) {

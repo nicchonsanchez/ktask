@@ -191,7 +191,6 @@ export class AutomationsEngine {
       const cardForEval = await this.prisma.card.findUnique({
         where: { id: cardId },
         select: {
-          priority: true,
           leadId: true,
           dueDate: true,
           labels: { select: { labelId: true } },

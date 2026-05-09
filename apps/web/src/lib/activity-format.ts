@@ -3,18 +3,21 @@ import type { ActivityNode } from '@/lib/queries/cards';
 const FIELD_LABELS: Record<string, string> = {
   title: 'o título',
   description: 'a descrição',
-  priority: 'a prioridade',
+  cardColor: 'a cor do card',
   dueDate: 'o prazo',
   startDate: 'a data de início',
   estimateMinutes: 'a estimativa',
 };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  NONE: 'sem prioridade',
-  LOW: 'baixa',
-  MEDIUM: 'média',
-  HIGH: 'alta',
-  URGENT: 'urgente',
+const CARD_COLOR_LABELS: Record<string, string> = {
+  slate: 'cinza',
+  rose: 'rosa',
+  orange: 'laranja',
+  amber: 'âmbar',
+  emerald: 'verde',
+  sky: 'azul',
+  violet: 'violeta',
+  pink: 'pink',
 };
 
 function fmtDate(iso: string | null | undefined): string | null {
@@ -53,12 +56,15 @@ function changePart(field: string, change: { from: unknown; to: unknown }): Acti
     return ['alterou ', label, ' de "', { bold: from }, '" para "', { bold: to }, '"'];
   }
 
-  if (field === 'priority') {
-    const from = typeof change.from === 'string' ? PRIORITY_LABELS[change.from] : null;
-    const to = typeof change.to === 'string' ? PRIORITY_LABELS[change.to] : null;
-    if (!to) return null;
-    if (!from || from === to) return ['definiu ', label, ' como ', { bold: to }];
-    return ['alterou ', label, ' de ', { bold: from }, ' para ', { bold: to }];
+  if (field === 'cardColor') {
+    const fromKey = typeof change.from === 'string' ? change.from : null;
+    const toKey = typeof change.to === 'string' ? change.to : null;
+    const from = fromKey ? (CARD_COLOR_LABELS[fromKey] ?? fromKey) : null;
+    const to = toKey ? (CARD_COLOR_LABELS[toKey] ?? toKey) : null;
+    if (!from && to) return ['definiu ', label, ' como ', { bold: to }];
+    if (from && !to) return ['removeu ', label];
+    if (from && to) return ['alterou ', label, ' de ', { bold: from }, ' para ', { bold: to }];
+    return null;
   }
 
   if (field === 'dueDate' || field === 'startDate') {

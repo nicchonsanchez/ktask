@@ -1,23 +1,10 @@
-import type { Priority } from '@prisma/client';
-
-export type AutomationCondition =
-  | TagsCondition
-  | PriorityCondition
-  | LeadCondition
-  | DueDateCondition;
+export type AutomationCondition = TagsCondition | LeadCondition | DueDateCondition;
 
 export interface TagsCondition {
   field: 'tags';
   operator: 'containsAny' | 'notContainsAny' | 'containsAll' | 'notContainsAll';
   /** labelIds */
   value: string[];
-}
-
-export interface PriorityCondition {
-  field: 'priority';
-  operator: 'is' | 'isNot' | 'isAny' | 'isNotAny';
-  /** sempre array (1+ elementos); pra `is`/`isNot` use array de 1 */
-  value: Priority[];
 }
 
 export interface LeadCondition {
@@ -37,10 +24,9 @@ export interface DueDateCondition {
 /**
  * Card carregado com os campos necessarios pra avaliacao das condicoes.
  * A engine inclui labels (relacao many-to-many via CardLabel) e os campos
- * priority/leadId/dueDate diretos do model Card.
+ * leadId/dueDate diretos do model Card.
  */
 export interface CardForConditions {
-  priority: Priority;
   leadId: string | null;
   dueDate: Date | null;
   labels: Array<{ labelId: string }>;
@@ -65,8 +51,6 @@ function evaluateOne(card: CardForConditions, cond: AutomationCondition): boolea
   switch (cond.field) {
     case 'tags':
       return evalTags(card, cond);
-    case 'priority':
-      return evalPriority(card, cond);
     case 'lead':
       return evalLead(card, cond);
     case 'dueDate':
@@ -87,21 +71,6 @@ function evalTags(card: CardForConditions, cond: TagsCondition): boolean {
       return target.every((id) => cardLabels.has(id));
     case 'notContainsAll':
       return !target.every((id) => cardLabels.has(id));
-  }
-}
-
-function evalPriority(card: CardForConditions, cond: PriorityCondition): boolean {
-  const target = cond.value ?? [];
-  if (target.length === 0) return true;
-  switch (cond.operator) {
-    case 'is':
-      return target.length === 1 && card.priority === target[0];
-    case 'isNot':
-      return target.length === 1 && card.priority !== target[0];
-    case 'isAny':
-      return target.includes(card.priority);
-    case 'isNotAny':
-      return !target.includes(card.priority);
   }
 }
 

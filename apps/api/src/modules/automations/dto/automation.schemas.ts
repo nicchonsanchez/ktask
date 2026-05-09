@@ -1,17 +1,9 @@
 import { z } from 'zod';
 
-const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
-
 const TagsConditionSchema = z.object({
   field: z.literal('tags'),
   operator: z.enum(['containsAny', 'notContainsAny', 'containsAll', 'notContainsAll']),
   value: z.array(z.string().cuid()).min(1),
-});
-
-const PriorityConditionSchema = z.object({
-  field: z.literal('priority'),
-  operator: z.enum(['is', 'isNot', 'isAny', 'isNotAny']),
-  value: z.array(PrioritySchema).min(1),
 });
 
 const LeadConditionSchema = z.object({
@@ -35,7 +27,6 @@ const DueDateConditionSchema = z.object({
 
 export const AutomationConditionSchema = z.discriminatedUnion('field', [
   TagsConditionSchema,
-  PriorityConditionSchema,
   LeadConditionSchema,
   DueDateConditionSchema,
 ]);
