@@ -48,4 +48,23 @@ export class BoardAccessService {
 
     return { role };
   }
+
+  /**
+   * Doc 40: lista IDs de boards onde o user tem pelo menos VIEWER.
+   * OWNER/ADMIN/GESTOR tem bypass — veem todos da Org.
+   * Usado pra filtrar dados ao "ver como" outro membro: gestor so ve
+   * cards do membro nos boards que ele proprio tambem tem acesso.
+   */
+  async listAccessibleBoardIds(userId: string, tenant: TenantContext): Promise<string[]> {
+    const bypass = tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const where = bypass
+      ? { organizationId: tenant.organizationId, isArchived: false }
+      : {
+          organizationId: tenant.organizationId,
+          isArchived: false,
+          OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
+        };
+    const boards = await this.prisma.board.findMany({ where, select: { id: true } });
+    return boards.map((b) => b.id);
+  }
 }

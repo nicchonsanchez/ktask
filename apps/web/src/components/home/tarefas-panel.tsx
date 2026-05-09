@@ -90,6 +90,7 @@ export function TarefasPanel({
               tasks={filteredTasks}
               day={selectedDay!}
               onClearFilter={() => onClearFilter?.()}
+              readOnly={readOnly}
             />
           )}
 
@@ -99,8 +100,8 @@ export function TarefasPanel({
                 <OverdueSection tasks={data.overdue} readOnly={readOnly} />
               )}
               <TodaySection tasks={data.today} readOnly={readOnly} />
-              {data.next7.length > 0 && <Next7Section tasks={data.next7} />}
-              {data.noDate.length > 0 && <NoDateSection tasks={data.noDate} />}
+              {data.next7.length > 0 && <Next7Section tasks={data.next7} readOnly={readOnly} />}
+              {data.noDate.length > 0 && <NoDateSection tasks={data.noDate} readOnly={readOnly} />}
 
               {data.overdue.length === 0 &&
                 data.today.length === 0 &&
@@ -159,7 +160,7 @@ function OverdueSection({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boole
         )}
       </div>
       {tasks.map((t) => (
-        <TarefaRow key={t.id} task={t} variant="overdue" />
+        <TarefaRow key={t.id} task={t} variant="overdue" readOnly={readOnly} />
       ))}
     </div>
   );
@@ -188,7 +189,7 @@ function TodaySection({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boolean
           Sem tarefas pra hoje. Bom dia tranquilo.
         </p>
       ) : (
-        tasks.map((t) => <TarefaRow key={t.id} task={t} variant="today" />)
+        tasks.map((t) => <TarefaRow key={t.id} task={t} variant="today" readOnly={readOnly} />)
       )}
       {!readOnly && <InlineAddTaskRow />}
     </div>
@@ -272,27 +273,27 @@ function InlineAddTaskRow() {
   );
 }
 
-function Next7Section({ tasks }: { tasks: MeTask[] }) {
+function Next7Section({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boolean }) {
   return (
     <div>
       <p className="text-fg-muted px-3 pb-1 pt-3 text-[12px] font-medium sm:px-4">
         Próximos 7 dias
       </p>
       {tasks.map((t) => (
-        <TarefaRow key={t.id} task={t} variant="next7" />
+        <TarefaRow key={t.id} task={t} variant="next7" readOnly={readOnly} />
       ))}
     </div>
   );
 }
 
-function NoDateSection({ tasks }: { tasks: MeTask[] }) {
+function NoDateSection({ tasks, readOnly }: { tasks: MeTask[]; readOnly?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? tasks : tasks.slice(0, 5);
   return (
     <div>
       <p className="text-fg-muted px-3 pb-1 pt-3 text-[12px] font-medium sm:px-4">Sem data</p>
       {visible.map((t) => (
-        <TarefaRow key={t.id} task={t} variant="noDate" />
+        <TarefaRow key={t.id} task={t} variant="noDate" readOnly={readOnly} />
       ))}
       {tasks.length > 5 && (
         <button
@@ -316,10 +317,12 @@ function FilteredDaySection({
   tasks,
   day,
   onClearFilter,
+  readOnly,
 }: {
   tasks: MeTask[];
   day: string;
   onClearFilter: () => void;
+  readOnly?: boolean;
 }) {
   const [y, m, d] = day.split('-').map(Number);
   const label = new Date(y!, m! - 1, d!).toLocaleDateString('pt-BR', {
@@ -346,7 +349,12 @@ function FilteredDaySection({
         </p>
       ) : (
         tasks.map((t) => (
-          <TarefaRow key={t.id} task={t} variant={inferVariantForDay(t.dueDate, day)} />
+          <TarefaRow
+            key={t.id}
+            task={t}
+            variant={inferVariantForDay(t.dueDate, day)}
+            readOnly={readOnly}
+          />
         ))
       )}
     </div>

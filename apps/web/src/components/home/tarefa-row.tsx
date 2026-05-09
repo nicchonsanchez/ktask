@@ -37,7 +37,15 @@ const DUE_TEXT: Record<Variant, string> = {
   noDate: 'text-fg-subtle',
 };
 
-export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant }) {
+export function TarefaRow({
+  task,
+  variant,
+  readOnly,
+}: {
+  task: MeTask;
+  variant: Variant;
+  readOnly?: boolean;
+}) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
@@ -92,11 +100,21 @@ export function TarefaRow({ task, variant }: { task: MeTask; variant: Variant })
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (readOnly) return;
           toggleMut.mutate();
         }}
-        disabled={toggleMut.isPending}
-        aria-label={task.isDone ? 'Desmarcar tarefa' : 'Marcar tarefa como concluída'}
-        className="border-border-strong hover:border-success focus-visible:ring-primary inline-flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus-visible:outline-none focus-visible:ring-2"
+        disabled={toggleMut.isPending || readOnly}
+        aria-label={
+          readOnly
+            ? 'Visualização — não é possível alterar tarefas de outro membro'
+            : task.isDone
+              ? 'Desmarcar tarefa'
+              : 'Marcar tarefa como concluída'
+        }
+        title={readOnly ? 'Modo visualização' : undefined}
+        className={`border-border-strong focus-visible:ring-primary inline-flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+          readOnly ? 'cursor-not-allowed opacity-60' : 'hover:border-success'
+        }`}
       >
         {task.isDone && <span aria-hidden className="bg-success size-2.5 rounded-full" />}
       </button>
