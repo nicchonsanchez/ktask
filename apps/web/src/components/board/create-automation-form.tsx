@@ -122,22 +122,10 @@ export function CreateAutomationForm({
   // Action-specific state
   const [tagIds, setTagIds] = useState<string[]>(initial?.tagIds ?? []);
   const [checklistTitle, setChecklistTitle] = useState(initial?.checklistTitle ?? 'Tarefas');
-  const [checklistItemsRaw, setChecklistItemsRaw] = useState(initial?.checklistItemsRaw ?? '');
-  const [checklistAssigneeMode, setChecklistAssigneeMode] = useState<ChecklistAssigneeMode>(
-    initial?.checklistAssigneeMode ?? 'NONE',
-  );
-  const [checklistAssigneeUserId, setChecklistAssigneeUserId] = useState(
-    initial?.checklistAssigneeUserId ?? '',
-  );
-  const [checklistDueMode, setChecklistDueMode] = useState<ChecklistDueMode>(
-    initial?.checklistDueMode ?? 'NONE',
-  );
-  const [checklistDueOffsetDays, setChecklistDueOffsetDays] = useState(
-    initial?.checklistDueOffsetDays ?? 0,
-  );
-  const [checklistDueDate, setChecklistDueDate] = useState(initial?.checklistDueDate ?? '');
-  const [checklistItemPriority, setChecklistItemPriority] = useState<ChecklistItemPriority>(
-    initial?.checklistItemPriority ?? 'NONE',
+  const [checklistItems, setChecklistItems] = useState<ChecklistItemDraft[]>(
+    initial?.checklistItems && initial.checklistItems.length > 0
+      ? initial.checklistItems
+      : [newChecklistDraft()],
   );
   const [leadUserId, setLeadUserId] = useState(initial?.leadUserId ?? '');
   const [leadReplaceMode, setLeadReplaceMode] = useState<LeadReplaceMode>(
@@ -185,13 +173,7 @@ export function CreateAutomationForm({
     setMinutes(next.minutes);
     setTagIds(next.tagIds);
     setChecklistTitle(next.checklistTitle);
-    setChecklistItemsRaw(next.checklistItemsRaw);
-    setChecklistAssigneeMode(next.checklistAssigneeMode);
-    setChecklistAssigneeUserId(next.checklistAssigneeUserId);
-    setChecklistDueMode(next.checklistDueMode);
-    setChecklistDueOffsetDays(next.checklistDueOffsetDays);
-    setChecklistDueDate(next.checklistDueDate);
-    setChecklistItemPriority(next.checklistItemPriority);
+    setChecklistItems(next.checklistItems.length > 0 ? next.checklistItems : [newChecklistDraft()]);
     setLeadUserId(next.leadUserId);
     setLeadReplaceMode(next.leadReplaceMode);
     setTeamUserIds(next.teamUserIds);
@@ -231,13 +213,7 @@ export function CreateAutomationForm({
       const actionConfig = buildActionConfig(actionType, {
         tagIds,
         checklistTitle,
-        checklistItems: checklistItemsRaw,
-        checklistAssigneeMode,
-        checklistAssigneeUserId,
-        checklistDueMode,
-        checklistDueOffsetDays,
-        checklistDueDate,
-        checklistItemPriority,
+        checklistItems,
         leadUserId,
         leadReplaceMode,
         teamUserIds,
@@ -305,7 +281,7 @@ export function CreateAutomationForm({
     !createMut.isPending &&
     validateAction(actionType, {
       tagIds,
-      checklistItems: checklistItemsRaw,
+      checklistItems,
       leadUserId,
       teamUserIds,
       commentTemplate,
@@ -425,20 +401,8 @@ export function CreateAutomationForm({
             <ChecklistItemsConfig
               checklistTitle={checklistTitle}
               setChecklistTitle={setChecklistTitle}
-              itemsRaw={checklistItemsRaw}
-              setItemsRaw={setChecklistItemsRaw}
-              assigneeMode={checklistAssigneeMode}
-              setAssigneeMode={setChecklistAssigneeMode}
-              assigneeUserId={checklistAssigneeUserId}
-              setAssigneeUserId={setChecklistAssigneeUserId}
-              dueMode={checklistDueMode}
-              setDueMode={setChecklistDueMode}
-              dueOffsetDays={checklistDueOffsetDays}
-              setDueOffsetDays={setChecklistDueOffsetDays}
-              dueDate={checklistDueDate}
-              setDueDate={setChecklistDueDate}
-              itemPriority={checklistItemPriority}
-              setItemPriority={setChecklistItemPriority}
+              items={checklistItems}
+              setItems={setChecklistItems}
               members={membersQ.data ?? []}
               membersLoading={membersQ.isLoading}
               hint={
@@ -610,13 +574,7 @@ type LeadReplaceMode = 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';
 interface ConfigState {
   tagIds: string[];
   checklistTitle: string;
-  checklistItems: string;
-  checklistAssigneeMode: ChecklistAssigneeMode;
-  checklistAssigneeUserId: string;
-  checklistDueMode: ChecklistDueMode;
-  checklistDueOffsetDays: number;
-  checklistDueDate: string;
-  checklistItemPriority: ChecklistItemPriority;
+  checklistItems: ChecklistItemDraft[];
   leadUserId: string;
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
@@ -637,28 +595,28 @@ interface ConfigState {
 }
 
 /**
- * Empacota assignee/due/priority dos checklists em um objeto plano com
- * defaults omitidos (NONE = nao envia). Usado por INSERT_CHECKLIST_ITEMS
- * e INSERT_CHECKLIST_GROUP — backend trata ausencia como "sem default".
+ * Empacota 1 ChecklistItemDraft no shape esperado pelo backend.
+ * Omite campos NONE/vazios — backend cai pro default da automacao
+ * (se houver) ou pra null.
  */
-function checklistDefaultsConfig(s: ConfigState): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (s.checklistAssigneeMode !== 'NONE') {
-    out.assigneeMode = s.checklistAssigneeMode;
-    if (s.checklistAssigneeMode === 'SPECIFIC_USER' && s.checklistAssigneeUserId) {
-      out.assigneeUserId = s.checklistAssigneeUserId;
+function checklistItemToPayload(item: ChecklistItemDraft): Record<string, unknown> {
+  const out: Record<string, unknown> = { text: item.text.trim() };
+  if (item.assigneeMode !== 'NONE') {
+    out.assigneeMode = item.assigneeMode;
+    if (item.assigneeMode === 'SPECIFIC_USER' && item.assigneeUserId) {
+      out.assigneeUserId = item.assigneeUserId;
     }
   }
-  if (s.checklistDueMode !== 'NONE') {
-    out.dueMode = s.checklistDueMode;
-    if (s.checklistDueMode === 'OFFSET_FROM_CARD_DUE' || s.checklistDueMode === 'OFFSET_FROM_NOW') {
-      out.dueOffsetDays = s.checklistDueOffsetDays;
-    } else if (s.checklistDueMode === 'FIXED_DATE' && s.checklistDueDate) {
-      out.dueDate = s.checklistDueDate;
+  if (item.dueMode !== 'NONE') {
+    out.dueMode = item.dueMode;
+    if (item.dueMode === 'OFFSET_FROM_CARD_DUE' || item.dueMode === 'OFFSET_FROM_NOW') {
+      out.dueOffsetDays = item.dueOffsetDays;
+    } else if (item.dueMode === 'FIXED_DATE' && item.dueDate) {
+      out.dueDate = item.dueDate;
     }
   }
-  if (s.checklistItemPriority !== 'NONE') {
-    out.itemPriority = s.checklistItemPriority;
+  if (item.itemPriority !== 'NONE') {
+    out.itemPriority = item.itemPriority;
   }
   return out;
 }
@@ -674,20 +632,12 @@ function buildActionConfig(
     case 'INSERT_CHECKLIST_ITEMS':
       return {
         checklistTitle: s.checklistTitle.trim() || 'Tarefas',
-        items: s.checklistItems
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean),
-        ...checklistDefaultsConfig(s),
+        items: s.checklistItems.filter((i) => i.text.trim().length > 0).map(checklistItemToPayload),
       };
     case 'INSERT_CHECKLIST_GROUP':
       return {
         title: s.checklistTitle.trim() || 'Tarefas',
-        items: s.checklistItems
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean),
-        ...checklistDefaultsConfig(s),
+        items: s.checklistItems.filter((i) => i.text.trim().length > 0).map(checklistItemToPayload),
       };
     case 'UPDATE_FLOW_POSITION':
       return { position: s.flowPosition };
@@ -727,7 +677,7 @@ function validateAction(
   actionType: AutomationActionType,
   s: {
     tagIds: string[];
-    checklistItems: string;
+    checklistItems: ChecklistItemDraft[];
     leadUserId: string;
     teamUserIds: string[];
     commentTemplate: string;
@@ -745,7 +695,7 @@ function validateAction(
       return s.tagIds.length > 0;
     case 'INSERT_CHECKLIST_ITEMS':
     case 'INSERT_CHECKLIST_GROUP':
-      return s.checklistItems.split('\n').some((l) => l.trim().length > 0);
+      return s.checklistItems.some((i) => i.text.trim().length > 0);
     case 'UPDATE_FLOW_POSITION':
       return true;
     case 'SET_LEAD':
@@ -777,18 +727,37 @@ type ChecklistAssigneeMode = 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
 type ChecklistDueMode = 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
 type ChecklistItemPriority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
+interface ChecklistItemDraft {
+  /** UID local pro React key — nao vai pro backend. */
+  uid: string;
+  text: string;
+  assigneeMode: ChecklistAssigneeMode;
+  assigneeUserId: string;
+  dueMode: ChecklistDueMode;
+  dueOffsetDays: number;
+  dueDate: string;
+  itemPriority: ChecklistItemPriority;
+}
+
+function newChecklistDraft(text = ''): ChecklistItemDraft {
+  return {
+    uid: Math.random().toString(36).slice(2, 10),
+    text,
+    assigneeMode: 'NONE',
+    assigneeUserId: '',
+    dueMode: 'NONE',
+    dueOffsetDays: 0,
+    dueDate: '',
+    itemPriority: 'NONE',
+  };
+}
+
 interface InitialState {
   trigger: AutomationTrigger;
   minutes: number;
   tagIds: string[];
   checklistTitle: string;
-  checklistItemsRaw: string;
-  checklistAssigneeMode: ChecklistAssigneeMode;
-  checklistAssigneeUserId: string;
-  checklistDueMode: ChecklistDueMode;
-  checklistDueOffsetDays: number;
-  checklistDueDate: string;
-  checklistItemPriority: ChecklistItemPriority;
+  checklistItems: ChecklistItemDraft[];
   leadUserId: string;
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
@@ -815,6 +784,85 @@ interface InitialState {
  * Cada actionType olha apenas as chaves que produziu em buildActionConfig —
  * o resto fica com o default neutro pra evitar "vazamento" entre tipos.
  */
+/**
+ * Le actionConfig.items e devolve no formato ChecklistItemDraft.
+ *
+ * Aceita 2 formatos:
+ *  - Legacy `string[]`: cada item ganha defaults vazios. Os campos
+ *    assignee/due/priority herdados do nivel cfg.* da automacao
+ *    (caso o user tenha setado defaults globais no schema antigo)
+ *    sao copiados pra TODOS os items pra preservar o comportamento.
+ *  - Novo: `Array<{ text, assigneeMode?, ... }>` — usa direto.
+ */
+function parseChecklistItemsFromConfig(cfg: Record<string, unknown>): ChecklistItemDraft[] {
+  const raw = Array.isArray(cfg.items) ? (cfg.items as unknown[]) : [];
+  if (raw.length === 0) return [];
+
+  // Legacy defaults (no nivel global do cfg). Se existir, propaga pra
+  // todos os items que vierem como string.
+  const legacyAssigneeMode: ChecklistAssigneeMode =
+    cfg.assigneeMode === 'CARD_LEAD' || cfg.assigneeMode === 'SPECIFIC_USER'
+      ? (cfg.assigneeMode as ChecklistAssigneeMode)
+      : 'NONE';
+  const legacyAssigneeUserId =
+    typeof cfg.assigneeUserId === 'string' ? (cfg.assigneeUserId as string) : '';
+  const legacyDueMode: ChecklistDueMode =
+    cfg.dueMode === 'OFFSET_FROM_CARD_DUE' ||
+    cfg.dueMode === 'OFFSET_FROM_NOW' ||
+    cfg.dueMode === 'FIXED_DATE'
+      ? (cfg.dueMode as ChecklistDueMode)
+      : 'NONE';
+  const legacyDueOffsetDays =
+    typeof cfg.dueOffsetDays === 'number' ? (cfg.dueOffsetDays as number) : 0;
+  const legacyDueDate = typeof cfg.dueDate === 'string' ? (cfg.dueDate as string) : '';
+  const legacyPriority: ChecklistItemPriority =
+    cfg.itemPriority === 'LOW' ||
+    cfg.itemPriority === 'MEDIUM' ||
+    cfg.itemPriority === 'HIGH' ||
+    cfg.itemPriority === 'URGENT'
+      ? (cfg.itemPriority as ChecklistItemPriority)
+      : 'NONE';
+
+  return raw.map((entry) => {
+    if (typeof entry === 'string') {
+      return {
+        ...newChecklistDraft(entry),
+        assigneeMode: legacyAssigneeMode,
+        assigneeUserId: legacyAssigneeUserId,
+        dueMode: legacyDueMode,
+        dueOffsetDays: legacyDueOffsetDays,
+        dueDate: legacyDueDate,
+        itemPriority: legacyPriority,
+      };
+    }
+    const e = (entry ?? {}) as Record<string, unknown>;
+    const base = newChecklistDraft(typeof e.text === 'string' ? (e.text as string) : '');
+    return {
+      ...base,
+      assigneeMode:
+        e.assigneeMode === 'CARD_LEAD' || e.assigneeMode === 'SPECIFIC_USER'
+          ? (e.assigneeMode as ChecklistAssigneeMode)
+          : 'NONE',
+      assigneeUserId: typeof e.assigneeUserId === 'string' ? (e.assigneeUserId as string) : '',
+      dueMode:
+        e.dueMode === 'OFFSET_FROM_CARD_DUE' ||
+        e.dueMode === 'OFFSET_FROM_NOW' ||
+        e.dueMode === 'FIXED_DATE'
+          ? (e.dueMode as ChecklistDueMode)
+          : 'NONE',
+      dueOffsetDays: typeof e.dueOffsetDays === 'number' ? (e.dueOffsetDays as number) : 0,
+      dueDate: typeof e.dueDate === 'string' ? (e.dueDate as string) : '',
+      itemPriority:
+        e.itemPriority === 'LOW' ||
+        e.itemPriority === 'MEDIUM' ||
+        e.itemPriority === 'HIGH' ||
+        e.itemPriority === 'URGENT'
+          ? (e.itemPriority as ChecklistItemPriority)
+          : 'NONE',
+    };
+  });
+}
+
 function extractInitial(a: Automation): InitialState {
   const cfg = (a.actionConfig ?? {}) as Record<string, unknown>;
   const tCfg = (a.triggerConfig ?? {}) as Record<string, unknown>;
@@ -828,29 +876,7 @@ function extractInitial(a: Automation): InitialState {
       (typeof cfg.checklistTitle === 'string' && (cfg.checklistTitle as string)) ||
       (typeof cfg.title === 'string' && (cfg.title as string)) ||
       'Tarefas',
-    checklistItemsRaw: Array.isArray(cfg.items) ? (cfg.items as string[]).join('\n') : '',
-    checklistAssigneeMode:
-      cfg.assigneeMode === 'CARD_LEAD' || cfg.assigneeMode === 'SPECIFIC_USER'
-        ? (cfg.assigneeMode as ChecklistAssigneeMode)
-        : 'NONE',
-    checklistAssigneeUserId:
-      typeof cfg.assigneeUserId === 'string' ? (cfg.assigneeUserId as string) : '',
-    checklistDueMode:
-      cfg.dueMode === 'OFFSET_FROM_CARD_DUE' ||
-      cfg.dueMode === 'OFFSET_FROM_NOW' ||
-      cfg.dueMode === 'FIXED_DATE'
-        ? (cfg.dueMode as ChecklistDueMode)
-        : 'NONE',
-    checklistDueOffsetDays:
-      typeof cfg.dueOffsetDays === 'number' ? (cfg.dueOffsetDays as number) : 0,
-    checklistDueDate: typeof cfg.dueDate === 'string' ? (cfg.dueDate as string) : '',
-    checklistItemPriority:
-      cfg.itemPriority === 'LOW' ||
-      cfg.itemPriority === 'MEDIUM' ||
-      cfg.itemPriority === 'HIGH' ||
-      cfg.itemPriority === 'URGENT'
-        ? (cfg.itemPriority as ChecklistItemPriority)
-        : 'NONE',
+    checklistItems: parseChecklistItemsFromConfig(cfg),
     leadUserId: typeof cfg.userId === 'string' ? (cfg.userId as string) : '',
     leadReplaceMode:
       cfg.replaceMode === 'REMOVE_FROM_TEAM' || cfg.replaceMode === 'KEEP_IF_HAS_LEAD'
@@ -959,44 +985,31 @@ function TagsConfig({
 function ChecklistItemsConfig({
   checklistTitle,
   setChecklistTitle,
-  itemsRaw,
-  setItemsRaw,
-  assigneeMode,
-  setAssigneeMode,
-  assigneeUserId,
-  setAssigneeUserId,
-  dueMode,
-  setDueMode,
-  dueOffsetDays,
-  setDueOffsetDays,
-  dueDate,
-  setDueDate,
-  itemPriority,
-  setItemPriority,
+  items,
+  setItems,
   members,
   membersLoading,
   hint,
 }: {
   checklistTitle: string;
   setChecklistTitle: (v: string) => void;
-  itemsRaw: string;
-  setItemsRaw: (v: string) => void;
-  assigneeMode: ChecklistAssigneeMode;
-  setAssigneeMode: (v: ChecklistAssigneeMode) => void;
-  assigneeUserId: string;
-  setAssigneeUserId: (v: string) => void;
-  dueMode: ChecklistDueMode;
-  setDueMode: (v: ChecklistDueMode) => void;
-  dueOffsetDays: number;
-  setDueOffsetDays: (v: number) => void;
-  dueDate: string;
-  setDueDate: (v: string) => void;
-  itemPriority: ChecklistItemPriority;
-  setItemPriority: (v: ChecklistItemPriority) => void;
+  items: ChecklistItemDraft[];
+  setItems: (v: ChecklistItemDraft[]) => void;
   members: OrgMember[];
   membersLoading: boolean;
   hint?: string;
 }) {
+  function patch(uid: string, partial: Partial<ChecklistItemDraft>) {
+    setItems(items.map((i) => (i.uid === uid ? { ...i, ...partial } : i)));
+  }
+  function remove(uid: string) {
+    const next = items.filter((i) => i.uid !== uid);
+    setItems(next.length > 0 ? next : [newChecklistDraft()]);
+  }
+  function add() {
+    setItems([...items, newChecklistDraft()]);
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -1017,99 +1030,291 @@ function ChecklistItemsConfig({
       </div>
 
       <div>
-        <label className="text-fg-muted block text-[11px] font-medium">Itens (um por linha)</label>
-        <textarea
-          value={itemsRaw}
-          onChange={(e) => setItemsRaw(e.target.value)}
-          rows={5}
-          placeholder={'Conferir layout\nValidar copy\nAprovação cliente'}
-          className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
-        />
+        <label className="text-fg-muted mb-1 block text-[11px] font-medium">Itens</label>
+        <div className="flex flex-col gap-1.5">
+          {items.map((item, idx) => (
+            <ChecklistItemRow
+              key={item.uid}
+              item={item}
+              onPatch={(p) => patch(item.uid, p)}
+              onRemove={() => remove(item.uid)}
+              onEnterAddNew={() => {
+                if (idx === items.length - 1 && item.text.trim()) add();
+              }}
+              members={members}
+              membersLoading={membersLoading}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={add}
+          className="text-fg-muted hover:text-fg hover:bg-bg-muted/60 mt-1.5 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium"
+        >
+          + adicionar item
+        </button>
       </div>
+    </div>
+  );
+}
 
-      {/* Defaults aplicados a todos os items criados nesta execucao */}
-      <div className="border-border/60 flex flex-col gap-3 rounded-md border border-dashed p-3">
-        <p className="text-fg-muted text-[11px] font-medium">Valores padrão para os itens</p>
+/**
+ * Linha de um item de checklist com 3 botoes-popover:
+ * 👤 responsavel (Sem / Lider / Especifico),
+ * 🚩 prazo (Sem / N dias apos / N dias do prazo / Data fixa),
+ * ⚡ prioridade (5 niveis).
+ *
+ * Cada botao mostra ativo (preenchido) quando o item tem override
+ * setado pra aquele campo. Click toggla popover absoluto na propria
+ * linha — fecha ao clicar em outro botao ou Esc.
+ */
+function ChecklistItemRow({
+  item,
+  onPatch,
+  onRemove,
+  onEnterAddNew,
+  members,
+  membersLoading,
+}: {
+  item: ChecklistItemDraft;
+  onPatch: (p: Partial<ChecklistItemDraft>) => void;
+  onRemove: () => void;
+  onEnterAddNew: () => void;
+  members: OrgMember[];
+  membersLoading: boolean;
+}) {
+  const [open, setOpen] = useState<'assignee' | 'due' | 'priority' | null>(null);
 
-        <div>
-          <label className="text-fg-muted block text-[11px] font-medium">Responsável</label>
-          <select
-            value={assigneeMode}
-            onChange={(e) => setAssigneeMode(e.target.value as ChecklistAssigneeMode)}
-            className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
-          >
-            <option value="NONE">Sem responsável</option>
-            <option value="CARD_LEAD">Líder do card</option>
-            <option value="SPECIFIC_USER">Membro específico</option>
-          </select>
-          {assigneeMode === 'SPECIFIC_USER' && (
+  const hasAssignee = item.assigneeMode !== 'NONE';
+  const hasDue = item.dueMode !== 'NONE';
+  const hasPriority = item.itemPriority !== 'NONE';
+
+  function toggle(p: 'assignee' | 'due' | 'priority') {
+    setOpen(open === p ? null : p);
+  }
+  function close() {
+    setOpen(null);
+  }
+
+  return (
+    <div className="border-border/60 hover:border-border bg-bg relative flex items-center gap-1 rounded-md border px-2 py-1">
+      <input
+        type="text"
+        value={item.text}
+        onChange={(e) => onPatch({ text: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            onEnterAddNew();
+          }
+        }}
+        placeholder="Descrever a tarefa"
+        className="flex-1 bg-transparent text-sm focus:outline-none"
+      />
+      <IconBtn
+        title="Responsável"
+        active={hasAssignee}
+        onClick={() => toggle('assignee')}
+        label="👤"
+      />
+      <IconBtn title="Prazo" active={hasDue} onClick={() => toggle('due')} label="🚩" />
+      <IconBtn
+        title="Prioridade"
+        active={hasPriority}
+        onClick={() => toggle('priority')}
+        label="⚡"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remover item"
+        className="text-fg-subtle hover:text-danger ml-0.5 size-6 shrink-0 text-sm"
+      >
+        ×
+      </button>
+
+      {open === 'assignee' && (
+        <ItemPopover onClose={close}>
+          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Responsável</p>
+          <RadioRow
+            label="Sem responsável"
+            active={item.assigneeMode === 'NONE'}
+            onClick={() => {
+              onPatch({ assigneeMode: 'NONE', assigneeUserId: '' });
+              close();
+            }}
+          />
+          <RadioRow
+            label="Líder do card"
+            active={item.assigneeMode === 'CARD_LEAD'}
+            onClick={() => {
+              onPatch({ assigneeMode: 'CARD_LEAD', assigneeUserId: '' });
+              close();
+            }}
+          />
+          <RadioRow
+            label="Membro específico"
+            active={item.assigneeMode === 'SPECIFIC_USER'}
+            onClick={() => onPatch({ assigneeMode: 'SPECIFIC_USER' })}
+          />
+          {item.assigneeMode === 'SPECIFIC_USER' && (
             <div className="mt-2">
               <SingleUserConfig
                 members={members}
                 loading={membersLoading}
-                selectedId={assigneeUserId}
-                onChange={setAssigneeUserId}
+                selectedId={item.assigneeUserId}
+                onChange={(id) => {
+                  onPatch({ assigneeUserId: id });
+                  close();
+                }}
               />
             </div>
           )}
-        </div>
+        </ItemPopover>
+      )}
 
-        <div>
-          <label className="text-fg-muted block text-[11px] font-medium">Prazo</label>
-          <select
-            value={dueMode}
-            onChange={(e) => setDueMode(e.target.value as ChecklistDueMode)}
-            className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
-          >
-            <option value="NONE">Sem prazo</option>
-            <option value="OFFSET_FROM_NOW">N dias após a criação</option>
-            <option value="OFFSET_FROM_CARD_DUE">N dias do prazo do card</option>
-            <option value="FIXED_DATE">Data fixa</option>
-          </select>
-          {(dueMode === 'OFFSET_FROM_NOW' || dueMode === 'OFFSET_FROM_CARD_DUE') && (
+      {open === 'due' && (
+        <ItemPopover onClose={close}>
+          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Prazo</p>
+          <RadioRow
+            label="Sem prazo"
+            active={item.dueMode === 'NONE'}
+            onClick={() => {
+              onPatch({ dueMode: 'NONE', dueOffsetDays: 0, dueDate: '' });
+              close();
+            }}
+          />
+          <RadioRow
+            label="N dias após a criação"
+            active={item.dueMode === 'OFFSET_FROM_NOW'}
+            onClick={() => onPatch({ dueMode: 'OFFSET_FROM_NOW' })}
+          />
+          <RadioRow
+            label="N dias do prazo do card"
+            active={item.dueMode === 'OFFSET_FROM_CARD_DUE'}
+            onClick={() => onPatch({ dueMode: 'OFFSET_FROM_CARD_DUE' })}
+          />
+          <RadioRow
+            label="Data fixa"
+            active={item.dueMode === 'FIXED_DATE'}
+            onClick={() => onPatch({ dueMode: 'FIXED_DATE' })}
+          />
+          {(item.dueMode === 'OFFSET_FROM_NOW' || item.dueMode === 'OFFSET_FROM_CARD_DUE') && (
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="number"
-                value={dueOffsetDays}
-                onChange={(e) => setDueOffsetDays(Number(e.target.value))}
-                className="border-border focus:border-primary w-24 rounded-md border px-2 py-1 text-sm focus:outline-none"
+                value={item.dueOffsetDays}
+                onChange={(e) => onPatch({ dueOffsetDays: Number(e.target.value) })}
+                className="border-border focus:border-primary w-20 rounded-md border px-2 py-1 text-sm focus:outline-none"
               />
-              <span className="text-fg-subtle text-[11px]">
-                dias{' '}
-                {dueMode === 'OFFSET_FROM_CARD_DUE'
-                  ? '(positivo = depois, negativo = antes)'
-                  : '(a partir de hoje)'}
+              <span className="text-fg-subtle text-[10px]">
+                {item.dueMode === 'OFFSET_FROM_CARD_DUE' ? '(±)' : 'a partir de hoje'}
               </span>
             </div>
           )}
-          {dueMode === 'FIXED_DATE' && (
-            <div className="mt-2">
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="border-border focus:border-primary rounded-md border px-2 py-1 text-sm focus:outline-none"
-              />
-            </div>
+          {item.dueMode === 'FIXED_DATE' && (
+            <input
+              type="date"
+              value={item.dueDate}
+              onChange={(e) => onPatch({ dueDate: e.target.value })}
+              className="border-border focus:border-primary mt-2 rounded-md border px-2 py-1 text-sm focus:outline-none"
+            />
           )}
-        </div>
+        </ItemPopover>
+      )}
 
-        <div>
-          <label className="text-fg-muted block text-[11px] font-medium">Prioridade</label>
-          <select
-            value={itemPriority}
-            onChange={(e) => setItemPriority(e.target.value as ChecklistItemPriority)}
-            className="border-border focus:border-primary mt-1 w-full rounded-md border px-2 py-1 text-sm focus:outline-none"
-          >
-            <option value="NONE">Sem prioridade</option>
-            <option value="LOW">Baixa</option>
-            <option value="MEDIUM">Média</option>
-            <option value="HIGH">Alta</option>
-            <option value="URGENT">Urgente</option>
-          </select>
-        </div>
-      </div>
+      {open === 'priority' && (
+        <ItemPopover onClose={close}>
+          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Prioridade</p>
+          {(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as ChecklistItemPriority[]).map((p) => (
+            <RadioRow
+              key={p}
+              label={
+                {
+                  NONE: 'Sem prioridade',
+                  LOW: 'Baixa',
+                  MEDIUM: 'Média',
+                  HIGH: 'Alta',
+                  URGENT: 'Urgente',
+                }[p]
+              }
+              active={item.itemPriority === p}
+              onClick={() => {
+                onPatch({ itemPriority: p });
+                close();
+              }}
+            />
+          ))}
+        </ItemPopover>
+      )}
     </div>
+  );
+}
+
+function IconBtn({
+  title,
+  active,
+  onClick,
+  label,
+}: {
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`size-6 shrink-0 rounded text-sm transition-opacity ${
+        active ? 'opacity-100' : 'opacity-40 hover:opacity-100'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function RadioRow({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`hover:bg-bg-muted flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
+        active ? 'bg-primary-subtle/30 text-fg font-medium' : 'text-fg-muted'
+      }`}
+    >
+      <span className={`inline-block size-2 rounded-full ${active ? 'bg-primary' : 'bg-border'}`} />
+      {label}
+    </button>
+  );
+}
+
+function ItemPopover({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} aria-hidden />
+      <div className="bg-bg border-border absolute right-0 top-full z-20 mt-1 flex w-64 flex-col gap-1 rounded-md border p-2 shadow-lg">
+        {children}
+      </div>
+    </>
   );
 }
 

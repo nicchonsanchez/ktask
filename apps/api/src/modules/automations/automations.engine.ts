@@ -425,18 +425,9 @@ export class AutomationsEngine {
     automation: Automation,
     cardId: string,
   ): Promise<{ checklistId: string; itemsAdded: number; itemsSkipped: number }> {
-    const config = automation.actionConfig as {
-      items?: string[];
-      checklistTitle?: string;
-      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
-      assigneeUserId?: string;
-      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
-      dueOffsetDays?: number;
-      dueDate?: string;
-      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-    };
-    const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
-    if (items.length === 0) return { checklistId: '', itemsAdded: 0, itemsSkipped: 0 };
+    const config = automation.actionConfig as ChecklistItemsActionConfig;
+    const parsedItems = parseChecklistItemsConfig(config);
+    if (parsedItems.length === 0) return { checklistId: '', itemsAdded: 0, itemsSkipped: 0 };
 
     const title = config.checklistTitle?.trim() || 'Tarefas';
 
@@ -464,15 +455,14 @@ export class AutomationsEngine {
     // Idempotência: filtra items cujo texto ja existe no checklist
     // (comparacao case-insensitive + trim).
     const existingTexts = new Set((checklist.items ?? []).map((i) => i.text.trim().toLowerCase()));
-    const itemsToCreate = items.filter((t) => !existingTexts.has(t.toLowerCase()));
-    const itemsSkipped = items.length - itemsToCreate.length;
+    const itemsToCreate = parsedItems.filter((it) => !existingTexts.has(it.text.toLowerCase()));
+    const itemsSkipped = parsedItems.length - itemsToCreate.length;
     if (itemsToCreate.length === 0) {
       return { checklistId: checklist.id, itemsAdded: 0, itemsSkipped };
     }
 
-    // Resolve assignee/dueDate/priority (1x por execucao — vale pra todos
-    // os items deste run).
-    const resolved = await this.resolveChecklistItemDefaults(cardId, config);
+    // Resolve defaults globais da automacao 1x (usados como fallback per-item).
+    const globalDefaults = await this.resolveChecklistItemDefaults(cardId, config);
 
     // Última posição dos items existentes — pra apender com espaçamento
     // padrão (POSITION_STEP) entre cada novo item.
@@ -483,22 +473,26 @@ export class AutomationsEngine {
     });
     let basePos = computeInsertPosition(lastItem?.position ?? null, null);
 
-    await this.prisma.checklistItem.createMany({
-      data: itemsToCreate.map((text) => {
-        const data = {
-          checklistId: checklist!.id,
-          text,
-          position: basePos,
-          ...(resolved.assigneeId ? { assigneeId: resolved.assigneeId } : {}),
-          ...(resolved.dueDate ? { dueDate: resolved.dueDate } : {}),
-          ...(resolved.priority ? { priority: resolved.priority } : {}),
-        };
-        basePos = computeInsertPosition(basePos, null);
-        return data;
-      }),
-    });
+    const rows: Prisma.ChecklistItemCreateManyInput[] = [];
+    for (const item of itemsToCreate) {
+      // Per-item: se o item tem config propria, resolve dela; senao usa
+      // os defaults globais. Permite mix livre na mesma automacao.
+      const r = hasItemSpecificConfig(item)
+        ? await this.resolveChecklistItemDefaults(cardId, item)
+        : globalDefaults;
+      rows.push({
+        checklistId: checklist.id,
+        text: item.text,
+        position: basePos,
+        ...(r.assigneeId ? { assigneeId: r.assigneeId } : {}),
+        ...(r.dueDate ? { dueDate: r.dueDate } : {}),
+        ...(r.priority ? { priority: r.priority } : {}),
+      });
+      basePos = computeInsertPosition(basePos, null);
+    }
+    await this.prisma.checklistItem.createMany({ data: rows });
 
-    return { checklistId: checklist.id, itemsAdded: itemsToCreate.length, itemsSkipped };
+    return { checklistId: checklist.id, itemsAdded: rows.length, itemsSkipped };
   }
 
   /**
@@ -510,14 +504,7 @@ export class AutomationsEngine {
    */
   private async resolveChecklistItemDefaults(
     cardId: string,
-    config: {
-      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
-      assigneeUserId?: string;
-      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
-      dueOffsetDays?: number;
-      dueDate?: string;
-      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-    },
+    config: ChecklistDefaultsConfig,
   ): Promise<{ assigneeId: string | null; dueDate: Date | null; priority: Priority | null }> {
     // ---- assignee ----
     let assigneeId: string | null = null;
@@ -1024,19 +1011,16 @@ export class AutomationsEngine {
     automation: Automation,
     cardId: string,
   ): Promise<{ checklistId: string; itemsAdded: number }> {
-    const config = automation.actionConfig as {
-      title?: string;
-      items?: string[];
-      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
-      assigneeUserId?: string;
-      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
-      dueOffsetDays?: number;
-      dueDate?: string;
-      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    // Reusa o mesmo parser: title field aqui se chama "title" em vez de
+    // "checklistTitle". Normalizamos ambos antes de passar.
+    const raw = automation.actionConfig as ChecklistItemsActionConfig & { title?: string };
+    const config: ChecklistItemsActionConfig = {
+      ...raw,
+      checklistTitle: raw.checklistTitle ?? raw.title,
     };
-    const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
-    if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
-    const title = config.title?.trim() || 'Tarefas';
+    const parsedItems = parseChecklistItemsConfig(config);
+    if (parsedItems.length === 0) return { checklistId: '', itemsAdded: 0 };
+    const title = config.checklistTitle?.trim() || 'Tarefas';
 
     const last = await this.prisma.checklist.findFirst({
       where: { cardId },
@@ -1051,27 +1035,29 @@ export class AutomationsEngine {
       },
     });
 
-    const resolved = await this.resolveChecklistItemDefaults(cardId, config);
+    const globalDefaults = await this.resolveChecklistItemDefaults(cardId, config);
 
     // Items sempre começam do zero (checklist novo); usar espaçamento padrão
     // pra deixar gaps razoáveis pra inserções manuais futuras.
     let basePos = computeInsertPosition(null, null);
-    await this.prisma.checklistItem.createMany({
-      data: items.map((text) => {
-        const data = {
-          checklistId: checklist.id,
-          text,
-          position: basePos,
-          ...(resolved.assigneeId ? { assigneeId: resolved.assigneeId } : {}),
-          ...(resolved.dueDate ? { dueDate: resolved.dueDate } : {}),
-          ...(resolved.priority ? { priority: resolved.priority } : {}),
-        };
-        basePos = computeInsertPosition(basePos, null);
-        return data;
-      }),
-    });
+    const rows: Prisma.ChecklistItemCreateManyInput[] = [];
+    for (const item of parsedItems) {
+      const r = hasItemSpecificConfig(item)
+        ? await this.resolveChecklistItemDefaults(cardId, item)
+        : globalDefaults;
+      rows.push({
+        checklistId: checklist.id,
+        text: item.text,
+        position: basePos,
+        ...(r.assigneeId ? { assigneeId: r.assigneeId } : {}),
+        ...(r.dueDate ? { dueDate: r.dueDate } : {}),
+        ...(r.priority ? { priority: r.priority } : {}),
+      });
+      basePos = computeInsertPosition(basePos, null);
+    }
+    await this.prisma.checklistItem.createMany({ data: rows });
 
-    return { checklistId: checklist.id, itemsAdded: items.length };
+    return { checklistId: checklist.id, itemsAdded: rows.length };
   }
 
   /**
@@ -1374,4 +1360,70 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
     return vars[key] ?? '';
   });
+}
+
+// ---------------- Checklist items config (parsing) ----------------
+
+/**
+ * Defaults aplicaveis a 1 item ou ao conjunto inteiro (global da automacao).
+ * Reusados pelo resolveChecklistItemDefaults — quando o item nao tem campo
+ * proprio, o resolver le do nivel acima (config global).
+ */
+interface ChecklistDefaultsConfig {
+  assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
+  assigneeUserId?: string;
+  dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
+  dueOffsetDays?: number;
+  dueDate?: string;
+  itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+}
+
+/** Item individual no actionConfig.items (formato novo). */
+interface ChecklistItemConfig extends ChecklistDefaultsConfig {
+  text: string;
+}
+
+/** Action config completo do INSERT_CHECKLIST_ITEMS/GROUP. */
+interface ChecklistItemsActionConfig extends ChecklistDefaultsConfig {
+  checklistTitle?: string;
+  items?: Array<string | ChecklistItemConfig>;
+}
+
+/**
+ * Normaliza items pra { text, ...config } independente do formato.
+ *
+ * Aceita 2 formatos no actionConfig.items:
+ *   - Legacy: `string[]` — automacoes criadas antes do per-item config.
+ *     Items herdam tudo dos defaults globais da automacao.
+ *   - Novo:   `Array<{ text, assigneeMode?, dueMode?, itemPriority?, ... }>`
+ *     — items podem sobrescrever os defaults globais.
+ *
+ * Filtra entries sem texto. Trim no texto pra evitar duplicacao por espaco.
+ */
+function parseChecklistItemsConfig(config: ChecklistItemsActionConfig): ChecklistItemConfig[] {
+  const raw = Array.isArray(config.items) ? config.items : [];
+  const out: ChecklistItemConfig[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      const text = entry.trim();
+      if (text) out.push({ text });
+    } else if (entry && typeof entry === 'object' && typeof entry.text === 'string') {
+      const text = entry.text.trim();
+      if (text) out.push({ ...entry, text });
+    }
+  }
+  return out;
+}
+
+/**
+ * True se o item tem QUALQUER override de assignee/due/priority em relacao
+ * aos defaults da automacao. Usado pra decidir se vale a pena chamar
+ * resolveChecklistItemDefaults com o item especifico (vs reusar o global).
+ */
+function hasItemSpecificConfig(item: ChecklistItemConfig): boolean {
+  return Boolean(
+    (item.assigneeMode && item.assigneeMode !== 'NONE') ||
+    (item.dueMode && item.dueMode !== 'NONE') ||
+    (item.itemPriority && item.itemPriority !== 'NONE'),
+  );
 }
