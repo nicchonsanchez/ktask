@@ -121,6 +121,134 @@ export class AutomationsService {
     });
   }
 
+  // ============ Doc 48: escopo checklist/item ============
+
+  async listByChecklist(userId: string, tenant: TenantContext, checklistId: string) {
+    const checklist = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
+    await this.access.assertAccess(userId, checklist.boardId, tenant, 'VIEWER');
+    return this.prisma.automation.findMany({
+      where: { scopeChecklistId: checklistId, organizationId: tenant.organizationId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        createdBy: { select: { id: true, name: true, avatarUrl: true } },
+        _count: { select: { runs: true } },
+      },
+    });
+  }
+
+  async createForChecklist(
+    userId: string,
+    tenant: TenantContext,
+    checklistId: string,
+    input: CreateAutomationRequest,
+  ) {
+    if (input.trigger !== 'CHECKLIST_COMPLETED') {
+      throw new ForbiddenException('Automacoes em checklist exigem trigger CHECKLIST_COMPLETED.');
+    }
+    const checklist = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
+    await this.access.assertAccess(userId, checklist.boardId, tenant, 'EDITOR');
+
+    return this.prisma.automation.create({
+      data: {
+        organizationId: tenant.organizationId,
+        scopeChecklistId: checklistId,
+        boardId: checklist.boardId,
+        trigger: input.trigger,
+        triggerConfig: (input.triggerConfig ?? {}) as Prisma.InputJsonValue,
+        actionType: input.actionType,
+        actionConfig: (input.actionConfig ?? {}) as Prisma.InputJsonValue,
+        label: input.label ?? null,
+        isActive: input.isActive ?? true,
+        conditions:
+          input.conditions !== undefined && input.conditions !== null
+            ? (input.conditions as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        createdById: userId,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, avatarUrl: true } },
+        _count: { select: { runs: true } },
+      },
+    });
+  }
+
+  async listByChecklistItem(userId: string, tenant: TenantContext, itemId: string) {
+    const item = await this.getChecklistItemOrThrow(itemId, tenant.organizationId);
+    await this.access.assertAccess(userId, item.boardId, tenant, 'VIEWER');
+    return this.prisma.automation.findMany({
+      where: { scopeChecklistItemId: itemId, organizationId: tenant.organizationId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        createdBy: { select: { id: true, name: true, avatarUrl: true } },
+        _count: { select: { runs: true } },
+      },
+    });
+  }
+
+  async createForChecklistItem(
+    userId: string,
+    tenant: TenantContext,
+    itemId: string,
+    input: CreateAutomationRequest,
+  ) {
+    if (input.trigger !== 'CHECKLIST_ITEM_DONE') {
+      throw new ForbiddenException(
+        'Automacoes em item de checklist exigem trigger CHECKLIST_ITEM_DONE.',
+      );
+    }
+    const item = await this.getChecklistItemOrThrow(itemId, tenant.organizationId);
+    await this.access.assertAccess(userId, item.boardId, tenant, 'EDITOR');
+
+    return this.prisma.automation.create({
+      data: {
+        organizationId: tenant.organizationId,
+        scopeChecklistItemId: itemId,
+        boardId: item.boardId,
+        trigger: input.trigger,
+        triggerConfig: (input.triggerConfig ?? {}) as Prisma.InputJsonValue,
+        actionType: input.actionType,
+        actionConfig: (input.actionConfig ?? {}) as Prisma.InputJsonValue,
+        label: input.label ?? null,
+        isActive: input.isActive ?? true,
+        conditions:
+          input.conditions !== undefined && input.conditions !== null
+            ? (input.conditions as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        createdById: userId,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, avatarUrl: true } },
+        _count: { select: { runs: true } },
+      },
+    });
+  }
+
+  private async getChecklistOrThrow(checklistId: string, organizationId: string) {
+    const checklist = await this.prisma.checklist.findUnique({
+      where: { id: checklistId },
+      include: { card: { select: { boardId: true, organizationId: true } } },
+    });
+    if (!checklist || checklist.card.organizationId !== organizationId) {
+      throw new NotFoundException('Checklist não encontrado.');
+    }
+    return { id: checklist.id, boardId: checklist.card.boardId };
+  }
+
+  private async getChecklistItemOrThrow(itemId: string, organizationId: string) {
+    const item = await this.prisma.checklistItem.findUnique({
+      where: { id: itemId },
+      include: {
+        checklist: { include: { card: { select: { boardId: true, organizationId: true } } } },
+      },
+    });
+    if (!item || item.checklist.card.organizationId !== organizationId) {
+      throw new NotFoundException('Item de checklist não encontrado.');
+    }
+    return { id: item.id, boardId: item.checklist.card.boardId };
+  }
+
+  // ============ /Doc 48 ============
+
   async remove(userId: string, tenant: TenantContext, automationId: string) {
     const automation = await this.getOneOrThrow(automationId, tenant.organizationId);
     if (automation.boardId) {

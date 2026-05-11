@@ -54,6 +54,52 @@ export class AutomationsController {
     return this.automations.create(user.userId, org, listId, body);
   }
 
+  // ============ Doc 48: escopo checklist/item ============
+
+  @Get('checklists/:checklistId/automations')
+  @ApiOperation({ summary: 'Lista automações escopadas a um checklist (CHECKLIST_COMPLETED)' })
+  listByChecklist(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('checklistId') checklistId: string,
+  ) {
+    return this.automations.listByChecklist(user.userId, org, checklistId);
+  }
+
+  @Post('checklists/:checklistId/automations')
+  @ApiOperation({ summary: 'Cria automação no checklist (trigger=CHECKLIST_COMPLETED)' })
+  createForChecklist(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('checklistId') checklistId: string,
+    @Body(new ZodValidationPipe(CreateAutomationSchema)) body: CreateAutomationRequest,
+  ) {
+    return this.automations.createForChecklist(user.userId, org, checklistId, body);
+  }
+
+  @Get('checklists/items/:itemId/automations')
+  @ApiOperation({ summary: 'Lista automações escopadas a um item (CHECKLIST_ITEM_DONE)' })
+  listByChecklistItem(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.automations.listByChecklistItem(user.userId, org, itemId);
+  }
+
+  @Post('checklists/items/:itemId/automations')
+  @ApiOperation({ summary: 'Cria automação no item (trigger=CHECKLIST_ITEM_DONE)' })
+  createForChecklistItem(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(CreateAutomationSchema)) body: CreateAutomationRequest,
+  ) {
+    return this.automations.createForChecklistItem(user.userId, org, itemId, body);
+  }
+
+  // ============ /Doc 48 ============
+
   @Patch('automations/:automationId')
   @ApiOperation({ summary: 'Atualiza automação (toggle isActive, alterar config, etc.)' })
   update(

@@ -125,16 +125,63 @@ export class AutomationsEngine {
   }
 
   /**
-   * Busca automações ativas pra (listId, trigger) e dispara cada uma.
-   * Usado tanto pelo listener acima quanto recursivamente pelas actions
-   * que disparam novos eventos. Retorna os IDs dos AutomationRun criados.
+   * Doc 48: dispara automacoes do tipo CHECKLIST_ITEM_DONE escopadas
+   * a um item especifico. Acionado por ChecklistsService quando um
+   * item é marcado como done (transicao false → true).
+   */
+  @OnEvent('checklist.item.done', { async: true })
+  async onChecklistItemDone(payload: {
+    itemId: string;
+    checklistId: string;
+    cardId: string;
+    listId: string;
+    organizationId: string;
+    actorId: string;
+  }) {
+    await this.dispatchTrigger({
+      scope: { kind: 'checklistItem', id: payload.itemId },
+      trigger: 'CHECKLIST_ITEM_DONE',
+      cardId: payload.cardId,
+      organizationId: payload.organizationId,
+      chainDepth: 0,
+    });
+  }
+
+  /**
+   * Doc 48: dispara automacoes do tipo CHECKLIST_COMPLETED escopadas
+   * a um checklist especifico. Acionado quando o ultimo item pendente
+   * vira done (checklist 100% concluido).
+   */
+  @OnEvent('checklist.completed', { async: true })
+  async onChecklistCompleted(payload: {
+    checklistId: string;
+    cardId: string;
+    listId: string;
+    organizationId: string;
+    actorId: string;
+  }) {
+    await this.dispatchTrigger({
+      scope: { kind: 'checklist', id: payload.checklistId },
+      trigger: 'CHECKLIST_COMPLETED',
+      cardId: payload.cardId,
+      organizationId: payload.organizationId,
+      chainDepth: 0,
+    });
+  }
+
+  /**
+   * Busca automações ativas pra (escopo, trigger) e dispara cada uma.
+   * Escopo pode ser uma lista (CARD_ENTERED/LEFT), um checklist
+   * (CHECKLIST_COMPLETED) ou um item (CHECKLIST_ITEM_DONE).
+   * Retorna os IDs dos AutomationRun criados.
    */
   async dispatchTrigger(params: {
-    listId: string;
     trigger: AutomationTrigger;
     cardId: string;
     organizationId: string;
     chainDepth: number;
+    listId?: string;
+    scope?: { kind: 'list' | 'checklist' | 'checklistItem'; id: string };
   }): Promise<string[]> {
     if (params.chainDepth > this.MAX_CHAIN_DEPTH) {
       this.logger.warn(
@@ -143,9 +190,24 @@ export class AutomationsEngine {
       return [];
     }
 
+    // Backward-compat: aceita params.listId direto OU params.scope.
+    const scope =
+      params.scope ?? (params.listId ? { kind: 'list' as const, id: params.listId } : null);
+    if (!scope) {
+      this.logger.warn(`dispatchTrigger sem escopo (cardId=${params.cardId})`);
+      return [];
+    }
+
+    const scopeWhere =
+      scope.kind === 'list'
+        ? { listId: scope.id }
+        : scope.kind === 'checklist'
+          ? { scopeChecklistId: scope.id }
+          : { scopeChecklistItemId: scope.id };
+
     const automations = await this.prisma.automation.findMany({
       where: {
-        listId: params.listId,
+        ...scopeWhere,
         trigger: params.trigger,
         isActive: true,
         organizationId: params.organizationId,

@@ -324,6 +324,35 @@ export class ChecklistsService {
           payload: { itemId, text: updated.text },
         },
       });
+
+      // Doc 48: dispara eventos pra automation engine. Só na transição
+      // false → true (input.isDone === true). Re-marcar como undone não
+      // dispara nada (evita loops e disparos espurios).
+      if (input.isDone === true) {
+        this.events.emit('checklist.item.done', {
+          itemId,
+          checklistId: item.checklistId,
+          cardId: card.id,
+          listId: card.listId,
+          organizationId: tenant.organizationId,
+          actorId: userId,
+        });
+
+        // Se este foi o último item pendente do checklist, dispara
+        // CHECKLIST_COMPLETED também.
+        const remaining = await this.prisma.checklistItem.count({
+          where: { checklistId: item.checklistId, isDone: false },
+        });
+        if (remaining === 0) {
+          this.events.emit('checklist.completed', {
+            checklistId: item.checklistId,
+            cardId: card.id,
+            listId: card.listId,
+            organizationId: tenant.organizationId,
+            actorId: userId,
+          });
+        }
+      }
     }
 
     if (isRenaming) {

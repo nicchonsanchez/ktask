@@ -8,7 +8,9 @@ export type AutomationTrigger =
   | 'DUE_DATE_TODAY'
   | 'DUE_DATE_OVERDUE'
   | 'CARD_APPROVED'
-  | 'CARD_REJECTED';
+  | 'CARD_REJECTED'
+  | 'CHECKLIST_ITEM_DONE'
+  | 'CHECKLIST_COMPLETED';
 
 export type AutomationActionType =
   | 'INSERT_TAGS'
@@ -61,6 +63,8 @@ export interface Automation {
   organizationId: string;
   listId: string | null;
   boardId: string | null;
+  scopeChecklistId: string | null;
+  scopeChecklistItemId: string | null;
   trigger: AutomationTrigger;
   triggerConfig: Record<string, unknown>;
   actionType: AutomationActionType;
@@ -94,6 +98,14 @@ export const automationsQueries = {
     queryKey: ['automations', 'by-list', listId] as const,
     queryFn: () => api.get<Automation[]>(`/api/v1/lists/${listId}/automations`),
   }),
+  byChecklist: (checklistId: string) => ({
+    queryKey: ['automations', 'by-checklist', checklistId] as const,
+    queryFn: () => api.get<Automation[]>(`/api/v1/checklists/${checklistId}/automations`),
+  }),
+  byChecklistItem: (itemId: string) => ({
+    queryKey: ['automations', 'by-checklist-item', itemId] as const,
+    queryFn: () => api.get<Automation[]>(`/api/v1/checklists/items/${itemId}/automations`),
+  }),
   runs: (automationId: string) => ({
     queryKey: ['automations', automationId, 'runs'] as const,
     queryFn: () => api.get<AutomationRun[]>(`/api/v1/automations/${automationId}/runs`),
@@ -112,6 +124,14 @@ export interface CreateAutomationInput {
 
 export function createAutomation(listId: string, input: CreateAutomationInput) {
   return api.post<Automation>(`/api/v1/lists/${listId}/automations`, input);
+}
+
+export function createAutomationForChecklist(checklistId: string, input: CreateAutomationInput) {
+  return api.post<Automation>(`/api/v1/checklists/${checklistId}/automations`, input);
+}
+
+export function createAutomationForChecklistItem(itemId: string, input: CreateAutomationInput) {
+  return api.post<Automation>(`/api/v1/checklists/items/${itemId}/automations`, input);
 }
 
 export function updateAutomation(

@@ -146,8 +146,10 @@ enum AutomationTrigger {
   TIME_NO_INTERACTION
   DUE_DATE_TODAY
   DUE_DATE_OVERDUE
-  CARD_APPROVED // disparado quando uma CardApproval termina como APPROVED
-  CARD_REJECTED // disparado quando uma CardApproval termina como REJECTED
+  CARD_APPROVED          // CardApproval termina como APPROVED
+  CARD_REJECTED          // CardApproval termina como REJECTED
+  CHECKLIST_ITEM_DONE    // ChecklistItem marcado como done (escopo: item específico)
+  CHECKLIST_COMPLETED    // todos os items de um Checklist marcados (escopo: checklist específico)
 }
 
 enum AutomationActionType {
@@ -773,8 +775,9 @@ model Checklist {
   position  Float
   createdAt DateTime @default(now())
 
-  card  Card            @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  items ChecklistItem[]
+  card        Card            @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  items       ChecklistItem[]
+  automations Automation[]
 
   @@index([cardId])
 }
@@ -812,9 +815,10 @@ model ChecklistItem {
   doneAt      DateTime?
   doneById    String?
 
-  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  assignee  User?     @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  doneBy    User?     @relation("ChecklistItemDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  checklist   Checklist    @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  assignee    User?        @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  doneBy      User?        @relation("ChecklistItemDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  automations Automation[]
 
   @@index([checklistId, position])
   @@index([assigneeId, dueDate, isDone]) // suporta query da home: tarefas do user X agrupadas por prazo
@@ -1037,6 +1041,11 @@ model Automation {
   organizationId String
   listId         String?
   boardId        String?
+  /// Doc 48: escopo de checklist quando trigger=CHECKLIST_COMPLETED.
+  /// Mutex com listId pro mesmo registro.
+  scopeChecklistId     String?
+  /// Doc 48: escopo de item quando trigger=CHECKLIST_ITEM_DONE.
+  scopeChecklistItemId String?
   trigger        AutomationTrigger
   /// Configuração do gatilho. Ex: { minutes: 60 } pra TIME_IN_LIST.
   triggerConfig  Json                 @default("{}")
@@ -1058,12 +1067,16 @@ model Automation {
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   list         List?           @relation(fields: [listId], references: [id], onDelete: Cascade)
   board        Board?          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  scopeChecklist     Checklist?     @relation(fields: [scopeChecklistId], references: [id], onDelete: Cascade)
+  scopeChecklistItem ChecklistItem? @relation(fields: [scopeChecklistItemId], references: [id], onDelete: Cascade)
   createdBy    User            @relation("AutomationCreator", fields: [createdById], references: [id])
   runs         AutomationRun[]
 
   @@index([organizationId])
   @@index([listId, isActive])
   @@index([boardId, isActive])
+  @@index([scopeChecklistId, isActive])
+  @@index([scopeChecklistItemId, isActive])
 }
 
 /// Histórico de execução de uma automação. Cada run referencia (quando

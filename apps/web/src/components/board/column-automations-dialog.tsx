@@ -438,6 +438,8 @@ const TRIGGER_LABEL: Record<Automation['trigger'], string> = {
   DUE_DATE_OVERDUE: 'prazo do card vencer',
   CARD_APPROVED: 'card for aprovado (cliente externo)',
   CARD_REJECTED: 'card for rejeitado (cliente externo)',
+  CHECKLIST_ITEM_DONE: 'esta tarefa for concluída',
+  CHECKLIST_COMPLETED: 'este checklist for 100% concluído',
 };
 
 function describeTrigger(trigger: Automation['trigger']): string {

@@ -16,12 +16,15 @@ import {
   type ChecklistItem,
   type TaskPriority,
 } from '@/lib/queries/cards';
-import { CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { Bot, CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
 import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
 import { DatePickerPopover } from './due-date-picker';
+import { ChecklistAutomationDialog } from './checklist-automation-dialog';
+import { automationsQueries } from '@/lib/queries/automations';
+import type { ListWithCards } from '@/lib/queries/boards';
 import {
   applyChecklistTemplate,
   checklistTemplatesQueries,
@@ -68,10 +71,31 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
     },
   });
 
+  // Stub mínimo do List pra passar pro CreateAutomationForm via dialog.
+  // O form usa list só pra exibir o nome no header e pra automation
+  // list-scoped — quando scope=checklist/item, list.id não é usado.
+  const listStub: ListWithCards = {
+    id: card.list.id,
+    name: card.list.name,
+    position: 0,
+    color: null,
+    wipLimit: null,
+    isArchived: false,
+    isFinalList: false,
+    isBacklog: false,
+    cards: [],
+  };
+
   return (
     <div className="flex flex-col gap-5">
       {card.checklists.map((cl) => (
-        <ChecklistSection key={cl.id} checklist={cl} onChange={invalidate} />
+        <ChecklistSection
+          key={cl.id}
+          checklist={cl}
+          onChange={invalidate}
+          list={listStub}
+          boardId={boardId}
+        />
       ))}
       {/* nota: AssigneePicker usa orgMembersQuery diretamente — qualquer membro
           da Org pode ser atribuído (mesmo critério do LeadPicker do card). */}
@@ -213,14 +237,30 @@ function TemplatePickerDialog({
   );
 }
 
-function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onChange: () => void }) {
+function ChecklistSection({
+  checklist,
+  onChange,
+  list,
+  boardId,
+}: {
+  checklist: Checklist;
+  onChange: () => void;
+  list: ListWithCards;
+  boardId: string;
+}) {
   const confirm = useConfirm();
   const prompt = usePrompt();
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(checklist.title);
+  const [autoOpen, setAutoOpen] = useState(false);
   useEffect(() => setTitle(checklist.title), [checklist.title]);
+
+  const automationsCount = useQuery({
+    ...automationsQueries.byChecklist(checklist.id),
+    select: (data) => data.filter((a) => a.isActive).length,
+  });
 
   const [newItemText, setNewItemText] = useState('');
   const [addingItem, setAddingItem] = useState(false);
@@ -306,6 +346,31 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
         <span className="text-fg-muted text-[11px] tabular-nums">
           {done}/{total}
         </span>
+        {/* Doc 48: botão 🤖 para automacoes escopadas no checklist inteiro */}
+        <button
+          type="button"
+          onClick={() => setAutoOpen(true)}
+          className={`flex items-center gap-0.5 rounded p-1 ${
+            (automationsCount.data ?? 0) > 0
+              ? 'text-primary'
+              : 'text-fg-subtle hover:text-primary opacity-60 hover:opacity-100'
+          }`}
+          aria-label="Automações do checklist"
+          title="Automações quando este checklist for 100% concluído"
+        >
+          <Bot size={13} />
+          {(automationsCount.data ?? 0) > 0 && (
+            <span className="text-[10px] font-semibold tabular-nums">{automationsCount.data}</span>
+          )}
+        </button>
+        <ChecklistAutomationDialog
+          scope={{ kind: 'checklist', id: checklist.id }}
+          scopeLabel={checklist.title}
+          list={list}
+          boardId={boardId}
+          open={autoOpen}
+          onOpenChange={setAutoOpen}
+        />
         {total > 0 && (
           <button
             type="button"
@@ -360,7 +425,7 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
 
       <ul className="flex flex-col gap-0.5">
         {checklist.items.map((item) => (
-          <ItemRow key={item.id} item={item} onChange={onChange} />
+          <ItemRow key={item.id} item={item} onChange={onChange} list={list} boardId={boardId} />
         ))}
       </ul>
 
@@ -428,11 +493,27 @@ function ChecklistSection({ checklist, onChange }: { checklist: Checklist; onCha
   );
 }
 
-function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void }) {
+function ItemRow({
+  item,
+  onChange,
+  list,
+  boardId,
+}: {
+  item: ChecklistItem;
+  onChange: () => void;
+  list: ListWithCards;
+  boardId: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
+  const [autoOpen, setAutoOpen] = useState(false);
   useEffect(() => setText(item.text), [item.text]);
   const textRef = useRef<HTMLInputElement>(null);
+
+  const automationsCount = useQuery({
+    ...automationsQueries.byChecklistItem(item.id),
+    select: (data) => data.filter((a) => a.isActive).length,
+  });
 
   const toggleMut = useMutation({
     mutationFn: () => updateChecklistItem(item.id, { isDone: !item.isDone }),
@@ -524,6 +605,32 @@ function ItemRow({ item, onChange }: { item: ChecklistItem; onChange: () => void
         priority={item.priority}
         onChange={(p) => priorityMut.mutate(p)}
         disabled={priorityMut.isPending}
+      />
+
+      {/* Doc 48: botão 🤖 para automacao escopada NESTE item */}
+      <button
+        type="button"
+        onClick={() => setAutoOpen(true)}
+        className={`flex items-center gap-0.5 rounded p-0.5 ${
+          (automationsCount.data ?? 0) > 0
+            ? 'text-primary'
+            : 'text-fg-subtle hover:text-primary opacity-60 hover:opacity-100'
+        }`}
+        aria-label="Automações da tarefa"
+        title="Automações quando esta tarefa for concluída"
+      >
+        <Bot size={13} />
+        {(automationsCount.data ?? 0) > 0 && (
+          <span className="text-[10px] font-semibold tabular-nums">{automationsCount.data}</span>
+        )}
+      </button>
+      <ChecklistAutomationDialog
+        scope={{ kind: 'item', id: item.id }}
+        scopeLabel={item.text}
+        list={list}
+        boardId={boardId}
+        open={autoOpen}
+        onOpenChange={setAutoOpen}
       />
 
       <AssigneePicker

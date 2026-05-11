@@ -42,6 +42,8 @@ export const AutomationTriggerSchema = z.enum([
   'DUE_DATE_OVERDUE',
   'CARD_APPROVED',
   'CARD_REJECTED',
+  'CHECKLIST_ITEM_DONE',
+  'CHECKLIST_COMPLETED',
 ]);
 
 export const AutomationActionTypeSchema = z.enum([

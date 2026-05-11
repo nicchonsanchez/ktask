@@ -8,6 +8,8 @@ import type { ListWithCards } from '@/lib/queries/boards';
 import {
   automationsQueries,
   createAutomation,
+  createAutomationForChecklist,
+  createAutomationForChecklistItem,
   updateAutomation,
   type Automation,
   type AutomationActionType,
@@ -87,6 +89,7 @@ export function CreateAutomationForm({
   list,
   boardId,
   editing,
+  scope,
   onCreated,
   onCancel,
 }: {
@@ -94,13 +97,26 @@ export function CreateAutomationForm({
   list: ListWithCards;
   boardId: string;
   editing?: Automation;
+  /**
+   * Doc 48: quando definido, o form cria automação escopada a um checklist
+   * ou item, com trigger pré-fixado e oculto. Default = list-scoped.
+   */
+  scope?: { kind: 'checklist'; id: string } | { kind: 'item'; id: string };
   onCreated: () => void;
   onCancel: () => void;
 }) {
   const isEdit = Boolean(editing);
   const initial = editing ? extractInitial(editing) : null;
+  const lockedTrigger: AutomationTrigger | null =
+    scope?.kind === 'checklist'
+      ? 'CHECKLIST_COMPLETED'
+      : scope?.kind === 'item'
+        ? 'CHECKLIST_ITEM_DONE'
+        : null;
 
-  const [trigger, setTrigger] = useState<AutomationTrigger>(initial?.trigger ?? 'CARD_ENTERED');
+  const [trigger, setTrigger] = useState<AutomationTrigger>(
+    lockedTrigger ?? initial?.trigger ?? 'CARD_ENTERED',
+  );
   const [minutes, setMinutes] = useState(initial?.minutes ?? 60);
 
   // Action-specific state
@@ -262,10 +278,22 @@ export function CreateAutomationForm({
         label: label.trim() || undefined,
         conditions: conditionsPayload,
       };
+      if (scope?.kind === 'checklist') return createAutomationForChecklist(scope.id, input);
+      if (scope?.kind === 'item') return createAutomationForChecklistItem(scope.id, input);
       return createAutomation(list.id, input);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: automationsQueries.byList(list.id).queryKey });
+      if (scope?.kind === 'checklist') {
+        queryClient.invalidateQueries({
+          queryKey: automationsQueries.byChecklist(scope.id).queryKey,
+        });
+      } else if (scope?.kind === 'item') {
+        queryClient.invalidateQueries({
+          queryKey: automationsQueries.byChecklistItem(scope.id).queryKey,
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: automationsQueries.byList(list.id).queryKey });
+      }
       notify.success(isEdit ? 'Automação atualizada.' : 'Automação criada.');
       onCreated();
     },
@@ -301,36 +329,49 @@ export function CreateAutomationForm({
       <div className="flex-1 overflow-y-auto px-5 py-4">
         <section className="mb-5">
           <h3 className="text-fg mb-2 text-[12px] font-semibold uppercase tracking-wide">Quando</h3>
-          <div className="flex flex-col gap-1.5">
-            {TRIGGERS.map((t) => (
-              <label
-                key={t.value}
-                className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 ${
-                  trigger === t.value
-                    ? 'border-primary bg-primary-subtle/30'
-                    : 'border-border/60 hover:border-border-strong'
-                } ${t.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="trigger"
-                  value={t.value}
-                  checked={trigger === t.value}
-                  onChange={() => setTrigger(t.value)}
-                  disabled={t.disabled}
-                  className="accent-primary mt-0.5"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-fg text-[13px] font-medium">{t.label}</p>
-                  {t.disabled && (
-                    <p className="text-fg-subtle text-[10px]">
-                      Disponível quando os triggers temporais estiverem rodando.
-                    </p>
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
+          {lockedTrigger ? (
+            // Doc 48: trigger fixo no escopo de checklist/item. Mostra
+            // como info read-only.
+            <div className="border-primary/40 bg-primary-subtle/30 rounded-md border px-3 py-2 text-[13px]">
+              <p className="text-fg font-medium">
+                {TRIGGERS.find((t) => t.value === lockedTrigger)?.label}
+              </p>
+              <p className="text-fg-subtle mt-0.5 text-[11px]">
+                Gatilho fixado pelo escopo da automação.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {TRIGGERS.map((t) => (
+                <label
+                  key={t.value}
+                  className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 ${
+                    trigger === t.value
+                      ? 'border-primary bg-primary-subtle/30'
+                      : 'border-border/60 hover:border-border-strong'
+                  } ${t.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="trigger"
+                    value={t.value}
+                    checked={trigger === t.value}
+                    onChange={() => setTrigger(t.value)}
+                    disabled={t.disabled}
+                    className="accent-primary mt-0.5"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-fg text-[13px] font-medium">{t.label}</p>
+                    {t.disabled && (
+                      <p className="text-fg-subtle text-[10px]">
+                        Disponível quando os triggers temporais estiverem rodando.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
 
           {(trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION') && (
             <div className="mt-3">
@@ -560,6 +601,8 @@ const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: bool
   { value: 'DUE_DATE_OVERDUE', label: 'Quando o prazo do card vencer' },
   { value: 'CARD_APPROVED', label: 'Quando o card for aprovado (cliente externo)' },
   { value: 'CARD_REJECTED', label: 'Quando o card for rejeitado (cliente externo)' },
+  { value: 'CHECKLIST_ITEM_DONE', label: 'Quando esta tarefa for concluída' },
+  { value: 'CHECKLIST_COMPLETED', label: 'Quando este checklist for 100% concluído' },
 ];
 
 type LeadReplaceMode = 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';
