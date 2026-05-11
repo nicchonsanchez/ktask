@@ -123,15 +123,29 @@
       console.log(`  ${cols.length} colunas`);
       await sleep(150);
 
-      // 2. Pra cada coluna, lista projects (cards)
+      // 2. Pra cada coluna, lista projects (cards) — PAGINADO
+      // O endpoint /flow-columns/{id}/projects retorna ~14 cards por pagina.
+      // Sem loopar, perdemos cards de colunas com >14 (ex: Aprovação material
+      // em Redes Sociais tinha 50 cards em 4 paginas, e o FATEO sumiu).
       let totalCards = 0;
       for (const col of cols) {
-        const projResp = await api(
-          `/api/organization/flow-columns/${col.id}/projects?filter=${FILTER}`,
-        );
-        const projects = projResp?.result?.projects || [];
+        const projects = [];
+        let page = 1;
+        let totalPages = 1;
+        while (page <= totalPages) {
+          const projResp = await api(
+            `/api/organization/flow-columns/${col.id}/projects?page=${page}&filter=${FILTER}`,
+          );
+          const pageProjects = projResp?.result?.projects || [];
+          projects.push(...pageProjects);
+          totalPages = projResp?.result?.pagination?.totalPages || 1;
+          page++;
+          if (page <= totalPages) await sleep(150);
+        }
         totalCards += projects.length;
-        console.log(`  [${col.name}] ${projects.length} cards`);
+        console.log(
+          `  [${col.name}] ${projects.length} cards (${totalPages} pagina${totalPages > 1 ? 's' : ''})`,
+        );
         await sleep(150);
 
         // 3. Pra cada card, busca tarefas
