@@ -516,6 +516,10 @@ export class ImporterService {
           );
           continue;
         }
+        // Bug do Ummense: col 15 (Cards Filhos) as vezes contem o
+        // proprio nome do card. Pular self-reference — DB tem CHECK
+        // constraint que tambem bloqueia, mas evitamos o roundtrip.
+        if (childId === myId) continue;
         await this.prisma.card.update({
           where: { id: childId },
           data: { parentCardId: myId },
@@ -1197,6 +1201,10 @@ export class ImporterService {
           );
           continue;
         }
+        // Bug do Ummense: col 15 (Cards Filhos) as vezes contem o
+        // proprio nome do card. Pular self-reference — DB tem CHECK
+        // constraint que tambem bloqueia, mas evitamos o roundtrip.
+        if (childId === myId) continue;
         await this.prisma.card.update({
           where: { id: childId },
           data: { parentCardId: myId },
