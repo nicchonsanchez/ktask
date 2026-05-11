@@ -558,6 +558,8 @@ const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: bool
   },
   { value: 'DUE_DATE_TODAY', label: 'Quando o prazo do card cair pra hoje' },
   { value: 'DUE_DATE_OVERDUE', label: 'Quando o prazo do card vencer' },
+  { value: 'CARD_APPROVED', label: 'Quando o card for aprovado (cliente externo)' },
+  { value: 'CARD_REJECTED', label: 'Quando o card for rejeitado (cliente externo)' },
 ];
 
 type LeadReplaceMode = 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';

@@ -436,6 +436,8 @@ const TRIGGER_LABEL: Record<Automation['trigger'], string> = {
   TIME_NO_INTERACTION: 'card ficar parado sem interação',
   DUE_DATE_TODAY: 'prazo do card cair pra hoje',
   DUE_DATE_OVERDUE: 'prazo do card vencer',
+  CARD_APPROVED: 'card for aprovado (cliente externo)',
+  CARD_REJECTED: 'card for rejeitado (cliente externo)',
 };
 
 function describeTrigger(trigger: Automation['trigger']): string {

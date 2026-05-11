@@ -6,7 +6,9 @@ export type AutomationTrigger =
   | 'TIME_IN_LIST'
   | 'TIME_NO_INTERACTION'
   | 'DUE_DATE_TODAY'
-  | 'DUE_DATE_OVERDUE';
+  | 'DUE_DATE_OVERDUE'
+  | 'CARD_APPROVED'
+  | 'CARD_REJECTED';
 
 export type AutomationActionType =
   | 'INSERT_TAGS'

@@ -40,6 +40,8 @@ export const AutomationTriggerSchema = z.enum([
   'TIME_NO_INTERACTION',
   'DUE_DATE_TODAY',
   'DUE_DATE_OVERDUE',
+  'CARD_APPROVED',
+  'CARD_REJECTED',
 ]);
 
 export const AutomationActionTypeSchema = z.enum([
