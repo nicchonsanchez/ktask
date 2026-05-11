@@ -407,7 +407,15 @@ export class AutomationsEngine {
   /**
    * INSERT_CHECKLIST_ITEMS — cria itens em um checklist do card. Se o
    * card não tiver checklist com o título passado, cria. Senão, anexa
-   * os items no fim do checklist existente. Items vazios são ignorados.
+   * os items novos no fim do checklist existente.
+   *
+   * Idempotência: itens com texto que já existe no mesmo checklist
+   * (case-insensitive, trimmed) são pulados. Isso evita duplicação
+   * quando:
+   *   - A automation re-roda (card sai e volta na coluna)
+   *   - O card já tinha os items via import do Ummense e a automation
+   *     também tenta criar
+   *   - Multiplas automations da mesma coluna criam items sobrepostos
    *
    * Suporta atribuir responsavel/prazo/prioridade a TODOS os items
    * criados nessa execucao (1 valor por automacao, nao por item — match
@@ -416,7 +424,7 @@ export class AutomationsEngine {
   private async handleInsertChecklistItems(
     automation: Automation,
     cardId: string,
-  ): Promise<{ checklistId: string; itemsAdded: number }> {
+  ): Promise<{ checklistId: string; itemsAdded: number; itemsSkipped: number }> {
     const config = automation.actionConfig as {
       items?: string[];
       checklistTitle?: string;
@@ -428,13 +436,14 @@ export class AutomationsEngine {
       itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     };
     const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
-    if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
+    if (items.length === 0) return { checklistId: '', itemsAdded: 0, itemsSkipped: 0 };
 
     const title = config.checklistTitle?.trim() || 'Tarefas';
 
     // Procura checklist com mesmo título no card. Se não existir, cria.
     let checklist = await this.prisma.checklist.findFirst({
       where: { cardId, title },
+      include: { items: { select: { text: true } } },
     });
     if (!checklist) {
       const last = await this.prisma.checklist.findFirst({
@@ -442,13 +451,23 @@ export class AutomationsEngine {
         orderBy: { position: 'desc' },
         select: { position: true },
       });
-      checklist = await this.prisma.checklist.create({
+      const created = await this.prisma.checklist.create({
         data: {
           cardId,
           title,
           position: computeInsertPosition(last?.position ?? null, null),
         },
       });
+      checklist = { ...created, items: [] };
+    }
+
+    // Idempotência: filtra items cujo texto ja existe no checklist
+    // (comparacao case-insensitive + trim).
+    const existingTexts = new Set((checklist.items ?? []).map((i) => i.text.trim().toLowerCase()));
+    const itemsToCreate = items.filter((t) => !existingTexts.has(t.toLowerCase()));
+    const itemsSkipped = items.length - itemsToCreate.length;
+    if (itemsToCreate.length === 0) {
+      return { checklistId: checklist.id, itemsAdded: 0, itemsSkipped };
     }
 
     // Resolve assignee/dueDate/priority (1x por execucao — vale pra todos
@@ -465,7 +484,7 @@ export class AutomationsEngine {
     let basePos = computeInsertPosition(lastItem?.position ?? null, null);
 
     await this.prisma.checklistItem.createMany({
-      data: items.map((text) => {
+      data: itemsToCreate.map((text) => {
         const data = {
           checklistId: checklist!.id,
           text,
@@ -479,7 +498,7 @@ export class AutomationsEngine {
       }),
     });
 
-    return { checklistId: checklist.id, itemsAdded: items.length };
+    return { checklistId: checklist.id, itemsAdded: itemsToCreate.length, itemsSkipped };
   }
 
   /**
