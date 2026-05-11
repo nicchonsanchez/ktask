@@ -1577,9 +1577,20 @@ export class ImporterService {
    */
   private htmlToProseMirror(html: string): { type: 'doc'; content: unknown[] } {
     if (!html) return { type: 'doc', content: [] };
-    const cleaned = html
+
+    // Preserva <a href> como sentinela `<<<LINK|href|texto>>>` antes do
+    // strip-all-tags pra nao perder URLs. Tambem detecta URLs nuas no
+    // texto puro (http(s)://... ou www....) e cria marks de link.
+    const withLinks = html
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/p>/gi, '\n\n')
+      .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, (_m, href, text) => {
+        const t =
+          String(text)
+            .replace(/<[^>]+>/g, '')
+            .trim() || String(href);
+        return `<<<LINK|${href}|${t}>>>`;
+      })
       .replace(/<[^>]+>/g, '')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
@@ -1587,18 +1598,72 @@ export class ImporterService {
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .trim();
-    const paragraphs = cleaned
+
+    const paragraphs = withLinks
       .split(/\n\n+/)
       .map((p) => p.trim())
       .filter(Boolean);
     if (paragraphs.length === 0) return { type: 'doc', content: [] };
+
     return {
       type: 'doc',
       content: paragraphs.map((p) => ({
         type: 'paragraph',
-        content: p ? [{ type: 'text', text: p }] : [],
+        content: this.paragraphToInlineNodes(p),
       })),
     };
+  }
+
+  /**
+   * Converte um paragrafo (com sentinelas <<<LINK|...>>> ou URLs nuas) em
+   * nodes inline do ProseMirror com marks `link` onde apropriado.
+   */
+  private paragraphToInlineNodes(text: string): unknown[] {
+    if (!text) return [];
+    const nodes: unknown[] = [];
+    const RE = /<<<LINK\|([^|]+)\|([^>]+)>>>|((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = RE.exec(text)) !== null) {
+      if (m.index > lastIndex) {
+        const before = text.slice(lastIndex, m.index);
+        if (before) nodes.push({ type: 'text', text: before });
+      }
+      if (m[1] && m[2]) {
+        const href = m[1];
+        const linkText = m[2];
+        nodes.push({
+          type: 'text',
+          text: linkText,
+          marks: [
+            {
+              type: 'link',
+              attrs: { href, target: '_blank', rel: 'noopener noreferrer nofollow' },
+            },
+          ],
+        });
+      } else if (m[3]) {
+        const url = m[3];
+        const href = url.startsWith('http') ? url : `https://${url}`;
+        nodes.push({
+          type: 'text',
+          text: url,
+          marks: [
+            {
+              type: 'link',
+              attrs: { href, target: '_blank', rel: 'noopener noreferrer nofollow' },
+            },
+          ],
+        });
+      }
+      lastIndex = RE.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      const tail = text.slice(lastIndex);
+      if (tail) nodes.push({ type: 'text', text: tail });
+    }
+    if (nodes.length === 0) nodes.push({ type: 'text', text });
+    return nodes;
   }
 
   private randomLabelColor(): string {
