@@ -109,6 +109,7 @@ export function describeAutomationRich(automation: Automation, lookups: Lookups)
             {items.length} tarefa{items.length === 1 ? '' : 's'}
           </Strong>{' '}
           em <Strong>{title}</Strong>
+          {describeChecklistDefaults(cfg, lookups)}
         </>
       );
     }
@@ -122,6 +123,7 @@ export function describeAutomationRich(automation: Automation, lookups: Lookups)
           <Strong>
             {items.length} tarefa{items.length === 1 ? '' : 's'}
           </Strong>
+          {describeChecklistDefaults(cfg, lookups)}
         </>
       );
     }
@@ -178,4 +180,92 @@ const ACTION_FALLBACK: Partial<Record<Automation['actionType'], string>> = {
 
 function Strong({ children }: { children: React.ReactNode }) {
   return <strong className="text-fg font-semibold">{children}</strong>;
+}
+
+/**
+ * Descricao opcional (sufixo) com assignee/prazo/prioridade dos items
+ * criados pela automacao. Soh renderiza se algum default estiver setado.
+ */
+function describeChecklistDefaults(
+  cfg: Record<string, unknown>,
+  lookups: Lookups,
+): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+
+  // ---- assignee ----
+  if (cfg.assigneeMode === 'CARD_LEAD') {
+    parts.push(
+      <>
+        para o <Strong>líder do card</Strong>
+      </>,
+    );
+  } else if (cfg.assigneeMode === 'SPECIFIC_USER' && typeof cfg.assigneeUserId === 'string') {
+    const member = lookups.members.find((m) => m.id === cfg.assigneeUserId);
+    parts.push(
+      <>
+        para <Strong>{member?.name ?? 'membro'}</Strong>
+      </>,
+    );
+  }
+
+  // ---- due date ----
+  if (cfg.dueMode === 'OFFSET_FROM_NOW' && typeof cfg.dueOffsetDays === 'number') {
+    parts.push(
+      <>
+        com prazo em{' '}
+        <Strong>
+          {cfg.dueOffsetDays} dia{cfg.dueOffsetDays === 1 ? '' : 's'}
+        </Strong>
+      </>,
+    );
+  } else if (cfg.dueMode === 'OFFSET_FROM_CARD_DUE' && typeof cfg.dueOffsetDays === 'number') {
+    const n = cfg.dueOffsetDays;
+    const dir = n >= 0 ? 'após' : 'antes';
+    parts.push(
+      <>
+        com prazo{' '}
+        <Strong>
+          {Math.abs(n)} dia{Math.abs(n) === 1 ? '' : 's'} {dir} do prazo do card
+        </Strong>
+      </>,
+    );
+  } else if (cfg.dueMode === 'FIXED_DATE' && typeof cfg.dueDate === 'string') {
+    parts.push(
+      <>
+        com prazo em <Strong>{cfg.dueDate}</Strong>
+      </>,
+    );
+  }
+
+  // ---- priority ----
+  if (
+    cfg.itemPriority === 'LOW' ||
+    cfg.itemPriority === 'MEDIUM' ||
+    cfg.itemPriority === 'HIGH' ||
+    cfg.itemPriority === 'URGENT'
+  ) {
+    const PT: Record<string, string> = {
+      LOW: 'baixa',
+      MEDIUM: 'média',
+      HIGH: 'alta',
+      URGENT: 'urgente',
+    };
+    parts.push(
+      <>
+        com prioridade <Strong>{PT[cfg.itemPriority as string]}</Strong>
+      </>,
+    );
+  }
+
+  if (parts.length === 0) return null;
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i === 0 ? ', ' : i === parts.length - 1 ? ' e ' : ', '}
+          {p}
+        </span>
+      ))}
+    </>
+  );
 }

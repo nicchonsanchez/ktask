@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import type { Automation, AutomationRun, AutomationTrigger, Prisma } from '@prisma/client';
+import type {
+  Automation,
+  AutomationRun,
+  AutomationTrigger,
+  Prisma,
+  Priority,
+} from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
@@ -340,6 +346,10 @@ export class AutomationsEngine {
    * INSERT_CHECKLIST_ITEMS — cria itens em um checklist do card. Se o
    * card não tiver checklist com o título passado, cria. Senão, anexa
    * os items no fim do checklist existente. Items vazios são ignorados.
+   *
+   * Suporta atribuir responsavel/prazo/prioridade a TODOS os items
+   * criados nessa execucao (1 valor por automacao, nao por item — match
+   * com o caso de uso dominante do Ummense).
    */
   private async handleInsertChecklistItems(
     automation: Automation,
@@ -348,6 +358,12 @@ export class AutomationsEngine {
     const config = automation.actionConfig as {
       items?: string[];
       checklistTitle?: string;
+      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
+      assigneeUserId?: string;
+      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
+      dueOffsetDays?: number;
+      dueDate?: string;
+      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     };
     const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
     if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
@@ -373,6 +389,10 @@ export class AutomationsEngine {
       });
     }
 
+    // Resolve assignee/dueDate/priority (1x por execucao — vale pra todos
+    // os items deste run).
+    const resolved = await this.resolveChecklistItemDefaults(cardId, config);
+
     // Última posição dos items existentes — pra apender com espaçamento
     // padrão (POSITION_STEP) entre cada novo item.
     const lastItem = await this.prisma.checklistItem.findFirst({
@@ -384,13 +404,77 @@ export class AutomationsEngine {
 
     await this.prisma.checklistItem.createMany({
       data: items.map((text) => {
-        const data = { checklistId: checklist!.id, text, position: basePos };
+        const data = {
+          checklistId: checklist!.id,
+          text,
+          position: basePos,
+          ...(resolved.assigneeId ? { assigneeId: resolved.assigneeId } : {}),
+          ...(resolved.dueDate ? { dueDate: resolved.dueDate } : {}),
+          ...(resolved.priority ? { priority: resolved.priority } : {}),
+        };
         basePos = computeInsertPosition(basePos, null);
         return data;
       }),
     });
 
     return { checklistId: checklist.id, itemsAdded: items.length };
+  }
+
+  /**
+   * Resolve os defaults (assignee/dueDate/priority) que vao ser aplicados
+   * em todos os items criados por uma execucao de INSERT_CHECKLIST_ITEMS
+   * ou INSERT_CHECKLIST_GROUP. Lookups silenciosos: se algo nao for
+   * resolvivel (ex: card sem lider quando mode=CARD_LEAD), cai pra null
+   * sem quebrar a execucao.
+   */
+  private async resolveChecklistItemDefaults(
+    cardId: string,
+    config: {
+      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
+      assigneeUserId?: string;
+      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
+      dueOffsetDays?: number;
+      dueDate?: string;
+      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    },
+  ): Promise<{ assigneeId: string | null; dueDate: Date | null; priority: Priority | null }> {
+    // ---- assignee ----
+    let assigneeId: string | null = null;
+    if (config.assigneeMode === 'CARD_LEAD') {
+      const card = await this.prisma.card.findUnique({
+        where: { id: cardId },
+        select: { leadId: true },
+      });
+      assigneeId = card?.leadId ?? null;
+    } else if (config.assigneeMode === 'SPECIFIC_USER' && config.assigneeUserId) {
+      assigneeId = config.assigneeUserId;
+    }
+
+    // ---- dueDate ----
+    let dueDate: Date | null = null;
+    const DAY = 24 * 60 * 60 * 1000;
+    if (config.dueMode === 'OFFSET_FROM_CARD_DUE' && typeof config.dueOffsetDays === 'number') {
+      const card = await this.prisma.card.findUnique({
+        where: { id: cardId },
+        select: { dueDate: true },
+      });
+      if (card?.dueDate) dueDate = new Date(card.dueDate.getTime() + config.dueOffsetDays * DAY);
+    } else if (config.dueMode === 'OFFSET_FROM_NOW' && typeof config.dueOffsetDays === 'number') {
+      dueDate = new Date(Date.now() + config.dueOffsetDays * DAY);
+    } else if (config.dueMode === 'FIXED_DATE' && config.dueDate) {
+      const parsed = new Date(config.dueDate);
+      if (!Number.isNaN(parsed.getTime())) dueDate = parsed;
+    }
+
+    // ---- priority ----
+    // Cast direto pro enum do Prisma — schema do actionConfig restringe
+    // aos 5 valores validos (NONE/LOW/MEDIUM/HIGH/URGENT).
+    const priority =
+      config.itemPriority && config.itemPriority !== 'NONE'
+        ? (config.itemPriority as Priority)
+        : null;
+
+    return { assigneeId, dueDate, priority };
   }
 
   /**
@@ -862,6 +946,12 @@ export class AutomationsEngine {
     const config = automation.actionConfig as {
       title?: string;
       items?: string[];
+      assigneeMode?: 'NONE' | 'CARD_LEAD' | 'SPECIFIC_USER';
+      assigneeUserId?: string;
+      dueMode?: 'NONE' | 'OFFSET_FROM_CARD_DUE' | 'OFFSET_FROM_NOW' | 'FIXED_DATE';
+      dueOffsetDays?: number;
+      dueDate?: string;
+      itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     };
     const items = (config.items ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
     if (items.length === 0) return { checklistId: '', itemsAdded: 0 };
@@ -880,12 +970,21 @@ export class AutomationsEngine {
       },
     });
 
+    const resolved = await this.resolveChecklistItemDefaults(cardId, config);
+
     // Items sempre começam do zero (checklist novo); usar espaçamento padrão
     // pra deixar gaps razoáveis pra inserções manuais futuras.
     let basePos = computeInsertPosition(null, null);
     await this.prisma.checklistItem.createMany({
       data: items.map((text) => {
-        const data = { checklistId: checklist.id, text, position: basePos };
+        const data = {
+          checklistId: checklist.id,
+          text,
+          position: basePos,
+          ...(resolved.assigneeId ? { assigneeId: resolved.assigneeId } : {}),
+          ...(resolved.dueDate ? { dueDate: resolved.dueDate } : {}),
+          ...(resolved.priority ? { priority: resolved.priority } : {}),
+        };
         basePos = computeInsertPosition(basePos, null);
         return data;
       }),
