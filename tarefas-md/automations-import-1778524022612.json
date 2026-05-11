@@ -1,0 +1,252 @@
+{
+  "flowsProcessed": 22,
+  "boardsNotFound": [],
+  "listsNotFound": [],
+  "usersNotFound": [
+    {
+      "board": "Executivo de contas - Fábio Machado",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Jocildo Silva Lemos Júnior"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Hay Amaral"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Jocildo Silva Lemos Júnior"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Jocildo Silva Lemos Júnior"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "Redes Sociais",
+      "user": "Luana Coelho Valletta"
+    },
+    {
+      "board": "Análise de Dados & IA",
+      "user": "Ruann Graize"
+    },
+    {
+      "board": "Blogs & Conteúdos",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "Blogs & Conteúdos",
+      "user": "Sabrina Ruela"
+    },
+    {
+      "board": "Blogs & Conteúdos",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "ANEC",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "CATEDRAL",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "CATEDRAL",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "CATEDRAL",
+      "user": "João Vitor Goulart"
+    },
+    {
+      "board": "CATEDRAL",
+      "user": "João Vitor Goulart"
+    },
+    {
+      "board": "ECO",
+      "user": "Luana Coelho Valletta"
+    },
+    {
+      "board": "ECO",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "ECO",
+      "user": "Hay Amaral"
+    },
+    {
+      "board": "ECO",
+      "user": "Ruann Graize"
+    },
+    {
+      "board": "ECO",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "ECO",
+      "user": "FABIO JOSE MACHADO"
+    },
+    {
+      "board": "ECO",
+      "user": "Thainara Alves Moreira"
+    },
+    {
+      "board": "ECO",
+      "user": "Luana Coelho Valletta"
+    },
+    {
+      "board": "ECO",
+      "user": "Hay Amaral"
+    },
+    {
+      "board": "ECO",
+      "user": "Ruann Graize"
+    }
+  ],
+  "tagsNotFound": [
+    {
+      "board": "Redes Sociais",
+      "tagId": 2661891,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "FACULDADE DOM ORIONE",
+      "tagId": 3068975,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "FACULDADE DOM ORIONE",
+      "tagId": 3068977,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "FACULDADE DOM ORIONE",
+      "tagId": 3068976,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Atendimento",
+      "tagId": 2897239,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Blogs & Conteúdos",
+      "tagId": 3091192,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Blogs & Conteúdos",
+      "tagId": 3091192,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685247,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685250,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685249,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685252,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685251,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685248,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "KHARIS",
+      "tagId": 2685253,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897236,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897237,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897241,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897236,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897239,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897241,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897240,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897239,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897238,
+      "reason": "sem nome no dict"
+    },
+    {
+      "board": "Comercial AGÊNCIA Kharis",
+      "tagId": 2897240,
+      "reason": "sem nome no dict"
+    }
+  ],
+  "unsupportedTypes": {
+    "AutomationAlertTimeExceeded": 13,
+    "AutomationUpdateStep": 2,
+    "AutomationAlertLastInteraction": 4,
+    "AutomationAlertTodayDueDate": 2,
+    "AutomationCreateProjectParent": 1,
+    "AutomationSendEmail": 7,
+    "AutomationAddCustomFieldsInProject": 1
+  },
+  "conditionsSkipped": 0,
+  "statusUnmapped": [],
+  "skippedByStrictTags": 0,
+  "automationsAttempted": 108,
+  "automationsCreated": 108,
+  "automationsErrors": []
+}
