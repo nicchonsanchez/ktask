@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, Users, X } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationsBell } from '@/components/notifications-bell';
 import { SearchTrigger } from '@/components/search-host';
 import { UserAvatar } from '@/components/user-avatar';
 import { TimerWidget } from '@/components/time-tracking/timer-widget';
+import { approvalsQueries } from '@/lib/queries/approvals';
 import { useAuthStore } from '@/stores/auth-store';
 import { logout } from '@/lib/auth';
 
@@ -53,6 +55,18 @@ export function Topbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Contador de aprovacoes pendentes do user — refetch a cada 60s pra
+  // ficar perto de tempo real sem usar socket. Polling leve: o endpoint
+  // ja eh enxuto (so itens onde o user e reviewer + status PENDING).
+  const pendingApprovalsQ = useQuery({
+    ...approvalsQueries.myPending(),
+    enabled: !!user,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+  });
+  const pendingCount = pendingApprovalsQ.data?.length ?? 0;
 
   async function handleLogout() {
     await logout();
@@ -116,15 +130,24 @@ export function Topbar() {
           <nav className="hidden h-[52px] items-stretch sm:flex">
             {NAV_PRIMARY.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+              const badge = item.href === '/aprovacoes' && pendingCount > 0 ? pendingCount : null;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`group relative flex items-center px-3 text-sm transition-colors ${
+                  className={`group relative flex items-center gap-1.5 px-3 text-sm transition-colors ${
                     active ? 'text-primary' : 'text-fg-muted hover:text-fg'
                   }`}
                 >
                   {item.label}
+                  {badge !== null && (
+                    <span
+                      aria-label={`${badge} pendente${badge === 1 ? '' : 's'}`}
+                      className="bg-primary text-primary-fg inline-flex min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none"
+                    >
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  )}
                   <span
                     aria-hidden
                     className={`absolute inset-x-3 bottom-0 h-[2px] rounded-t transition-colors ${
@@ -173,7 +196,12 @@ export function Topbar() {
             </div>
             <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
               {NAV_PRIMARY.map((item) => (
-                <DrawerLink key={item.href} item={item} pathname={pathname} />
+                <DrawerLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  badge={item.href === '/aprovacoes' && pendingCount > 0 ? pendingCount : undefined}
+                />
               ))}
               <DrawerSection label="CRM" />
               {NAV_CRM.map((item) => (
@@ -226,20 +254,30 @@ function DrawerLink({
   item,
   pathname,
   indent,
+  badge,
 }: {
   item: NavItem;
   pathname: string;
   indent?: boolean;
+  badge?: number;
 }) {
   const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
   return (
     <Link
       href={item.href}
-      className={`flex items-center rounded-md py-2.5 text-sm transition-colors ${
+      className={`flex items-center justify-between gap-2 rounded-md py-2.5 text-sm transition-colors ${
         indent ? 'px-5' : 'px-3'
       } ${active ? 'bg-primary-subtle/40 text-primary font-medium' : 'text-fg hover:bg-bg-muted'}`}
     >
-      {item.label}
+      <span>{item.label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span
+          aria-label={`${badge} pendente${badge === 1 ? '' : 's'}`}
+          className="bg-primary text-primary-fg inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold leading-none"
+        >
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </Link>
   );
 }
