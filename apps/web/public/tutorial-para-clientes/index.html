@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Como acessar e usar o KTask — Kharis</title>
+  <style>
+    /* ---------------- Tokens ---------------- */
+    :root {
+      --violet-50:  #f5f3ff;
+      --violet-100: #ede9fe;
+      --violet-300: #c4b5fd;
+      --violet-500: #8b5cf6;
+      --violet-600: #7c3aed;
+      --violet-700: #6d28d9;
+      --violet-800: #5b21b6;
+      --violet-900: #4c1d95;
+      --teal:       #2ee8b8;
+      --rose:       #f43f5e;
+      --ink-900:    #0a0a0b;
+      --ink-700:    #2a2a2e;
+      --ink-500:    #595962;
+      --ink-300:    #b6b6bd;
+      --ink-100:    #ececef;
+      --paper:      #ffffff;
+      --paper-2:    #f8f7fb;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-700);
+      background: var(--paper-2);
+    }
+
+    /* ---------------- Layout / pages ---------------- */
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--paper);
+      padding: 80px 80px 100px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.06);
+      margin-bottom: 32px;
+    }
+    .page + .page { margin-top: 0; }
+
+    /* ---------------- Cover ---------------- */
+    .cover {
+      background:
+        radial-gradient(circle at 15% 10%, rgba(255,255,255,.08), transparent 40%),
+        radial-gradient(circle at 85% 90%, rgba(46,232,184,.10), transparent 50%),
+        linear-gradient(135deg, var(--violet-900) 0%, var(--violet-700) 50%, var(--violet-600) 100%);
+      color: #fff;
+      min-height: 1080px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 100px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .cover-top, .cover-center, .cover-bottom { position: relative; z-index: 1; }
+    .cover-center { text-align: center; }
+    .cover-logo {
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 40px;
+      background: #fff;
+      border-radius: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,.30);
+    }
+    .cover-logo img { width: 70%; height: auto; }
+    .cover h1 {
+      font-size: 64px;
+      font-weight: 800;
+      line-height: 1.05;
+      margin: 0;
+      letter-spacing: -.02em;
+    }
+    .cover h1 small {
+      display: block;
+      font-size: 36px;
+      font-weight: 400;
+      opacity: .9;
+      margin-bottom: 8px;
+    }
+    .cover .kharis-mark {
+      text-align: center;
+    }
+    .cover .kharis-mark img {
+      max-width: 160px;
+      opacity: .95;
+    }
+
+    /* ---------------- TOC ---------------- */
+    .toc h2 {
+      font-size: 32px;
+      color: var(--violet-700);
+      margin: 0 0 24px;
+      font-weight: 800;
+    }
+    .toc ol {
+      list-style: none;
+      padding: 0;
+      counter-reset: section;
+    }
+    .toc ol li {
+      counter-increment: section;
+      padding: 14px 0;
+      border-bottom: 1px dashed var(--ink-100);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .toc ol li::before {
+      content: counter(section, decimal-leading-zero);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      color: var(--violet-700);
+      min-width: 32px;
+    }
+    .toc a {
+      color: var(--ink-700);
+      text-decoration: none;
+      font-weight: 500;
+      flex: 1;
+    }
+    .toc a:hover { color: var(--violet-700); }
+    .toc .sub {
+      padding-left: 48px;
+      font-size: 14px;
+      color: var(--ink-500);
+    }
+    .toc .sub::before { display: none; }
+
+    /* ---------------- Headings ---------------- */
+    h2.section {
+      font-size: 36px;
+      font-weight: 800;
+      color: var(--violet-700);
+      margin: 0 0 8px;
+      letter-spacing: -.01em;
+    }
+    .section-tag {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--violet-600);
+      background: var(--violet-100);
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    h3 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink-900);
+      margin: 40px 0 12px;
+    }
+    h4 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ink-900);
+      margin: 28px 0 8px;
+    }
+    p { margin: 0 0 16px; }
+    ul, ol { padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    code {
+      background: var(--violet-50);
+      color: var(--violet-800);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: .92em;
+      font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    strong { color: var(--ink-900); }
+    a { color: var(--violet-700); }
+
+    .lead {
+      font-size: 18px;
+      color: var(--ink-500);
+      margin-bottom: 32px;
+    }
+
+    /* ---------------- Callouts ---------------- */
+    .obs {
+      background: var(--violet-50);
+      border-left: 4px solid var(--violet-600);
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-size: 15px;
+    }
+    .obs strong:first-child {
+      color: var(--violet-700);
+      letter-spacing: .03em;
+    }
+    .danger {
+      background: #fff1f3;
+      border-left: 4px solid var(--rose);
+    }
+    .danger strong:first-child { color: var(--rose); }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 20px;
+    }
+    .pill {
+      background: var(--ink-100);
+      color: var(--ink-700);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .pill.primary { background: var(--violet-100); color: var(--violet-700); }
+    .pill.accent  { background: #cffaf0; color: #047857; }
+    .pill.warn    { background: #fff1d6; color: #92400e; }
+
+    /* ---------------- Steps (numbered) ---------------- */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      margin: 24px 0;
+    }
+    .steps > li {
+      counter-increment: step;
+      position: relative;
+      padding: 14px 16px 14px 60px;
+      background: var(--paper-2);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .steps > li::before {
+      content: counter(step);
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      background: var(--violet-700);
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+    }
+
+    /* ---------------- Screenshot placeholders ---------------- */
+    figure.shot {
+      margin: 24px 0;
+      padding: 0;
+    }
+    .shot-frame {
+      border: 2px dashed var(--violet-300);
+      background: var(--violet-50);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: left;
+      font-size: 14px;
+      color: var(--ink-700);
+    }
+    .shot-frame .shot-id {
+      display: inline-block;
+      background: var(--violet-700);
+      color: #fff;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      letter-spacing: .05em;
+      margin-bottom: 12px;
+    }
+    .shot-frame .shot-what  { font-size: 16px; color: var(--ink-900); font-weight: 600; margin-bottom: 12px; }
+    .shot-frame .shot-note  { color: var(--ink-500); font-size: 13px; margin-top: 12px; }
+    .shot-frame code { background: #fff; }
+
+    /* Quando a imagem real for inserida, comentar a div .shot-frame e usar isso aqui: */
+    figure.shot img {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.08);
+      display: block;
+    }
+    figure.shot figcaption {
+      font-size: 14px;
+      color: var(--ink-500);
+      margin-top: 10px;
+      font-style: italic;
+      text-align: center;
+    }
+
+    /* ---------------- Toolbar (não imprime) ---------------- */
+    .toolbar {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+    }
+    .toolbar button {
+      background: var(--violet-700);
+      color: #fff;
+      border: 0;
+      padding: 12px 18px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(109,40,217,.4);
+    }
+    .toolbar button:hover { background: var(--violet-800); }
+
+    /* ---------------- Manifest (lista de prints) ---------------- */
+    .manifest {
+      background: #fffbeb;
+      border: 2px solid #fcd34d;
+      border-radius: 12px;
+      padding: 28px;
+      margin-top: 40px;
+    }
+    .manifest h3 {
+      color: #92400e;
+      margin-top: 0;
+    }
+    .manifest table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .manifest th, .manifest td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid #fde68a;
+      vertical-align: top;
+    }
+    .manifest th { background: #fef3c7; color: #92400e; font-weight: 700; }
+    .manifest td code { background: #fff; }
+
+    /* ---------------- Print ---------------- */
+    @page { size: A4; margin: 12mm; }
+    @media print {
+      body { background: #fff; }
+      .page {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        page-break-after: always;
+      }
+      .cover { min-height: 100vh; padding: 60px 50px; }
+      .toolbar, .manifest { display: none; }
+      h2.section, .toc h2 { color: var(--violet-700) !important; }
+      .shot-frame { border-style: solid; border-color: #ccc; background: #fafafa; }
+      figure.shot img { box-shadow: none; border: 1px solid #ddd; }
+      a { color: var(--ink-900); text-decoration: none; }
+    }
+
+    /* ---------------- Responsive ---------------- */
+    @media (max-width: 720px) {
+      .page { padding: 40px 24px 60px; }
+      .cover { padding: 60px 24px; min-height: 100vh; }
+      .cover h1 { font-size: 44px; }
+      .cover h1 small { font-size: 24px; }
+      h2.section { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===================== CAPA ===================== -->
+  <section class="page cover">
+    <div class="cover-top"></div>
+
+    <div class="cover-center">
+      <div class="cover-logo">
+        <img src="assets/ktask-logo.png" alt="Logo KTask">
+      </div>
+      <h1>
+        <small>Como acessar e usar o</small>
+        KTask
+      </h1>
+    </div>
+
+    <div class="cover-bottom kharis-mark">
+      <img src="assets/kharis-logo.png" alt="Kharis">
+    </div>
+  </section>
+
+
+  <!-- ===================== SUMÁRIO ===================== -->
+  <section class="page toc">
+    <h2>Tutorial para uso do KTask</h2>
+    <ol>
+      <li><a href="#introducao">Introdução</a></li>
+      <li><a href="#criando-conta">Criando sua conta</a></li>
+      <li><a href="#painel">Painel inicial — onde tudo começa</a></li>
+      <li>
+        <a href="#interacao">Interação nos cards</a>
+        <ol>
+          <li class="sub">Abrindo um card</li>
+          <li class="sub">Aprovando um conteúdo</li>
+          <li class="sub">Solicitando alterações</li>
+        </ol>
+      </li>
+      <li><a href="#comentarios">Comentários e menções (@)</a></li>
+      <li><a href="#notificacoes">Notificações — onde elas chegam</a></li>
+      <li><a href="#quadros">Conferindo os quadros e fluxos</a></li>
+    </ol>
+
+    <div class="obs" style="margin-top: 40px;">
+      <strong>Importante:</strong> Diferente de outras ferramentas, no KTask <strong>você não precisa mover cards entre colunas</strong>. As automações configuradas pela Kharis movem os cards sozinhas quando você aprova, reprova ou marca tarefas — sua função é só interagir com o que aparece pra você.
+    </div>
+  </section>
+
+
+  <!-- ===================== 1. INTRODUÇÃO ===================== -->
+  <section class="page" id="introducao">
+    <span class="section-tag">Seção 01</span>
+    <h2 class="section">Introdução</h2>
+    <p class="lead">
+      O KTask é o sistema que a Kharis usa pra organizar os projetos do seu negócio.
+      É por ele que você vai acompanhar tudo que estamos produzindo, aprovar entregas
+      e nos enviar suas observações.
+    </p>
+
+    <h3>O que você vai fazer no KTask</h3>
+    <ul>
+      <li><strong>Acompanhar</strong> o andamento das suas demandas em tempo real.</li>
+      <li><strong>Aprovar ou reprovar</strong> entregas (copy, arte, vídeo, briefing).</li>
+      <li><strong>Comentar</strong> ajustes na timeline do card e marcar pessoas.</li>
+      <li><strong>Criar cards novos</strong> quando tiver uma solicitação extra.</li>
+      <li><strong>Receber notificações</strong> no WhatsApp e dentro do próprio sistema.</li>
+    </ul>
+
+    <h3>O que você NÃO precisa fazer</h3>
+    <div class="pill-row">
+      <span class="pill warn">❌ Mover card entre colunas</span>
+      <span class="pill warn">❌ Atribuir responsável</span>
+      <span class="pill warn">❌ Definir prazo</span>
+      <span class="pill warn">❌ Mexer em configurações do quadro</span>
+    </div>
+    <p>
+      Tudo isso já vem ajustado e roda no automático conforme você interage. Se algo
+      parece confuso, fale com seu contato na Kharis — a gente ajusta a automação,
+      não você.
+    </p>
+  </section>
+
+
+  <!-- ===================== 2. CRIANDO A CONTA ===================== -->
+  <section class="page" id="criando-conta">
+    <span class="section-tag">Seção 02</span>
+    <h2 class="section">Criando sua conta</h2>
+    <p class="lead">
+      A Kharis vai te enviar um convite por <strong>WhatsApp</strong> e/ou
+      <strong>e-mail</strong>. O link do convite leva você direto pra tela onde define
+      sua senha — sem cadastro manual.
+    </p>
+
+    <ol class="steps">
+      <li><strong>Abra o convite</strong> que chegou no seu WhatsApp ou e-mail.</li>
+      <li><strong>Clique no link</strong> que aparece na mensagem. Ele leva você pra uma tela do KTask onde você vai definir sua senha.</li>
+      <li><strong>Crie uma senha</strong> com pelo menos 8 caracteres (use uma combinação de letras, números e algum símbolo).</li>
+      <li><strong>Pronto.</strong> Você já entra no sistema. Da próxima vez, vai direto pra tela de login.</li>
+    </ol>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #01</div>
+        <div class="shot-what">Mensagem do convite no WhatsApp/e-mail</div>
+        Capturar: a mensagem que o cliente recebe com o link do convite (texto + botão/link).<br>
+        Anotação sugerida: <strong>seta vermelha</strong> apontando pro link/botão.<br>
+        <div class="shot-note">Salvar como <code>img/01-convite.png</code> e substituir este bloco por <code>&lt;img src="img/01-convite.png" alt="..."&gt;</code></div>
+      </div>
+      <!-- Quando tiver o print, descomente e apague o bloco acima:
+      <img src="img/01-convite.png" alt="Mensagem de convite ao KTask">
+      <figcaption>Mensagem de convite — clique no link em destaque pra acessar.</figcaption>
+      -->
+    </figure>
+
+    <h3>Definindo a senha</h3>
+    <p>
+      Na tela de criação de senha, você só precisa digitar a senha duas vezes (a segunda
+      é só pra confirmar que você não errou). Não pede e-mail, nome, foto — tudo isso a
+      Kharis já cadastrou pra você.
+    </p>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #02</div>
+        <div class="shot-what">Tela de definição de senha (rota <code>/convite/[token]</code>)</div>
+        Capturar: a tela onde o usuário define a senha pela primeira vez, com os campos preenchidos.<br>
+        Anotação sugerida: <strong>circular</strong> o botão de confirmar.<br>
+        <div class="shot-note">Salvar como <code>img/02-criar-senha.png</code></div>
+      </div>
+    </figure>
+
+    <h3>Entrando depois (login)</h3>
+    <p>
+      Depois que sua conta estiver criada, basta acessar o link do KTask, digitar
+      seu e-mail e senha. Se for seu computador pessoal, marque
+      <strong>"Permanecer logado"</strong> — assim você não precisa logar toda hora.
+    </p>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #03</div>
+        <div class="shot-what">Tela de login do KTask</div>
+        Capturar: tela <code>/entrar</code> com os campos de e-mail e senha visíveis e o checkbox "Permanecer logado".<br>
+        Anotação sugerida: <strong>circular</strong> o checkbox "Permanecer logado".<br>
+        <div class="shot-note">Salvar como <code>img/03-login.png</code></div>
+      </div>
+    </figure>
+
+    <div class="obs">
+      <strong>Obs:</strong> Em computador compartilhado (ex: PC da recepção), <strong>não marque</strong> "Permanecer logado". Sua sessão expira em 1 dia ao invés de 90, o que é mais seguro.
+    </div>
+  </section>
+
+
+  <!-- ===================== 3. PAINEL INICIAL ===================== -->
+  <section class="page" id="painel">
+    <span class="section-tag">Seção 03</span>
+    <h2 class="section">Painel inicial — onde tudo começa</h2>
+    <p class="lead">
+      Assim que você loga, cai na tela de <strong>Início</strong>: um resumo do que
+      precisa da sua atenção hoje. É aqui que você acessa quadros, aprovações
+      pendentes e seu perfil.
+    </p>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #04</div>
+        <div class="shot-what">Tela de Início (rota <code>/</code>) com a topbar completa</div>
+        Capturar: tela inicial inteira, com a topbar mostrando todos os itens (Início, Quadros, Aprovações, Indicadores, CRM, Avatar).<br>
+        Anotação sugerida: <strong>numerar com círculos</strong> cada item da topbar (1, 2, 3...) pra referenciar no texto abaixo.<br>
+        <div class="shot-note">Salvar como <code>img/04-painel-topbar.png</code></div>
+      </div>
+    </figure>
+
+    <h3>O que cada item da topbar faz</h3>
+    <ol>
+      <li><strong>Início</strong> — resumo do dia (tarefas suas, cards recentes).</li>
+      <li><strong>Quadros</strong> — lista todos os quadros onde você tem acesso.</li>
+      <li><strong>Aprovações</strong> — fila de cards aguardando sua aprovação (badge com número).</li>
+      <li><strong>Indicadores</strong> — relatórios e métricas (visualização opcional).</li>
+      <li><strong>Avatar</strong> (canto direito) — sair, mudar foto, alterar senha.</li>
+    </ol>
+
+    <div class="obs">
+      <strong>Dica:</strong> Se o ícone do <strong>sino</strong> 🔔 estiver com um pontinho vermelho, é porque tem notificação nova esperando por você. Falaremos delas na Seção 06.
+    </div>
+  </section>
+
+
+  <!-- ===================== 4. INTERAÇÃO NOS CARDS ===================== -->
+  <section class="page" id="interacao">
+    <span class="section-tag">Seção 04</span>
+    <h2 class="section">Interação nos cards</h2>
+    <p class="lead">
+      Cada demanda da Kharis vira um <strong>card</strong>. Dentro do card tem tudo:
+      o briefing, o material entregue, suas tarefas pendentes (como "aprovar a
+      copy"), os comentários e o histórico. Aqui você vai aprender a abrir, aprovar
+      e pedir refação.
+    </p>
+
+    <h3>4.1 — Abrindo um card</h3>
+    <p>
+      Existem três jeitos de chegar num card:
+    </p>
+    <ul>
+      <li><strong>Pela tarefa no Início:</strong> clique no nome do card (em destaque) ao lado da tarefa que apareceu pra você.</li>
+      <li><strong>Pelo menu Aprovações:</strong> se o card está esperando sua aprovação, ele aparece nessa lista.</li>
+      <li><strong>Pelo quadro:</strong> entrando em Quadros → seu quadro → clicando direto no card.</li>
+    </ul>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #05</div>
+        <div class="shot-what">Tarefa pendente na tela de Início</div>
+        Capturar: bloco "Tarefas" da home com uma tarefa visível (tipo "Aprovar copy") e o nome do card relacionado em azul/destaque do lado.<br>
+        Anotação sugerida: <strong>seta vermelha</strong> apontando pro nome do card.<br>
+        <div class="shot-note">Salvar como <code>img/05-tarefa-home.png</code></div>
+      </div>
+    </figure>
+
+    <h3>4.2 — Aprovando um conteúdo</h3>
+    <p>
+      Dentro do card, role até o bloco <strong>Aprovações</strong> (ou <strong>Tarefas
+      do card</strong>, dependendo do tipo de aprovação). Se você concorda com o que
+      foi entregue, basta:
+    </p>
+
+    <ol class="steps">
+      <li><strong>Conferir o material</strong> — se é copy, está na descrição do card; se é arte ou vídeo, tem um link na descrição ou no anexo.</li>
+      <li><strong>Clique no botão <span class="pill accent">✓ Aprovar</span></strong> dentro do bloco de aprovação.</li>
+      <li><strong>Pronto.</strong> A automação move o card pra próxima etapa do fluxo e notifica a equipe da Kharis.</li>
+    </ol>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #06</div>
+        <div class="shot-what">Card aberto com o bloco de Aprovações destacado</div>
+        Capturar: card modal aberto, mostrando descrição + bloco "Aprovações" com botões Aprovar/Reprovar visíveis.<br>
+        Anotação sugerida: <strong>circular em verde</strong> o botão Aprovar.<br>
+        <div class="shot-note">Salvar como <code>img/06-aprovar.png</code></div>
+      </div>
+    </figure>
+
+    <div class="obs">
+      <strong>Obs:</strong> Você não precisa fazer mais nada depois de aprovar. O card sai automaticamente da sua fila de aprovações e segue o fluxo até a publicação.
+    </div>
+
+    <h3>4.3 — Solicitando alterações (reprovar)</h3>
+    <p>
+      Se o material precisa de ajustes, o processo tem <strong>duas etapas</strong> —
+      e a ordem importa:
+    </p>
+
+    <ol class="steps">
+      <li><strong>Primeiro, comente na timeline</strong> explicando o que você quer que mude. Seja específico ("Trocar a foto pela versão sem fundo" funciona melhor do que "Não gostei").</li>
+      <li><strong>Depois, clique em <span class="pill" style="background:#fee2e2;color:#991b1b">✗ Reprovar</span></strong> no bloco de Aprovações. A automação cria automaticamente uma nova tarefa de refação pra quem produziu o material, já com seu comentário linkado.</li>
+    </ol>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #07</div>
+        <div class="shot-what">Comentário sendo digitado na timeline do card</div>
+        Capturar: o card aberto, com o cursor no campo da timeline e um comentário sendo escrito ("Trocar a foto pela versão sem fundo, por favor").<br>
+        Anotação sugerida: <strong>seta vermelha</strong> apontando pro campo de comentário.<br>
+        <div class="shot-note">Salvar como <code>img/07-comentar-refacao.png</code></div>
+      </div>
+    </figure>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #08</div>
+        <div class="shot-what">Botão Reprovar destacado depois do comentário</div>
+        Capturar: bloco de aprovações com o botão Reprovar.<br>
+        Anotação sugerida: <strong>circular em vermelho</strong> o botão Reprovar.<br>
+        <div class="shot-note">Salvar como <code>img/08-reprovar.png</code></div>
+      </div>
+    </figure>
+
+    <div class="obs danger">
+      <strong>Atenção:</strong> Diferente do antigo sistema (Ummense), <strong>você NÃO precisa mover o card</strong> pra coluna "Design" ou "Copies a fazer". A automação faz isso sozinha quando você clica em Reprovar. Se você mover manualmente, pode confundir o fluxo.
+    </div>
+  </section>
+
+
+  <!-- ===================== 5. COMENTÁRIOS E MENÇÕES ===================== -->
+  <section class="page" id="comentarios">
+    <span class="section-tag">Seção 05</span>
+    <h2 class="section">Comentários e menções (@)</h2>
+    <p class="lead">
+      A <strong>Timeline</strong> do card é o lugar onde tudo é registrado:
+      mensagens suas, ações automáticas do sistema, anexos, mudanças de coluna.
+      É o histórico completo da conversa sobre aquela demanda.
+    </p>
+
+    <h3>Como comentar</h3>
+    <ol class="steps">
+      <li>Abra o card.</li>
+      <li>Role até o bloco <strong>Timeline</strong> (geralmente no lado direito ou no fim do card, depende da largura da sua tela).</li>
+      <li>Clique no campo de texto, escreva sua mensagem e dê <strong>Enviar</strong>.</li>
+    </ol>
+
+    <h3>Mencionando alguém com @</h3>
+    <p>
+      Pra <strong>chamar atenção</strong> de uma pessoa específica (ex: o designer
+      ou seu gerente de conta), digite <code>@</code> e comece a escrever o nome.
+      Uma lista vai aparecer — clique na pessoa certa. Ela recebe uma notificação
+      direta (no WhatsApp e dentro do app) avisando que foi mencionada.
+    </p>
+
+    <div class="obs">
+      <strong>Por que mencionar?</strong> Sem o @, a pessoa pode demorar pra ver. Com o @, ela é notificada na hora. Use sempre que o assunto for específico de alguém.
+    </div>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #09</div>
+        <div class="shot-what">Menção com @ no comentário (dropdown aparecendo)</div>
+        Capturar: comentário sendo digitado, mostrando o dropdown de pessoas que aparece depois de digitar "@".<br>
+        Anotação sugerida: <strong>circular</strong> o dropdown.<br>
+        <div class="shot-note">Salvar como <code>img/09-mencao.png</code></div>
+      </div>
+    </figure>
+
+    <h3>Anexando arquivo no comentário</h3>
+    <p>
+      Você pode anexar uma imagem ou PDF arrastando o arquivo pra cima do campo
+      de comentário, ou clicando no ícone de <strong>clipe 📎</strong>. Útil pra
+      mandar referências ("inspirei nessa arte aqui") ou prints com setas.
+    </p>
+  </section>
+
+
+  <!-- ===================== 6. NOTIFICAÇÕES ===================== -->
+  <section class="page" id="notificacoes">
+    <span class="section-tag">Seção 06</span>
+    <h2 class="section">Notificações — onde elas chegam</h2>
+    <p class="lead">
+      Você recebe notificação por três canais diferentes. O mais importante é o
+      <strong>WhatsApp</strong> — é por lá que você fica sabendo de aprovações
+      pedidas, menções e prazos.
+    </p>
+
+    <h3>1. WhatsApp</h3>
+    <p>
+      Sempre que <strong>algo precisa da sua atenção</strong> (precisa aprovar
+      algo, alguém te mencionou no comentário, um card está com prazo apertado),
+      você recebe uma mensagem com o link direto pro card. Basta clicar no link
+      pra abrir o KTask já naquele card.
+    </p>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #10</div>
+        <div class="shot-what">Notificação chegando no WhatsApp do cliente</div>
+        Capturar: mensagem de exemplo no WhatsApp avisando "Você foi marcado em um card" ou "Aprovação pendente".<br>
+        Anotação sugerida: <strong>circular</strong> o link clicável.<br>
+        <div class="shot-note">Salvar como <code>img/10-whats-notif.png</code></div>
+      </div>
+    </figure>
+
+    <h3>2. Sino dentro do KTask</h3>
+    <p>
+      No canto superior direito da topbar (perto do seu avatar), tem um ícone de
+      <strong>sino 🔔</strong>. Quando tem novidade, aparece um pontinho vermelho.
+      Clique pra abrir a lista de notificações.
+    </p>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #11</div>
+        <div class="shot-what">Sino na topbar com badge de notificação</div>
+        Capturar: topbar mostrando o sino com o pontinho/número vermelho indicando notificações novas.<br>
+        Anotação sugerida: <strong>seta</strong> apontando pro sino.<br>
+        <div class="shot-note">Salvar como <code>img/11-sino.png</code></div>
+      </div>
+    </figure>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #12</div>
+        <div class="shot-what">Painel de notificações aberto (sino clicado)</div>
+        Capturar: dropdown ou painel lateral aberto, mostrando notificações tipo "Fulano te mencionou", "Aprovação pendente".<br>
+        Anotação sugerida: nenhuma — só mostrar a lista.<br>
+        <div class="shot-note">Salvar como <code>img/12-notif-list.png</code></div>
+      </div>
+    </figure>
+
+    <h3>3. Notificação do navegador (opcional)</h3>
+    <p>
+      Na primeira vez que você acessa o KTask, o navegador pergunta se você quer
+      <strong>permitir notificações</strong>. Se você aceitar, recebe avisos no
+      cantinho do computador mesmo com a aba fechada. Recomendamos aceitar — fica
+      mais rápido que abrir o WhatsApp.
+    </p>
+
+    <div class="obs">
+      <strong>Dica:</strong> Se você acidentalmente bloqueou, dá pra reativar nas configurações do navegador. Procure por "Notificações" e libere o KTask.
+    </div>
+  </section>
+
+
+  <!-- ===================== 7. CONFERINDO QUADROS ===================== -->
+  <section class="page" id="quadros">
+    <span class="section-tag">Seção 07</span>
+    <h2 class="section">Conferindo os quadros e fluxos</h2>
+    <p class="lead">
+      Quando você quiser ver o <strong>panorama geral</strong> dos projetos — não
+      uma demanda específica, mas como tudo está andando — clique em
+      <strong>Quadros</strong> na topbar.
+    </p>
+
+    <ol class="steps">
+      <li>Na topbar, clique em <strong>Quadros</strong>.</li>
+      <li>Aparece a lista de quadros que você tem acesso. Clique no que quer ver.</li>
+      <li>Dentro do quadro, você vê todos os cards organizados por coluna (etapa do fluxo): briefing, produção, aprovação, finalizado.</li>
+    </ol>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #13</div>
+        <div class="shot-what">Lista de Quadros</div>
+        Capturar: tela <code>/quadros</code> com os cards de cada quadro disponível pro cliente.<br>
+        Anotação sugerida: <strong>circular</strong> um dos quadros.<br>
+        <div class="shot-note">Salvar como <code>img/13-quadros.png</code></div>
+      </div>
+    </figure>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #14</div>
+        <div class="shot-what">Quadro aberto, visão Kanban</div>
+        Capturar: um board real aberto, mostrando as colunas com cards. Sem dados sensíveis — use um exemplo limpo.<br>
+        Anotação sugerida: nenhuma — só dar visão geral.<br>
+        <div class="shot-note">Salvar como <code>img/14-board.png</code></div>
+      </div>
+    </figure>
+
+    <h3>Como criar um card novo</h3>
+    <p>
+      Se você tem uma <strong>solicitação nova</strong> pra Kharis (uma demanda
+      extra, uma dúvida que vira tarefa, um pedido de orçamento), pode criar um
+      card direto pelo quadro:
+    </p>
+
+    <ol class="steps">
+      <li>Entre no quadro do tipo de serviço (ex: "Redes Sociais", "Design").</li>
+      <li>Encontre a <strong>primeira coluna</strong> (geralmente chamada de "Entrada" ou "Fazer briefing").</li>
+      <li>Clique no botão <strong>+</strong> no rodapé dessa coluna.</li>
+      <li>Escreva um <strong>título claro</strong> e, na descrição, conte o que você precisa e em qual prazo. Salve.</li>
+    </ol>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <div class="shot-id">📷 PRINT #15</div>
+        <div class="shot-what">Botão "+" no rodapé da primeira coluna do quadro</div>
+        Capturar: a coluna de entrada com o botão de adicionar card.<br>
+        Anotação sugerida: <strong>circular</strong> o botão +.<br>
+        <div class="shot-note">Salvar como <code>img/15-criar-card.png</code></div>
+      </div>
+    </figure>
+
+    <div class="obs">
+      <strong>Obs:</strong> Você só precisa preencher <strong>título</strong> e <strong>descrição</strong>. Prazo, responsável e prioridade a equipe da Kharis ajusta. Quanto mais detalhada a descrição (com referências, prints, links), mais rápido a gente entende e começa.
+    </div>
+  </section>
+
+
+  <!-- ===================== ENCERRAMENTO ===================== -->
+  <section class="page" style="text-align: center; background: linear-gradient(135deg, var(--violet-50), #fff);">
+    <h2 class="section" style="margin-top: 60px;">Pronto pra começar 🚀</h2>
+    <p class="lead" style="max-width: 560px; margin: 0 auto 32px;">
+      Esses são todos os passos básicos. Se na prática surgir alguma dúvida,
+      <strong>fale com seu contato na Kharis</strong> pelo WhatsApp — a gente
+      ajusta junto.
+    </p>
+    <p style="margin-top: 80px;">
+      <img src="assets/kharis-logo.png" alt="Kharis" style="max-width: 120px; opacity: .8;">
+    </p>
+  </section>
+
+
+  <!-- ===================== MANIFESTO DE PRINTS (não imprime) ===================== -->
+  <section class="page manifest">
+    <h3>📋 Checklist de prints necessários</h3>
+    <p style="color: #92400e;">
+      Esta seção <strong>não aparece na impressão</strong>. Use como guia pra saber
+      quais screenshots tirar. Salve todos em <code>docs/tutorial-cliente/img/</code>
+      com o nome indicado, depois substitua cada bloco <code>.shot-frame</code> do HTML por
+      uma tag <code>&lt;img&gt;</code>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Arquivo</th><th>O que capturar</th><th>Anotação</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01</td><td><code>img/01-convite.png</code></td><td>Mensagem de convite no WhatsApp/e-mail com link</td><td>Seta no link</td></tr>
+        <tr><td>02</td><td><code>img/02-criar-senha.png</code></td><td>Tela <code>/convite/[token]</code> de criação de senha</td><td>Círculo no botão confirmar</td></tr>
+        <tr><td>03</td><td><code>img/03-login.png</code></td><td>Tela <code>/entrar</code> com "Permanecer logado"</td><td>Círculo no checkbox</td></tr>
+        <tr><td>04</td><td><code>img/04-painel-topbar.png</code></td><td>Tela inicial inteira com topbar visível</td><td>Numerar itens da topbar</td></tr>
+        <tr><td>05</td><td><code>img/05-tarefa-home.png</code></td><td>Bloco "Tarefas" da home com tarefa+nome do card</td><td>Seta no nome do card</td></tr>
+        <tr><td>06</td><td><code>img/06-aprovar.png</code></td><td>Card aberto com bloco Aprovações</td><td>Círculo verde no Aprovar</td></tr>
+        <tr><td>07</td><td><code>img/07-comentar-refacao.png</code></td><td>Comentário sendo digitado na timeline</td><td>Seta no campo</td></tr>
+        <tr><td>08</td><td><code>img/08-reprovar.png</code></td><td>Bloco aprovações com Reprovar</td><td>Círculo vermelho no Reprovar</td></tr>
+        <tr><td>09</td><td><code>img/09-mencao.png</code></td><td>Dropdown de @ aparecendo no comentário</td><td>Círculo no dropdown</td></tr>
+        <tr><td>10</td><td><code>img/10-whats-notif.png</code></td><td>Notificação WhatsApp com link</td><td>Círculo no link</td></tr>
+        <tr><td>11</td><td><code>img/11-sino.png</code></td><td>Sino na topbar com badge</td><td>Seta</td></tr>
+        <tr><td>12</td><td><code>img/12-notif-list.png</code></td><td>Painel de notificações aberto</td><td>—</td></tr>
+        <tr><td>13</td><td><code>img/13-quadros.png</code></td><td>Lista de quadros (<code>/quadros</code>)</td><td>Círculo num quadro</td></tr>
+        <tr><td>14</td><td><code>img/14-board.png</code></td><td>Quadro aberto, visão Kanban</td><td>—</td></tr>
+        <tr><td>15</td><td><code>img/15-criar-card.png</code></td><td>Botão + na coluna de entrada</td><td>Círculo no +</td></tr>
+      </tbody>
+    </table>
+
+    <h4 style="color:#92400e;margin-top:24px">Como substituir um print no HTML</h4>
+    <p style="color:#92400e">
+      Em cada <code>&lt;figure class="shot"&gt;</code> tem um bloco
+      <code>&lt;div class="shot-frame"&gt;</code> (o quadradinho roxo tracejado) e logo
+      abaixo um comentário HTML com a tag <code>&lt;img&gt;</code> pronta. Apaga a div
+      e descomenta a img — pronto.
+    </p>
+  </section>
+
+
+  <!-- ===================== TOOLBAR ===================== -->
+  <div class="toolbar">
+    <button onclick="window.print()">🖨️ Salvar como PDF / Imprimir</button>
+  </div>
+
+</body>
+</html>

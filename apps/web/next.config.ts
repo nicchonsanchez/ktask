@@ -31,6 +31,14 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react', '@ktask/ui'],
   },
+  async rewrites() {
+    return [
+      // Tutorial estático em /public/tutorial-para-clientes/ — sem essa rewrite,
+      // a URL canonica /tutorial-para-clientes daria 404 (Next só serve o
+      // arquivo se acessado como /tutorial-para-clientes/index.html).
+      { source: '/tutorial-para-clientes', destination: '/tutorial-para-clientes/index.html' },
+    ];
+  },
 };
 
 export default withSerwist(nextConfig);
