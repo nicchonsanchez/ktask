@@ -270,23 +270,30 @@ export const DEMO_SCREENS = [
   {
     slug: 'entrar',
     titulo: 'Tela de Login',
-    descricao: 'Tela /entrar com e-mail, senha e "Permanecer logado".',
+    descricao: 'Print #03: tela /entrar com e-mail, senha e "Permanecer logado".',
     icon: '🔐',
     grupo: 'Acesso',
   },
   {
     slug: 'convite/exemplo-abc123',
     titulo: 'Aceitar convite',
-    descricao: 'Tela onde a pessoa convidada define sua senha.',
+    descricao: 'Print #02: tela onde a pessoa convidada define sua senha.',
     icon: '✉️',
     grupo: 'Acesso',
   },
   {
     slug: 'home',
     titulo: 'Painel inicial',
-    descricao: 'Tela inicial com topbar completa e bloco de tarefas pendentes.',
+    descricao: 'Prints #04, #05 e #11: topbar completa + bloco Tarefas + sino com badge.',
     icon: '🏠',
     grupo: 'Visão do cliente',
+  },
+  {
+    slug: 'card',
+    titulo: 'Card aberto (Aprovações destacado)',
+    descricao: 'Print #06: AURORA-42 aberto, bloco Aprovações com Aprovar/Reprovar visível.',
+    icon: '🃏',
+    grupo: 'Cards e fluxos',
   },
 ] as const;
 
