@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { Priority } from '@prisma/client';
+import type { ChecklistItem, Prisma, Priority } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
+import { computeNextDueDate, parseRecurrence } from '@/common/util/recurrence';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
@@ -234,6 +235,7 @@ export class ChecklistsService {
       dueDate?: string | null;
       assigneeId?: string | null;
       priority?: Priority;
+      recurrence?: unknown;
     },
   ) {
     const { card, item } = await this.getItemOrThrow(itemId, tenant.organizationId);
@@ -256,10 +258,19 @@ export class ChecklistsService {
             : undefined,
         assigneeId: input.assigneeId !== undefined ? input.assigneeId : undefined,
         priority: input.priority,
+        recurrence:
+          input.recurrence !== undefined ? (input.recurrence as Prisma.InputJsonValue) : undefined,
         doneAt: isToggling ? (input.isDone ? new Date() : null) : undefined,
         doneById: isToggling ? (input.isDone ? userId : null) : undefined,
       },
     });
+
+    // Doc 49: recorrencia. Quando user marca como done (transicao false → true)
+    // E o item tem recurrence + dueDate, cria nova instancia com prox data.
+    // Idempotente: re-marcar pra undone NAO duplica (so dispara em false→true).
+    if (isToggling && input.isDone === true) {
+      await this.maybeCreateRecurrenceNext(updated, userId);
+    }
 
     // Notificações ao responsável (assignee) — sempre que NÃO for o próprio
     // autor da ação. Cobre 4 casos: atribuído, desatribuído, concluído, editado.
@@ -520,5 +531,42 @@ export class ChecklistsService {
       select: { position: true },
     });
     return { beforePos: before.position, afterPos: next?.position ?? null };
+  }
+
+  /**
+   * Doc 49: ao concluir um item com recurrence + dueDate, cria nova
+   * instancia no MESMO checklist com prox dueDate. Item original permanece
+   * marcado como done (vira historico). Idempotente: chamado uma vez por
+   * transicao false → true. Sem dueDate ou sem recurrence → no-op.
+   *
+   * Se a regra ja terminou (endsAt no passado), nao cria.
+   */
+  private async maybeCreateRecurrenceNext(item: ChecklistItem, _actorId: string): Promise<void> {
+    if (!item.dueDate || !item.recurrence) return;
+    const rec = parseRecurrence(item.recurrence);
+    if (!rec) return;
+    const next = computeNextDueDate(item.dueDate, rec);
+    if (!next) return;
+
+    // Posiciona depois do item atual; computeInsertPosition pega o ponto
+    // medio com o proximo (ou +1024 se for o ultimo).
+    const after = await this.prisma.checklistItem.findFirst({
+      where: { checklistId: item.checklistId, position: { gt: item.position } },
+      orderBy: { position: 'asc' },
+      select: { position: true },
+    });
+    const position = computeInsertPosition(item.position, after?.position ?? null);
+
+    await this.prisma.checklistItem.create({
+      data: {
+        checklistId: item.checklistId,
+        text: item.text,
+        position,
+        dueDate: next,
+        priority: item.priority,
+        assigneeId: item.assigneeId,
+        recurrence: item.recurrence as Prisma.InputJsonValue,
+      },
+    });
   }
 }

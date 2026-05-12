@@ -1,4 +1,5 @@
 import { api } from '@/lib/api-client';
+import type { TaskRecurrence } from './cards';
 
 /**
  * Queries da home pessoal (módulo /me no backend).
@@ -140,6 +141,7 @@ export interface StandaloneTask {
   createdById: string;
   doneAt: string | null;
   doneById: string | null;
+  recurrence: TaskRecurrence | null;
   createdAt: string;
   updatedAt: string;
   assignee: { id: string; name: string; email: string; avatarUrl: string | null } | null;
@@ -161,6 +163,7 @@ export function updateStandaloneTask(
     dueDate?: string | null;
     assigneeId?: string | null;
     isDone?: boolean;
+    recurrence?: TaskRecurrence | null;
   },
 ) {
   return api.patch<StandaloneTask>(`/api/v1/tasks/${taskId}`, input);

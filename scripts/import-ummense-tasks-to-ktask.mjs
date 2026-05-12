@@ -101,6 +101,34 @@ function mapPriority(p) {
   return undefined;
 }
 
+// Doc 49: converte campo 'repeat' do Ummense pro shape KTask.
+// Ummense entrega 2 formatos:
+//   - atalho string: "days" / "weeks" / "months" (= a cada 1 unidade)
+//   - objeto custom: { type:"custom", interval:N, period:"days|weeks|months|years",
+//                       repeatDays:[0-6], endedAtType:null }
+// Retorna null pro KTask se nao for reconhecivel (item nao-recorrente).
+function mapRecurrence(repeat) {
+  if (!repeat) return null;
+  const PERIOD = { days: 'DAILY', weeks: 'WEEKLY', months: 'MONTHLY', years: 'YEARLY' };
+  // Atalho string
+  if (typeof repeat === 'string') {
+    const freq = PERIOD[repeat];
+    return freq ? { freq, interval: 1 } : null;
+  }
+  // Objeto custom
+  if (typeof repeat === 'object' && repeat.period) {
+    const freq = PERIOD[repeat.period];
+    if (!freq) return null;
+    const interval = Math.max(1, Number(repeat.interval) || 1);
+    const out = { freq, interval };
+    if (Array.isArray(repeat.repeatDays) && repeat.repeatDays.length > 0 && freq === 'WEEKLY') {
+      out.weekdays = repeat.repeatDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+    }
+    return out;
+  }
+  return null;
+}
+
 // Converte data Ummense ("2026-04-08 12:09:17") pra ISO 8601 UTC com Z.
 // Zod .datetime() default rejeita offsets (-03:00), so aceita Z.
 function toIso(d) {
@@ -240,6 +268,7 @@ async function main() {
           const taskText = (task.name || '').slice(0, 500).trim();
           if (existingTexts.has(taskText.toLowerCase())) continue;
           try {
+            const recurrence = mapRecurrence(task.repeat);
             const item = await api(`/checklists/${checklist.id}/items`, {
               method: 'POST',
               body: JSON.stringify({
@@ -247,9 +276,11 @@ async function main() {
                 assigneeId: resolveAssignee(task.userName),
                 dueDate: task.dueDate ? toIso(task.dueDate) : null,
                 priority: mapPriority(task.priority),
+                ...(recurrence ? { recurrence } : {}),
               }),
             });
             stats.itemsCreated++;
+            if (recurrence) stats.itemsWithRecurrence = (stats.itemsWithRecurrence ?? 0) + 1;
 
             // Marca como concluído se tinha completedAt
             if (task.completedAt) {

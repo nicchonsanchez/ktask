@@ -829,6 +829,14 @@ model ChecklistItem {
   assigneeId  String?
   doneAt      DateTime?
   doneById    String?
+  /// Doc 49: configuração de recorrência. JSON com shape:
+  ///   { freq: 'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY', interval: number,
+  ///     weekdays?: number[] (0-6 Dom-Sáb pra WEEKLY), endsAt?: ISO date }
+  /// Quando o item recorrente é concluído, o backend cria uma nova
+  /// instância copiando text/assignee/priority/recurrence com nova dueDate
+  /// calculada a partir da atual + recurrence. Sem dueDate ou sem recurrence
+  /// → sem efeito (item normal).
+  recurrence  Json?
 
   checklist   Checklist    @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   assignee    User?        @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -1034,6 +1042,9 @@ model Task {
   createdById    String
   doneAt         DateTime?
   doneById       String?
+  /// Doc 49: mesmo shape de ChecklistItem.recurrence. Quando a Task
+  /// recorrente é concluída, cria nova com nova dueDate.
+  recurrence     Json?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

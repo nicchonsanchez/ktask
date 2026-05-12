@@ -1,7 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
+import { computeNextDueDate, parseRecurrence } from '@/common/util/recurrence';
 
 import type { CreateTaskRequest, UpdateTaskRequest } from './dto/task.schemas';
 
@@ -43,6 +45,9 @@ export class TasksService {
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
         assigneeId,
         createdById: userId,
+        ...(input.recurrence !== undefined
+          ? { recurrence: input.recurrence as Prisma.InputJsonValue }
+          : {}),
       },
       include: {
         assignee: { select: { id: true, name: true, email: true, avatarUrl: true } },
@@ -72,13 +77,15 @@ export class TasksService {
     if (input.text !== undefined) data.text = input.text;
     if (input.dueDate !== undefined) data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
     if (input.assigneeId !== undefined) data.assigneeId = input.assigneeId;
+    if (input.recurrence !== undefined) data.recurrence = input.recurrence;
+    const isToggling = input.isDone !== undefined && input.isDone !== task.isDone;
     if (input.isDone !== undefined) {
       data.isDone = input.isDone;
       data.doneAt = input.isDone ? new Date() : null;
       data.doneById = input.isDone ? userId : null;
     }
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id: taskId },
       data,
       include: {
@@ -86,6 +93,13 @@ export class TasksService {
         createdBy: { select: { id: true, name: true, email: true, avatarUrl: true } },
       },
     });
+
+    // Doc 49: recorrencia. Em transicao false → true, cria proxima
+    // instancia se tiver recurrence + dueDate.
+    if (isToggling && input.isDone === true) {
+      await this.maybeCreateRecurrenceNext(updated, userId);
+    }
+    return updated;
   }
 
   async remove(userId: string, org: TenantContext, taskId: string) {
@@ -116,5 +130,38 @@ export class TasksService {
         'Apenas o assignee, o criador ou OWNER/ADMIN podem editar esta tarefa.',
       );
     }
+  }
+
+  /**
+   * Doc 49: ao concluir Task standalone com recurrence + dueDate, cria
+   * nova instancia da Task com prox dueDate. Mesmo dono, mesmo assignee,
+   * mesma recurrence. Sem dueDate ou sem recurrence → no-op.
+   */
+  private async maybeCreateRecurrenceNext(
+    task: {
+      organizationId: string;
+      text: string;
+      dueDate: Date | null;
+      assigneeId: string | null;
+      createdById: string;
+      recurrence: unknown;
+    },
+    _actorId: string,
+  ): Promise<void> {
+    if (!task.dueDate || !task.recurrence) return;
+    const rec = parseRecurrence(task.recurrence);
+    if (!rec) return;
+    const next = computeNextDueDate(task.dueDate, rec);
+    if (!next) return;
+    await this.prisma.task.create({
+      data: {
+        organizationId: task.organizationId,
+        text: task.text,
+        dueDate: next,
+        assigneeId: task.assigneeId,
+        createdById: task.createdById,
+        recurrence: task.recurrence as Prisma.InputJsonValue,
+      },
+    });
   }
 }

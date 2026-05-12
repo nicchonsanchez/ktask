@@ -2,6 +2,16 @@ import { z } from 'zod';
 
 const PrioritySchema = z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 
+/** Doc 49: regra de recorrencia. null/undefined = sem recorrencia. */
+const RecurrenceSchema = z
+  .object({
+    freq: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
+    interval: z.number().int().min(1).max(365).default(1),
+    weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+    endsAt: z.string().date().optional(),
+  })
+  .nullable();
+
 export const CreateChecklistSchema = z.object({
   cardId: z.string().cuid(),
   title: z.string().min(1).max(200).trim().default('Tarefas'),
@@ -19,6 +29,7 @@ export const CreateItemSchema = z.object({
   assigneeId: z.string().cuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   priority: PrioritySchema.optional(),
+  recurrence: RecurrenceSchema.optional(),
 });
 export type CreateItemRequest = z.infer<typeof CreateItemSchema>;
 
@@ -28,6 +39,7 @@ export const UpdateItemSchema = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   assigneeId: z.string().cuid().nullable().optional(),
   priority: PrioritySchema.optional(),
+  recurrence: RecurrenceSchema.optional(),
 });
 export type UpdateItemRequest = z.infer<typeof UpdateItemSchema>;
 

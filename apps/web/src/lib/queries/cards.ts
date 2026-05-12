@@ -270,6 +270,16 @@ export const orgMembersQuery = {
 
 export type TaskPriority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
+/** Doc 49: regra de recorrencia da tarefa. null = sem recorrencia. */
+export interface TaskRecurrence {
+  freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  interval: number;
+  /** 0=Dom..6=Sab. So usado em WEEKLY. */
+  weekdays?: number[];
+  /** ISO date opcional, fim da recorrencia. */
+  endsAt?: string;
+}
+
 export interface ChecklistItem {
   id: string;
   checklistId: string;
@@ -282,6 +292,7 @@ export interface ChecklistItem {
   assignee: { id: string; name: string; avatarUrl: string | null } | null;
   doneAt: string | null;
   doneById: string | null;
+  recurrence: TaskRecurrence | null;
 }
 
 export interface Checklist {
@@ -330,6 +341,7 @@ export function updateChecklistItem(
     dueDate?: string | null;
     assigneeId?: string | null;
     priority?: TaskPriority;
+    recurrence?: TaskRecurrence | null;
   },
 ) {
   return api.patch<ChecklistItem>(`/api/v1/checklists/items/${itemId}`, input);

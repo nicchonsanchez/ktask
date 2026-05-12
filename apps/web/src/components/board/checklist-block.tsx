@@ -15,7 +15,9 @@ import {
   type Checklist,
   type ChecklistItem,
   type TaskPriority,
+  type TaskRecurrence,
 } from '@/lib/queries/cards';
+import { RecurrencePicker } from './recurrence-picker';
 import { Bot, CalendarDays, Flag, Loader2, Plus, Trash2, UserRoundPlus, X } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
@@ -538,6 +540,10 @@ function ItemRow({
     mutationFn: (p: TaskPriority) => updateChecklistItem(item.id, { priority: p }),
     onSuccess: onChange,
   });
+  const recurrenceMut = useMutation({
+    mutationFn: (rec: TaskRecurrence | null) => updateChecklistItem(item.id, { recurrence: rec }),
+    onSuccess: onChange,
+  });
 
   function saveText() {
     const trimmed = text.trim();
@@ -609,6 +615,10 @@ function ItemRow({
         onChange={(p) => priorityMut.mutate(p)}
         disabled={priorityMut.isPending}
       />
+
+      {/* Doc 49: recorrencia da tarefa. Click abre popover; ao concluir
+          o item, backend cria nova instancia com prox dueDate. */}
+      <RecurrencePicker value={item.recurrence} onChange={(rec) => recurrenceMut.mutate(rec)} />
 
       {/* Doc 48: botão 🤖 para automacao escopada NESTE item */}
       <button
