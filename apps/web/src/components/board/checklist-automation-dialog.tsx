@@ -45,7 +45,7 @@ export function ChecklistAutomationDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
-  const [actionType, setActionType] = useState<AutomationActionType>('UPDATE_FLOW_POSITION');
+  const [actionType, setActionType] = useState<AutomationActionType>('MOVE_CARD');
 
   // Doc 48: useQuery por escopo. Spread direto de union confunde o TS,
   // então escolhemos a query inline com a tupla fixa de queryKey.
@@ -182,7 +182,10 @@ export function ChecklistAutomationDialog({
                 onChange={(e) => setActionType(e.target.value as AutomationActionType)}
                 className="border-border bg-bg text-fg rounded-md border px-2 py-1.5 text-[13px]"
               >
-                <option value="UPDATE_FLOW_POSITION">Mover card no topo/base da coluna</option>
+                <option value="MOVE_CARD">Mover card pra outra coluna</option>
+                <option value="UPDATE_FLOW_POSITION">
+                  Mover card no topo/base da coluna atual
+                </option>
                 <option value="INSERT_TAGS">Adicionar etiquetas</option>
                 <option value="REMOVE_TAGS">Remover etiquetas</option>
                 <option value="SET_CARD_STATUS">Mudar status do card</option>
