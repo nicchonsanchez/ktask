@@ -140,9 +140,13 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
     }
   }
 
-  // Drag-drop handlers (formulário)
+  // Drag-drop handlers (formulário). stopPropagation em TODOS os eventos
+  // pra nao vazar pro card-modal — caso contrario o pane direito do modal
+  // capturava o mesmo drop via bubble e chamava addFiles 2x (duplicava o
+  // anexo no composer).
   function onDragEnter(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     if (Array.from(e.dataTransfer.types).includes('Files')) {
       dragCounter.current += 1;
       setDragActive(true);
@@ -150,15 +154,18 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
   }
   function onDragLeave(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     dragCounter.current = Math.max(0, dragCounter.current - 1);
     if (dragCounter.current === 0) setDragActive(false);
   }
   function onDragOver(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
   }
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     dragCounter.current = 0;
     setDragActive(false);
     if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);

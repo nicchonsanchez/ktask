@@ -447,186 +447,185 @@ export function CardModalContent({
             {/* Coluna esquerda — dados. Ordem: pessoas → conteúdo (descrição) →
                 organização (detalhes/tags) → execução (tarefas/anexos).
                 Divisores sutis separam blocos; respiração generosa.
-                Drag-and-drop wide: dropping aqui anexa permanente no card. */}
+                Drag-and-drop wide: dropping aqui anexa permanente no card.
+                Estrutura: outer relative+overflow-hidden serve de positioning
+                context pro overlay (que precisa ficar no viewport, nao no
+                conteudo rolavel). Scroll fica no filho interno. */}
             <div
               {...makeDropHandlers('card')}
-              className={`divide-border/40 relative flex min-h-0 flex-col divide-y overflow-y-auto ${
-                dragTarget === 'card' ? 'ring-primary -ring-offset-1 ring-2' : ''
-              }`}
+              className="relative flex min-h-0 flex-col overflow-hidden"
             >
-              {dragTarget === 'card' && (
-                <div className="bg-primary-subtle/95 text-primary pointer-events-none absolute inset-0 z-30 flex items-center justify-center text-sm font-semibold">
-                  Solte para anexar ao card
+              <DropOverlay active={dragTarget === 'card'} label="Solte para anexar ao card" />
+              <div className="divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto">
+                {/* Equipe — linha única estilo Ummense: label + lead + avatares + cadeado */}
+                <div className="px-5 py-4 sm:px-7">
+                  <MembersInline
+                    card={card}
+                    boardId={boardId}
+                    onTogglePrivacy={() =>
+                      privacyMut.mutate(card.privacy === 'TEAM_ONLY' ? 'PUBLIC' : 'TEAM_ONLY')
+                    }
+                    togglingPrivacy={privacyMut.isPending}
+                  />
                 </div>
-              )}
-              {/* Equipe — linha única estilo Ummense: label + lead + avatares + cadeado */}
-              <div className="px-5 py-4 sm:px-7">
-                <MembersInline
-                  card={card}
-                  boardId={boardId}
-                  onTogglePrivacy={() =>
-                    privacyMut.mutate(card.privacy === 'TEAM_ONLY' ? 'PUBLIC' : 'TEAM_ONLY')
-                  }
-                  togglingPrivacy={privacyMut.isPending}
-                />
-              </div>
 
-              <div className="flex flex-col gap-7 px-5 py-6 sm:px-7">
-                {/* Descrição */}
-                <Block icon={<DescriptionIcon />} label="Descrição">
-                  <RichEditor
-                    value={card.description}
-                    onChange={(doc) => descMut.mutate(doc)}
-                    placeholder="Escreva detalhes, contexto, links… aceita imagens (paste/drop)."
-                    isSaving={descMut.isPending}
-                    onUploadImage={async (file) => {
-                      const att = await uploadAttachment(card.id, file, { embedded: true });
-                      if (!att.publicUrl) {
-                        throw new Error('Imagem enviada, mas a URL pública não está disponível.');
-                      }
-                      return { src: att.publicUrl, alt: att.fileName };
-                    }}
-                  />
-                </Block>
+                <div className="flex flex-col gap-7 px-5 py-6 sm:px-7">
+                  {/* Descrição */}
+                  <Block icon={<DescriptionIcon />} label="Descrição">
+                    <RichEditor
+                      value={card.description}
+                      onChange={(doc) => descMut.mutate(doc)}
+                      placeholder="Escreva detalhes, contexto, links… aceita imagens (paste/drop)."
+                      isSaving={descMut.isPending}
+                      onUploadImage={async (file) => {
+                        const att = await uploadAttachment(card.id, file, { embedded: true });
+                        if (!att.publicUrl) {
+                          throw new Error('Imagem enviada, mas a URL pública não está disponível.');
+                        }
+                        return { src: att.publicUrl, alt: att.fileName };
+                      }}
+                    />
+                  </Block>
 
-                {/* Cor decorativa do card. Substituiu o sistema de Priority. */}
-                <Block icon={<ChevronsUp size={14} />} label="Cor do card">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => cardColorMut.mutate(null)}
-                      disabled={cardColorMut.isPending}
-                      aria-pressed={!card.cardColor}
-                      title="Sem cor"
-                      className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                        !card.cardColor
-                          ? 'border-fg/40 shadow-sm'
-                          : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
-                      }`}
-                    >
-                      <span
-                        aria-hidden
-                        className="block size-3.5 rounded-full border border-dashed border-current opacity-60"
-                      />
-                    </button>
-                    {CARD_COLOR_ORDER.map((value) => {
-                      const active = card.cardColor === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => cardColorMut.mutate(value)}
-                          disabled={cardColorMut.isPending}
-                          aria-pressed={active}
-                          title={CARD_COLOR_LABEL[value]}
-                          className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                            active
-                              ? 'border-fg/40 shadow-sm'
-                              : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
-                          }`}
-                        >
-                          <span
-                            aria-hidden
-                            className="block size-4 rounded-full"
-                            style={{ backgroundColor: CARD_COLOR_SWATCH[value] }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Block>
-
-                {/* Doc 25: Privacidade do card */}
-                <Block icon={<Lock size={14} />} label="Privacidade">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => privacyMut.mutate('PUBLIC')}
-                      disabled={privacyMut.isPending}
-                      aria-pressed={card.privacy === 'PUBLIC'}
-                      className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                        card.privacy === 'PUBLIC'
-                          ? 'border-fg/20 bg-bg text-fg shadow-sm'
-                          : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
-                      }`}
-                      title="Todos do fluxo veem"
-                    >
-                      <Unlock size={10} /> Público
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => privacyMut.mutate('TEAM_ONLY')}
-                      disabled={privacyMut.isPending}
-                      aria-pressed={card.privacy === 'TEAM_ONLY'}
-                      className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                        card.privacy === 'TEAM_ONLY'
-                          ? 'border-fg/30 bg-bg-muted text-fg shadow-sm'
-                          : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
-                      }`}
-                      title="Só líder e equipe (admin/gestor da Org sempre veem)"
-                    >
-                      <Lock size={10} /> Só equipe
-                    </button>
-                  </div>
-                </Block>
-
-                {/* Tags (labels) */}
-                <Block
-                  icon={<Tag size={14} />}
-                  label="Etiquetas"
-                  count={card.labels.length || undefined}
-                >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {card.labels.map((cl) => (
-                      <span
-                        key={cl.labelId}
-                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
-                        style={{ backgroundColor: cl.label.color }}
+                  {/* Cor decorativa do card. Substituiu o sistema de Priority. */}
+                  <Block icon={<ChevronsUp size={14} />} label="Cor do card">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => cardColorMut.mutate(null)}
+                        disabled={cardColorMut.isPending}
+                        aria-pressed={!card.cardColor}
+                        title="Sem cor"
+                        className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                          !card.cardColor
+                            ? 'border-fg/40 shadow-sm'
+                            : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
+                        }`}
                       >
-                        {cl.label.name}
-                      </span>
-                    ))}
-                    <LabelPicker card={card} boardId={boardId} />
-                  </div>
-                </Block>
+                        <span
+                          aria-hidden
+                          className="block size-3.5 rounded-full border border-dashed border-current opacity-60"
+                        />
+                      </button>
+                      {CARD_COLOR_ORDER.map((value) => {
+                        const active = card.cardColor === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => cardColorMut.mutate(value)}
+                            disabled={cardColorMut.isPending}
+                            aria-pressed={active}
+                            title={CARD_COLOR_LABEL[value]}
+                            className={`focus-visible:ring-primary inline-flex size-7 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                              active
+                                ? 'border-fg/40 shadow-sm'
+                                : 'border-border/60 hover:border-border-strong opacity-80 hover:opacity-100'
+                            }`}
+                          >
+                            <span
+                              aria-hidden
+                              className="block size-4 rounded-full"
+                              style={{ backgroundColor: CARD_COLOR_SWATCH[value] }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Block>
 
-                {/* Doc 38: Empresa(s) vinculada(s) — separado de Contatos pra
+                  {/* Doc 25: Privacidade do card */}
+                  <Block icon={<Lock size={14} />} label="Privacidade">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => privacyMut.mutate('PUBLIC')}
+                        disabled={privacyMut.isPending}
+                        aria-pressed={card.privacy === 'PUBLIC'}
+                        className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                          card.privacy === 'PUBLIC'
+                            ? 'border-fg/20 bg-bg text-fg shadow-sm'
+                            : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
+                        }`}
+                        title="Todos do fluxo veem"
+                      >
+                        <Unlock size={10} /> Público
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => privacyMut.mutate('TEAM_ONLY')}
+                        disabled={privacyMut.isPending}
+                        aria-pressed={card.privacy === 'TEAM_ONLY'}
+                        className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                          card.privacy === 'TEAM_ONLY'
+                            ? 'border-fg/30 bg-bg-muted text-fg shadow-sm'
+                            : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
+                        }`}
+                        title="Só líder e equipe (admin/gestor da Org sempre veem)"
+                      >
+                        <Lock size={10} /> Só equipe
+                      </button>
+                    </div>
+                  </Block>
+
+                  {/* Tags (labels) */}
+                  <Block
+                    icon={<Tag size={14} />}
+                    label="Etiquetas"
+                    count={card.labels.length || undefined}
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {card.labels.map((cl) => (
+                        <span
+                          key={cl.labelId}
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
+                          style={{ backgroundColor: cl.label.color }}
+                        >
+                          {cl.label.name}
+                        </span>
+                      ))}
+                      <LabelPicker card={card} boardId={boardId} />
+                    </div>
+                  </Block>
+
+                  {/* Doc 38: Empresa(s) vinculada(s) — separado de Contatos pra
                     nao misturar cliente com pessoas. Mesma fonte (CardContact). */}
-                <Block icon={<Building2 size={14} />} label="Empresa">
-                  <ContactsBlock cardId={card.id} filterType="COMPANY" />
-                </Block>
+                  <Block icon={<Building2 size={14} />} label="Empresa">
+                    <ContactsBlock cardId={card.id} filterType="COMPANY" />
+                  </Block>
 
-                {/* Contatos (pessoas) vinculados */}
-                <Block icon={<ContactIcon size={14} />} label="Contatos">
-                  <ContactsBlock cardId={card.id} filterType="PERSON" />
-                </Block>
+                  {/* Contatos (pessoas) vinculados */}
+                  <Block icon={<ContactIcon size={14} />} label="Contatos">
+                    <ContactsBlock cardId={card.id} filterType="PERSON" />
+                  </Block>
 
-                {/* Aprovações por cliente */}
-                <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
-                  <ApprovalsBlock
-                    cardId={card.id}
-                    boardId={card.boardId}
-                    currentListId={card.listId}
-                  />
-                </Block>
+                  {/* Aprovações por cliente */}
+                  <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
+                    <ApprovalsBlock
+                      cardId={card.id}
+                      boardId={card.boardId}
+                      currentListId={card.listId}
+                    />
+                  </Block>
 
-                {/* Tarefas do card */}
-                <Block
-                  icon={<ChecklistIcon />}
-                  label="Tarefas do card"
-                  count={checklistCounts(card)}
-                >
-                  <ChecklistBlock card={card} boardId={boardId} />
-                </Block>
+                  {/* Tarefas do card */}
+                  <Block
+                    icon={<ChecklistIcon />}
+                    label="Tarefas do card"
+                    count={checklistCounts(card)}
+                  >
+                    <ChecklistBlock card={card} boardId={boardId} />
+                  </Block>
 
-                {/* Anexos */}
-                <Block
-                  icon={<Paperclip size={14} />}
-                  label="Anexos"
-                  count={card.attachments.length || undefined}
-                >
-                  <AttachmentsBlock card={card} boardId={boardId} />
-                </Block>
+                  {/* Anexos */}
+                  <Block
+                    icon={<Paperclip size={14} />}
+                    label="Anexos"
+                    count={card.attachments.length || undefined}
+                  >
+                    <AttachmentsBlock card={card} boardId={boardId} />
+                  </Block>
+                </div>
               </div>
             </div>
 
@@ -636,15 +635,12 @@ export function CardModalContent({
                 comentário em vez de anexar no card. */}
             <aside
               {...makeDropHandlers('comment')}
-              className={`border-border/60 bg-bg-subtle relative hidden min-h-0 flex-col overflow-hidden lg:flex lg:border-l ${
-                dragTarget === 'comment' ? 'ring-primary -ring-offset-1 ring-2' : ''
-              }`}
+              className="border-border/60 bg-bg-subtle relative hidden min-h-0 flex-col overflow-hidden lg:flex lg:border-l"
             >
-              {dragTarget === 'comment' && (
-                <div className="bg-primary-subtle/95 text-primary pointer-events-none absolute inset-0 z-30 flex items-center justify-center text-sm font-semibold">
-                  Solte para anexar ao comentário
-                </div>
-              )}
+              <DropOverlay
+                active={dragTarget === 'comment'}
+                label="Solte para anexar ao comentário"
+              />
               <div className="flex shrink-0 items-center gap-2 px-5 pb-2 pt-5">
                 <h3 className="text-fg text-[13px] font-medium">Timeline</h3>
                 <span className="text-fg-subtle text-[11px]">
@@ -1058,5 +1054,28 @@ function RemovableTeamAvatar({
         <X size={9} />
       </button>
     </span>
+  );
+}
+
+/**
+ * Overlay visual que aparece quando o user arrasta arquivos sobre uma das
+ * 2 colunas (card pane ou timeline pane). Fica fora do container que rola
+ * — posicionado em `absolute inset-0` no wrapper relative+overflow-hidden,
+ * entao acompanha o viewport mesmo se o conteudo estiver rolado.
+ *
+ * Visual: dashed border ao redor + backdrop blur sutil + card central
+ * flutuante com icone. Inspirado em Notion/Linear.
+ */
+function DropOverlay({ active, label }: { active: boolean; label: string }) {
+  if (!active) return null;
+  return (
+    <div className="border-primary bg-primary-subtle/70 pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed backdrop-blur-[2px]">
+      <div className="border-primary/30 bg-bg flex flex-col items-center gap-2 rounded-xl border px-6 py-4 shadow-xl">
+        <div className="bg-primary text-primary-fg flex size-10 items-center justify-center rounded-full shadow">
+          <Paperclip size={18} />
+        </div>
+        <span className="text-fg text-sm font-medium">{label}</span>
+      </div>
+    </div>
   );
 }
