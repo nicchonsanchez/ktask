@@ -8,6 +8,8 @@ import { updateChecklistItem } from '@/lib/queries/cards';
 import { meQueries, updateStandaloneTask, type MeTask } from '@/lib/queries/me';
 import { UserAvatar } from '@/components/user-avatar';
 import { useAuthStore } from '@/stores/auth-store';
+import { DueDatePicker } from '@/components/board/due-date-picker';
+import { useNotify } from '@/components/ui/dialogs';
 
 /**
  * Linha de tarefa da home (TarefaRow).
@@ -48,6 +50,22 @@ export function TarefaRow({
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const notify = useNotify();
+
+  const dueDateMut = useMutation({
+    mutationFn: async (iso: string | null) => {
+      if (task.kind === 'standalone') {
+        await updateStandaloneTask(task.id, { dueDate: iso });
+      } else {
+        await updateChecklistItem(task.id, { dueDate: iso });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: meQueries.tasks().queryKey });
+      queryClient.invalidateQueries({ queryKey: ['me', 'calendar'] });
+    },
+    onError: () => notify.error('Erro ao alterar o prazo.'),
+  });
 
   const toggleMut = useMutation({
     mutationFn: async () => {
@@ -157,8 +175,10 @@ export function TarefaRow({
         </span>
       )}
 
-      {/* Prazo */}
-      {dueLabel && (
+      {/* Prazo — readOnly mostra label estática; senão wrap no DueDatePicker
+          que dispara mutation no PATCH /me/tasks. O picker tem trigger
+          proprio, entao escondemos o nosso label e estilizamos via CSS. */}
+      {readOnly && dueLabel && (
         <span
           className={`hidden shrink-0 items-center gap-1 text-[11px] sm:inline-flex ${DUE_TEXT[variant]}`}
           title={task.dueDate ?? undefined}
@@ -166,6 +186,14 @@ export function TarefaRow({
           <Calendar size={11} />
           {dueLabel}
         </span>
+      )}
+      {!readOnly && (
+        <div
+          className={`hidden shrink-0 sm:block ${DUE_TEXT[variant]}`}
+          title="Clique pra alterar o prazo"
+        >
+          <DueDatePicker value={task.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
+        </div>
       )}
 
       {/* Descrição/notas — só ícone se houver futuramente */}
