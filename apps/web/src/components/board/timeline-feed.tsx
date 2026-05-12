@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Download,
@@ -51,17 +51,27 @@ type FeedItem =
   | { kind: 'comment'; at: string; comment: CommentNode }
   | { kind: 'activity'; at: string; activity: ActivityNode };
 
-export function TimelineFeed({
-  cardId,
-  boardId,
-  comments,
-  activities,
-}: {
+interface TimelineFeedProps {
   cardId: string;
   boardId: string;
   comments: CommentNode[];
   activities: ActivityNode[];
-}) {
+}
+
+/**
+ * Handle exposto via ref pra que o card-modal possa empurrar arquivos
+ * direto no composer quando o user arrasta um arquivo na coluna direita
+ * (fora da textarea, mas dentro da timeline). Sem isso, o drag-and-drop
+ * "wide" da coluna nao consegue popular o `pending` interno daqui.
+ */
+export interface TimelineFeedHandle {
+  addFiles: (files: File[] | FileList) => void;
+}
+
+export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(function TimelineFeed(
+  { cardId, boardId, comments, activities },
+  externalRef,
+) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [tab, setTab] = useState<TabKey>('all');
@@ -89,6 +99,8 @@ export function TimelineFeed({
     setError(null);
     setPending((prev) => [...prev, ...arr]);
   }
+
+  useImperativeHandle(externalRef, () => ({ addFiles }), []);
 
   function removePending(index: number) {
     setPending((prev) => prev.filter((_, i) => i !== index));
@@ -327,7 +339,7 @@ export function TimelineFeed({
       </ul>
     </div>
   );
-}
+});
 
 function CommentItem({
   comment,

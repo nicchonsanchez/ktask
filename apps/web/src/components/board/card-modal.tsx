@@ -35,7 +35,7 @@ import {
 import { ApiError } from '@/lib/api-client';
 import { RichEditor } from '@/components/editor';
 import { UserAvatar } from '@/components/user-avatar';
-import { TimelineFeed } from './timeline-feed';
+import { TimelineFeed, type TimelineFeedHandle } from './timeline-feed';
 import { LeadPicker } from './lead-picker';
 import { TeamPicker } from './team-picker';
 import { ChecklistBlock } from './checklist-block';
@@ -225,6 +225,65 @@ export function CardModalContent({
   const [createChildOpen, setCreateChildOpen] = useState(false);
   const [tab, setTab] = useState<CardTab>('home');
 
+  // Drag-and-drop wide: 2 zonas de drop com alvos diferentes.
+  // - 'card': dropping na coluna esquerda anexa permanente no card.
+  // - 'comment': dropping na coluna direita (timeline) empilha no
+  //   composer de comentario — user clica Enviar depois.
+  // dragCounter evita flicker durante eventos enter/leave entre filhos.
+  const [dragTarget, setDragTarget] = useState<'card' | 'comment' | null>(null);
+  const dragCounter = useRef(0);
+  const timelineRef = useRef<TimelineFeedHandle>(null);
+
+  /** Aceita drag SO se trouxer arquivos do SO. Texto/HTML ignorado. */
+  function isFileDrag(e: React.DragEvent): boolean {
+    return Array.from(e.dataTransfer.types).includes('Files');
+  }
+
+  function makeDropHandlers(target: 'card' | 'comment') {
+    return {
+      onDragEnter: (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        dragCounter.current += 1;
+        setDragTarget(target);
+      },
+      onDragOver: (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        dragCounter.current = Math.max(0, dragCounter.current - 1);
+        if (dragCounter.current === 0) setDragTarget(null);
+      },
+      onDrop: async (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        dragCounter.current = 0;
+        setDragTarget(null);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+        if (target === 'card') {
+          // Upload sequencial pra nao saturar conexao. Mesmo padrao do
+          // AttachmentsBlock; embedded=false (anexo real, nao inline).
+          for (const file of files) {
+            try {
+              await uploadAttachment(card.id, file);
+            } catch (err) {
+              const msg = err instanceof ApiError ? err.message : 'Falha no anexo.';
+              console.error('drop card attach:', msg);
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
+        } else {
+          // Empurra pro composer da timeline (user envia manualmente).
+          timelineRef.current?.addFiles(files);
+        }
+      },
+    };
+  }
+
   // Tab "Timeline" só existe em mobile (em desktop ela vira coluna lateral).
   // Se o usuário está nela e a tela cresce pra lg+, redireciona pra Início.
   useEffect(() => {
@@ -387,8 +446,19 @@ export function CardModalContent({
           <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_400px]">
             {/* Coluna esquerda — dados. Ordem: pessoas → conteúdo (descrição) →
                 organização (detalhes/tags) → execução (tarefas/anexos).
-                Divisores sutis separam blocos; respiração generosa. */}
-            <div className="divide-border/40 flex min-h-0 flex-col divide-y overflow-y-auto">
+                Divisores sutis separam blocos; respiração generosa.
+                Drag-and-drop wide: dropping aqui anexa permanente no card. */}
+            <div
+              {...makeDropHandlers('card')}
+              className={`divide-border/40 relative flex min-h-0 flex-col divide-y overflow-y-auto ${
+                dragTarget === 'card' ? 'ring-primary -ring-offset-1 ring-2' : ''
+              }`}
+            >
+              {dragTarget === 'card' && (
+                <div className="bg-primary-subtle/95 text-primary pointer-events-none absolute inset-0 z-30 flex items-center justify-center text-sm font-semibold">
+                  Solte para anexar ao card
+                </div>
+              )}
               {/* Equipe — linha única estilo Ummense: label + lead + avatares + cadeado */}
               <div className="px-5 py-4 sm:px-7">
                 <MembersInline
@@ -561,8 +631,20 @@ export function CardModalContent({
             </div>
 
             {/* Coluna direita — Timeline (atividade + comentários). No mobile,
-                Timeline tem aba própria, então essa coluna só aparece em lg+. */}
-            <aside className="border-border/60 bg-bg-subtle hidden min-h-0 flex-col overflow-hidden lg:flex lg:border-l">
+                Timeline tem aba própria, então essa coluna só aparece em lg+.
+                Drag-and-drop wide: dropping aqui empilha no composer do
+                comentário em vez de anexar no card. */}
+            <aside
+              {...makeDropHandlers('comment')}
+              className={`border-border/60 bg-bg-subtle relative hidden min-h-0 flex-col overflow-hidden lg:flex lg:border-l ${
+                dragTarget === 'comment' ? 'ring-primary -ring-offset-1 ring-2' : ''
+              }`}
+            >
+              {dragTarget === 'comment' && (
+                <div className="bg-primary-subtle/95 text-primary pointer-events-none absolute inset-0 z-30 flex items-center justify-center text-sm font-semibold">
+                  Solte para anexar ao comentário
+                </div>
+              )}
               <div className="flex shrink-0 items-center gap-2 px-5 pb-2 pt-5">
                 <h3 className="text-fg text-[13px] font-medium">Timeline</h3>
                 <span className="text-fg-subtle text-[11px]">
@@ -571,6 +653,7 @@ export function CardModalContent({
               </div>
               <div className="flex min-h-0 flex-1 flex-col px-5 pb-4">
                 <TimelineFeed
+                  ref={timelineRef}
                   cardId={card.id}
                   boardId={boardId}
                   comments={card.comments}
