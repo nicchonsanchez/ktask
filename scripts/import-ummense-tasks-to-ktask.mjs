@@ -3,9 +3,9 @@
 // scripts/ummense-extract-tasks.js, faz matching por ticket (shortCode)
 // e cria 1 checklist "Tarefas" por card com todas as tarefas dentro.
 //
-// Uso: TOKEN=<jwt> node scripts/import-ummense-tasks-to-ktask.mjs
-// Default le o JSON de C:/Users/NoteBook1/Downloads/ummense-tasks-extraction.json
-// (passa um path como 1o argumento se for outro arquivo).
+// Uso: node scripts/import-ummense-tasks-to-ktask.mjs [path-do-json]
+// Pega credenciais do .env.ops (KTASK_BOT_EMAIL/PASSWORD), faz login
+// no inicio e re-loga automaticamente quando recebe 401 (token expirou).
 //
 // Idempotente: pula cards que ja tem checklist com nome "Tarefas".
 
@@ -13,8 +13,40 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const API = 'https://api.ktask.agenciakharis.com.br/api/v1';
-const TOKEN = process.env.TOKEN;
-if (!TOKEN) { console.error('Env TOKEN obrigatorio.'); process.exit(1); }
+
+// Le credenciais do .env.ops
+function loadEnv() {
+  const envPath = '.env.ops';
+  if (!fs.existsSync(envPath)) return {};
+  const txt = fs.readFileSync(envPath, 'utf-8');
+  const out = {};
+  for (const line of txt.split('\n')) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+  return out;
+}
+const env = loadEnv();
+const BOT_EMAIL = process.env.KTASK_BOT_EMAIL ?? env.KTASK_BOT_EMAIL;
+const BOT_PASSWORD = process.env.KTASK_BOT_PASSWORD ?? env.KTASK_BOT_PASSWORD;
+if (!BOT_EMAIL || !BOT_PASSWORD) {
+  console.error('Credenciais nao encontradas. Defina KTASK_BOT_EMAIL e KTASK_BOT_PASSWORD em .env.ops ou no env.');
+  process.exit(1);
+}
+
+let TOKEN = null;
+
+async function login() {
+  const r = await fetch(API + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: BOT_EMAIL, password: BOT_PASSWORD }),
+  });
+  if (!r.ok) throw new Error('Login falhou: ' + r.status);
+  const b = await r.json();
+  TOKEN = b.accessToken;
+  console.log('[auth] login OK');
+}
 
 const INPUT = process.argv[2] || 'C:/Users/NoteBook1/Downloads/ummense-tasks-extraction.json';
 if (!fs.existsSync(INPUT)) {
@@ -69,12 +101,13 @@ function mapPriority(p) {
   return undefined;
 }
 
-// Converte data Ummense ("2026-04-08 12:09:17") pra ISO 8601
+// Converte data Ummense ("2026-04-08 12:09:17") pra ISO 8601 UTC com Z.
+// Zod .datetime() default rejeita offsets (-03:00), so aceita Z.
 function toIso(d) {
   if (!d) return null;
-  // Ummense usa "YYYY-MM-DD HH:MM:SS" sem timezone — assume BRT
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d)) {
-    return d.replace(' ', 'T') + '-03:00';
+    // Interpreta como BRT (UTC-3) e converte pra UTC
+    return new Date(d.replace(' ', 'T') + '-03:00').toISOString();
   }
   return d;
 }
@@ -94,8 +127,24 @@ async function api(ep, opts = {}, retries = 3) {
     const t = await r.text();
     let b;
     try { b = t ? JSON.parse(t) : null; } catch { b = t; }
+
+    // Token expirou: re-loga e tenta de novo (sem consumir retry)
+    if (r.status === 401 && TOKEN) {
+      console.log('[auth] 401 — re-logando');
+      await login();
+      continue;
+    }
     if (r.status === 429 && attempt < retries) {
       await sleep([1000, 3000, 8000][attempt]);
+      continue;
+    }
+    // Resiliencia a deploys CI/CD em andamento (Caddy retorna 502/503/504
+    // enquanto o container API esta reiniciando). Backoff progressivo —
+    // espera 5/15/30s pra alinhar com tempo tipico de boot do Nest.
+    if ([502, 503, 504].includes(r.status) && attempt < retries) {
+      const wait = [5000, 15000, 30000][attempt] ?? 30000;
+      console.log(`[net] ${r.status} em ${ep}, esperando ${wait}ms (tentativa ${attempt + 1}/${retries})`);
+      await sleep(wait);
       continue;
     }
     if (!r.ok) {
@@ -118,6 +167,7 @@ async function getCardByCode(code) {
 }
 
 async function main() {
+  await login();
   const stats = {
     flows: 0,
     cardsTotal: 0,
@@ -147,28 +197,37 @@ async function main() {
       }
       stats.cardsMatched++;
 
-      // 2. Verifica se ja tem checklist "Tarefas" (idempotencia)
-      const existingChecklist = (ktaskCard.checklists || []).find(
+      // 2. Reutiliza checklist "Tarefas" se ja existe (com items ou nao);
+      //    se a anterior tem items na mesma quantidade do JSON, pula.
+      let checklist = (ktaskCard.checklists || []).find(
         (c) => c.title?.toLowerCase() === 'tarefas',
       );
-      if (existingChecklist) {
+      if (checklist && (checklist.items?.length ?? 0) >= card.tasks.length) {
         stats.cardsSkipped++;
         continue;
       }
 
-      // 3. Cria checklist
       try {
-        const checklist = await api('/checklists', {
-          method: 'POST',
-          body: JSON.stringify({ cardId: ktaskCard.id, title: 'Tarefas' }),
-        });
-        stats.checklistsCreated++;
+        if (!checklist) {
+          checklist = await api('/checklists', {
+            method: 'POST',
+            body: JSON.stringify({ cardId: ktaskCard.id, title: 'Tarefas' }),
+          });
+          stats.checklistsCreated++;
+        }
 
-        // 4. Cria items na ordem (positionProject ASC)
+        // 4. Cria items na ordem (positionProject ASC), pulando os
+        // que ja existem (match por texto exato) — evita duplicar em
+        // re-runs apos falha parcial.
+        const existingTexts = new Set(
+          (checklist.items ?? []).map((i) => (i.text || '').trim().toLowerCase()),
+        );
         const sorted = [...card.tasks].sort(
           (a, b) => (a.positionProject ?? 0) - (b.positionProject ?? 0),
         );
         for (const task of sorted) {
+          const taskText = (task.name || '').slice(0, 500).trim();
+          if (existingTexts.has(taskText.toLowerCase())) continue;
           try {
             const item = await api(`/checklists/${checklist.id}/items`, {
               method: 'POST',
@@ -219,7 +278,35 @@ async function main() {
   console.log('\nRelatorio salvo:', reportPath);
 }
 
-main().catch((e) => {
-  console.error('FATAL:', e.message);
-  process.exit(1);
-});
+// Auto-restart externo: se main() der throw (ex: 502 esgotou retries
+// internos), espera AUTO_RESTART_WAIT_MS e roda de novo. Cada re-run e
+// idempotente — dedup-por-texto pula cards/items ja processados, entao
+// retomar nao duplica.
+//
+// AUTO_RESTART_MAX_ATTEMPTS limita o numero de retentativas pra evitar
+// loop infinito. Default 50 (suficiente pra qualquer cenario real de
+// instabilidade de rede + dezenas de deploys).
+const AUTO_RESTART_MAX_ATTEMPTS = Number(process.env.AUTO_RESTART_MAX ?? 50);
+const AUTO_RESTART_WAIT_MS = Number(process.env.AUTO_RESTART_WAIT_MS ?? 60_000);
+
+(async () => {
+  for (let attempt = 1; attempt <= AUTO_RESTART_MAX_ATTEMPTS; attempt++) {
+    try {
+      console.log(`\n=== Tentativa ${attempt}/${AUTO_RESTART_MAX_ATTEMPTS} ===`);
+      await main();
+      console.log('\n✓ Import concluido com sucesso.');
+      process.exit(0);
+    } catch (e) {
+      console.error(`FATAL na tentativa ${attempt}:`, e.message);
+      if (attempt >= AUTO_RESTART_MAX_ATTEMPTS) {
+        console.error('Max tentativas atingido. Desistindo.');
+        process.exit(1);
+      }
+      console.log(`Esperando ${AUTO_RESTART_WAIT_MS}ms antes de retomar...`);
+      await sleep(AUTO_RESTART_WAIT_MS);
+      // Reseta token pra forcar re-login (token pode ter expirado durante
+      // o down do API).
+      TOKEN = null;
+    }
+  }
+})();

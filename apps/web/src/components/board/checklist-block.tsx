@@ -291,7 +291,17 @@ function ChecklistSection({
   });
 
   const addMut = useMutation({
-    mutationFn: () => addChecklistItem(checklist.id, newItemText.trim()),
+    mutationFn: () => {
+      // Default: prazo = hoje (00:00 BRT local). User pode trocar clicando
+      // no DueDatePicker da linha depois. Mesmo padrão do InlineAddTaskRow
+      // da home pessoal.
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      return addChecklistItem(checklist.id, {
+        text: newItemText.trim(),
+        dueDate: today.toISOString(),
+      });
+    },
     onSuccess: () => {
       setNewItemText('');
       setAddingItem(false);
