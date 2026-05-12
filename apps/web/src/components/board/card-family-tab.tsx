@@ -28,6 +28,7 @@ import { formatRelativeTime } from '@/lib/prose';
 import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
 import { CreateChildCardDialog } from './create-child-card-dialog';
+import { SetParentCardDialog } from './set-parent-card-dialog';
 
 /**
  * Aba "Família" do card — layout em árvore com indentação progressiva.
@@ -46,6 +47,7 @@ import { CreateChildCardDialog } from './create-child-card-dialog';
 export function CardFamilyTab({ card }: { card: CardDetail }) {
   const familyQuery = useQuery({ ...cardFamilyQuery(card.id) });
   const [createOpen, setCreateOpen] = useState(false);
+  const [setParentOpen, setSetParentOpen] = useState(false);
 
   const family = familyQuery.data;
   const parent = family?.parent ?? null;
@@ -65,14 +67,26 @@ export function CardFamilyTab({ card }: { card: CardDetail }) {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium"
-        >
-          <Plus size={14} />
-          Criar card filho
-        </button>
+        <div className="flex items-center gap-2">
+          {!parent && (
+            <button
+              type="button"
+              onClick={() => setSetParentOpen(true)}
+              className="border-border bg-bg hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
+            >
+              <LinkIcon size={14} />
+              Tornar filho de…
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium"
+          >
+            <Plus size={14} />
+            Criar card filho
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5 px-4 py-5 sm:px-6">
@@ -120,6 +134,7 @@ export function CardFamilyTab({ card }: { card: CardDetail }) {
       </div>
 
       <CreateChildCardDialog parent={card} open={createOpen} onOpenChange={setCreateOpen} />
+      <SetParentCardDialog card={card} open={setParentOpen} onOpenChange={setSetParentOpen} />
     </div>
   );
 }
