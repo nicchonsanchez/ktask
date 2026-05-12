@@ -631,6 +631,11 @@ model CardApproval {
   note                   String? // nota da decisão; obrigatória pra REJECTED
   defaultOnApproveListId String? // fallback: move card pra esta lista ao APROVAR
   defaultOnRejectListId  String? // fallback: move card pra esta lista ao REPROVAR
+  /// Acoes alem do move ao APROVAR. Shape:
+  /// { addTagIds: string[], removeTagIds: string[] }
+  onApproveActions       Json?
+  /// Idem pra REPROVAR.
+  onRejectActions        Json?
   /// JSON com side-effects executados pela decisão. Usado pra rollback no undo.
   /// Shape: { automationRunIds: string[], movedFromListId?: string,
   ///          createdChecklistItemIds?: string[], createdCommentIds?: string[],

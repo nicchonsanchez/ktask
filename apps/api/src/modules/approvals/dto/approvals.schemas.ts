@@ -25,6 +25,17 @@ export const ReviewerInputSchema = z
   });
 export type ReviewerInput = z.infer<typeof ReviewerInputSchema>;
 
+/** Acoes automaticas a executar quando o reviewer decidir. Permite
+ *  configurar a aprovacao pra adicionar/remover tags alem de mover o
+ *  card (que ja existia via defaultOn*ListId). */
+const DefaultActionsSchema = z
+  .object({
+    addTagIds: z.array(z.string().cuid()).max(20).optional(),
+    removeTagIds: z.array(z.string().cuid()).max(20).optional(),
+  })
+  .strict();
+export type DefaultApprovalActions = z.infer<typeof DefaultActionsSchema>;
+
 export const RequestApprovalSchema = z.object({
   reviewers: z.array(ReviewerInputSchema).min(1).max(10),
   /** Mensagem opcional pro reviewer (vai junto no WhatsApp/inbox). */
@@ -33,6 +44,10 @@ export const RequestApprovalSchema = z.object({
   defaultOnApproveListId: z.string().min(1).optional(),
   /** Lista pra mover o card automaticamente ao reprovar (fallback). */
   defaultOnRejectListId: z.string().min(1).optional(),
+  /** Tags a adicionar/remover ao aprovar. */
+  onApproveActions: DefaultActionsSchema.optional(),
+  /** Tags a adicionar/remover ao reprovar. */
+  onRejectActions: DefaultActionsSchema.optional(),
   /** Quando true, dispara WhatsApp pros reviewers que tiverem phone configurado. */
   notifyOnWhatsApp: z.boolean().default(true),
 });

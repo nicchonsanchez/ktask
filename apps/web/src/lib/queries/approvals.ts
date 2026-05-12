@@ -54,11 +54,18 @@ export interface ReviewerInputDTO {
   externalName?: string;
 }
 
+export interface ApprovalActionsDTO {
+  addTagIds?: string[];
+  removeTagIds?: string[];
+}
+
 export interface RequestApprovalInput {
   reviewers: ReviewerInputDTO[];
   message?: string;
   defaultOnApproveListId?: string;
   defaultOnRejectListId?: string;
+  onApproveActions?: ApprovalActionsDTO;
+  onRejectActions?: ApprovalActionsDTO;
   notifyOnWhatsApp?: boolean;
 }
 

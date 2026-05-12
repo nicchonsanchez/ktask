@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, MessageCircle, Phone, Trash2, User, X } from 'lu
 
 import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import { boardsQueries } from '@/lib/queries/boards';
+import { labelsQueries } from '@/lib/queries/labels';
 import { membersQueries } from '@/lib/queries/members';
 import { requestApproval, type ReviewerInputDTO } from '@/lib/queries/approvals';
 import { ApiError } from '@/lib/api-client';
@@ -41,10 +42,16 @@ export function RequestApprovalDialog({
   const [message, setMessage] = useState('');
   const [defaultOnApproveListId, setDefaultOnApproveListId] = useState<string>('');
   const [defaultOnRejectListId, setDefaultOnRejectListId] = useState<string>('');
+  // Tags a adicionar/remover (CUIDs de labels do board) ao aprovar/reprovar.
+  const [onApproveAddTagIds, setOnApproveAddTagIds] = useState<string[]>([]);
+  const [onApproveRemoveTagIds, setOnApproveRemoveTagIds] = useState<string[]>([]);
+  const [onRejectAddTagIds, setOnRejectAddTagIds] = useState<string[]>([]);
+  const [onRejectRemoveTagIds, setOnRejectRemoveTagIds] = useState<string[]>([]);
   const [notifyOnWhatsApp, setNotifyOnWhatsApp] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const boardQ = useQuery({ ...boardsQueries.detail(boardId) });
+  const labelsQ = useQuery({ ...labelsQueries.byBoard(boardId), enabled: open });
 
   useEffect(() => {
     if (open) {
@@ -52,6 +59,10 @@ export function RequestApprovalDialog({
       setMessage('');
       setDefaultOnApproveListId('');
       setDefaultOnRejectListId('');
+      setOnApproveAddTagIds([]);
+      setOnApproveRemoveTagIds([]);
+      setOnRejectAddTagIds([]);
+      setOnRejectRemoveTagIds([]);
       setNotifyOnWhatsApp(true);
       setError(null);
     }
@@ -73,14 +84,31 @@ export function RequestApprovalDialog({
   }
 
   const mut = useMutation({
-    mutationFn: () =>
-      requestApproval(cardId, {
+    mutationFn: () => {
+      const onApproveActions =
+        onApproveAddTagIds.length > 0 || onApproveRemoveTagIds.length > 0
+          ? {
+              ...(onApproveAddTagIds.length > 0 ? { addTagIds: onApproveAddTagIds } : {}),
+              ...(onApproveRemoveTagIds.length > 0 ? { removeTagIds: onApproveRemoveTagIds } : {}),
+            }
+          : undefined;
+      const onRejectActions =
+        onRejectAddTagIds.length > 0 || onRejectRemoveTagIds.length > 0
+          ? {
+              ...(onRejectAddTagIds.length > 0 ? { addTagIds: onRejectAddTagIds } : {}),
+              ...(onRejectRemoveTagIds.length > 0 ? { removeTagIds: onRejectRemoveTagIds } : {}),
+            }
+          : undefined;
+      return requestApproval(cardId, {
         reviewers: reviewers.map((r) => r.data),
         message: message.trim() || undefined,
         defaultOnApproveListId: defaultOnApproveListId || undefined,
         defaultOnRejectListId: defaultOnRejectListId || undefined,
+        onApproveActions,
+        onRejectActions,
         notifyOnWhatsApp,
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
       queryClient.invalidateQueries({ queryKey: ['cards', cardId, 'approvals'] });
@@ -202,26 +230,64 @@ export function RequestApprovalDialog({
 
           <details className="border-border bg-bg-muted/20 rounded-md border">
             <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium">
-              Mover card automaticamente conforme a decisão
+              Ações automáticas conforme a decisão
             </summary>
-            <div className="flex flex-col gap-3 px-3 pb-3 pt-1">
-              <ListSelect
-                label="Quando aprovar, mover pra"
-                value={defaultOnApproveListId}
-                onChange={setDefaultOnApproveListId}
-                lists={lists}
-                emptyLabel="(não mover)"
-              />
-              <ListSelect
-                label="Quando reprovar, mover pra"
-                value={defaultOnRejectListId}
-                onChange={setDefaultOnRejectListId}
-                lists={lists}
-                emptyLabel="(não mover)"
-              />
+            <div className="flex flex-col gap-4 px-3 pb-3 pt-1">
+              {/* Bloco APROVAR */}
+              <div className="flex flex-col gap-2">
+                <p className="text-fg text-[11px] font-semibold uppercase tracking-wide">
+                  Quando aprovar
+                </p>
+                <ListSelect
+                  label="Mover pra"
+                  value={defaultOnApproveListId}
+                  onChange={setDefaultOnApproveListId}
+                  lists={lists}
+                  emptyLabel="(não mover)"
+                />
+                <LabelMultiSelect
+                  label="Adicionar etiquetas"
+                  labels={labelsQ.data ?? []}
+                  selected={onApproveAddTagIds}
+                  onChange={setOnApproveAddTagIds}
+                />
+                <LabelMultiSelect
+                  label="Remover etiquetas"
+                  labels={labelsQ.data ?? []}
+                  selected={onApproveRemoveTagIds}
+                  onChange={setOnApproveRemoveTagIds}
+                />
+              </div>
+
+              {/* Bloco REPROVAR */}
+              <div className="border-border/40 flex flex-col gap-2 border-t pt-3">
+                <p className="text-fg text-[11px] font-semibold uppercase tracking-wide">
+                  Quando reprovar
+                </p>
+                <ListSelect
+                  label="Mover pra"
+                  value={defaultOnRejectListId}
+                  onChange={setDefaultOnRejectListId}
+                  lists={lists}
+                  emptyLabel="(não mover)"
+                />
+                <LabelMultiSelect
+                  label="Adicionar etiquetas"
+                  labels={labelsQ.data ?? []}
+                  selected={onRejectAddTagIds}
+                  onChange={setOnRejectAddTagIds}
+                />
+                <LabelMultiSelect
+                  label="Remover etiquetas"
+                  labels={labelsQ.data ?? []}
+                  selected={onRejectRemoveTagIds}
+                  onChange={setOnRejectRemoveTagIds}
+                />
+              </div>
+
               <p className="text-fg-subtle text-[11px] leading-relaxed">
-                As automações configuradas pra esses gatilhos (CARD_APPROVED / CARD_REJECTED) rodam
-                em sequência. Se preferir só rodar automações sem mover, deixe em branco.
+                Além disso, automações com gatilho CARD_APPROVED / CARD_REJECTED na coluna também
+                rodam em cadeia.
               </p>
             </div>
           </details>
@@ -302,6 +368,63 @@ function ListSelect({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/**
+ * Multi-select compacto de labels do board. Clicar num chip toggle
+ * sua presenca no array `selected`. Sem dropdown — mostra todas as
+ * labels em wrap.
+ */
+function LabelMultiSelect({
+  label,
+  labels,
+  selected,
+  onChange,
+}: {
+  label: string;
+  labels: Array<{ id: string; name: string; color: string }>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-fg-muted text-[11px] font-medium">{label}</label>
+      {labels.length === 0 ? (
+        <p className="text-fg-subtle text-[11px] italic">Nenhuma etiqueta no quadro.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {labels.map((l) => {
+            const on = selected.includes(l.id);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => toggle(l.id)}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  on
+                    ? 'border-transparent text-white'
+                    : 'border-border text-fg-muted hover:border-border-strong'
+                }`}
+                style={on ? { backgroundColor: l.color } : undefined}
+              >
+                {!on && (
+                  <span
+                    aria-hidden
+                    className="inline-block size-2 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                )}
+                {l.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { ApprovalStatus, Prisma } from '@prisma/client';
+import type { ApprovalStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -45,6 +46,8 @@ interface SideEffectsShape {
   movedFromListId?: string;
   movedToListId?: string;
   automationRunIds?: string[];
+  addedLabelIds?: string[];
+  removedLabelIds?: string[];
 }
 
 interface ApprovalEventPayload {
@@ -151,6 +154,12 @@ export class ApprovalsService {
           requestedById: userId,
           defaultOnApproveListId: body.defaultOnApproveListId ?? null,
           defaultOnRejectListId: body.defaultOnRejectListId ?? null,
+          onApproveActions: body.onApproveActions
+            ? (body.onApproveActions as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          onRejectActions: body.onRejectActions
+            ? (body.onRejectActions as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         },
       });
 
@@ -502,6 +511,41 @@ export class ApprovalsService {
           });
           sideEffects.movedFromListId = card.listId;
           sideEffects.movedToListId = targetListId;
+        }
+      }
+
+      // Aplica acoes default: add/remove tags configurados no pedido.
+      // Valida que os labels pertencem ao mesmo board do card e estao na Org.
+      const actions = (newStatus === 'APPROVED' ? a.onApproveActions : a.onRejectActions) as {
+        addTagIds?: string[];
+        removeTagIds?: string[];
+      } | null;
+      const addTagIds = Array.isArray(actions?.addTagIds) ? actions!.addTagIds : [];
+      const removeTagIds = Array.isArray(actions?.removeTagIds) ? actions!.removeTagIds : [];
+
+      if (addTagIds.length > 0) {
+        const validLabels = await tx.label.findMany({
+          where: {
+            id: { in: addTagIds },
+            organizationId: a.organizationId,
+            OR: [{ boardId: card.boardId }, { boardId: null }],
+          },
+          select: { id: true },
+        });
+        if (validLabels.length > 0) {
+          await tx.cardLabel.createMany({
+            data: validLabels.map((l) => ({ cardId: card.id, labelId: l.id })),
+            skipDuplicates: true,
+          });
+          sideEffects.addedLabelIds = validLabels.map((l) => l.id);
+        }
+      }
+      if (removeTagIds.length > 0) {
+        const removed = await tx.cardLabel.deleteMany({
+          where: { cardId: card.id, labelId: { in: removeTagIds } },
+        });
+        if (removed.count > 0) {
+          sideEffects.removedLabelIds = removeTagIds;
         }
       }
 
