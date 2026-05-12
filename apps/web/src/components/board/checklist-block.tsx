@@ -551,12 +551,16 @@ function ItemRow({
   }
 
   const priorityMeta = PRIORITY_META[item.priority];
-  const borderClass =
-    !item.isDone && item.priority !== 'NONE' ? `border-l-3 ${priorityMeta.borderClass}` : '';
+  const hasPriorityStripe = !item.isDone && item.priority !== 'NONE';
+  // Faixa esquerda colorida (border-l-4) + padding maior pra respiro
+  // entre a faixa e o checkbox. Sem prioridade fica pl-1 (sem deslocar
+  // visualmente).
+  const borderClass = hasPriorityStripe ? `border-l-4 ${priorityMeta.borderClass}` : '';
+  const paddingLeftClass = hasPriorityStripe ? 'pl-2' : 'pl-1';
 
   return (
     <li
-      className={`group/item hover:bg-bg-muted/60 -mx-1 flex items-center gap-2 rounded py-1 pl-1 pr-1 ${borderClass}`}
+      className={`group/item hover:bg-bg-muted/60 -mx-1 flex items-center gap-2 rounded py-1 pr-1 ${paddingLeftClass} ${borderClass}`}
     >
       <input
         type="checkbox"
