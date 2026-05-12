@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react';
 
 import {
   meQueries,
@@ -329,6 +329,10 @@ function FilteredDaySection({
     day: '2-digit',
     month: 'long',
   });
+  const [doneOpen, setDoneOpen] = useState(false);
+  const doneQuery = useQuery(meQueries.tasksDone(day));
+  const doneTasks = doneQuery.data ?? [];
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2 px-3 pb-1 pt-3 sm:px-4">
@@ -343,19 +347,52 @@ function FilteredDaySection({
           Limpar filtro
         </button>
       </div>
-      {tasks.length === 0 ? (
+      {tasks.length === 0 && doneTasks.length === 0 ? (
         <p className="text-fg-subtle px-4 py-6 text-center text-[12px] italic">
           Nenhuma tarefa atribuída a você nesse dia.
         </p>
       ) : (
-        tasks.map((t) => (
-          <TarefaRow
-            key={t.id}
-            task={t}
-            variant={inferVariantForDay(t.dueDate, day)}
-            readOnly={readOnly}
-          />
-        ))
+        <>
+          {tasks.length === 0 ? (
+            <p className="text-fg-subtle px-4 py-3 text-center text-[12px] italic">
+              Sem tarefas pendentes neste dia.
+            </p>
+          ) : (
+            tasks.map((t) => (
+              <TarefaRow
+                key={t.id}
+                task={t}
+                variant={inferVariantForDay(t.dueDate, day)}
+                readOnly={readOnly}
+              />
+            ))
+          )}
+
+          {doneTasks.length > 0 && (
+            <div className="border-border/40 border-t">
+              <button
+                type="button"
+                onClick={() => setDoneOpen((v) => !v)}
+                className="text-fg-muted hover:bg-bg-subtle/50 flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium sm:px-4"
+                aria-expanded={doneOpen}
+              >
+                {doneOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                <Check size={13} className="text-success" />
+                Concluídas ({doneTasks.length})
+              </button>
+              {doneOpen &&
+                doneTasks.map((t) => (
+                  <div key={t.id} className="opacity-70">
+                    <TarefaRow
+                      task={t}
+                      variant={inferVariantForDay(t.dueDate, day)}
+                      readOnly={readOnly}
+                    />
+                  </div>
+                ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

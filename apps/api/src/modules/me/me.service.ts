@@ -203,6 +203,116 @@ export class MeService {
   }
 
   /**
+   * GET /me/tasks/done?day=YYYY-MM-DD — tarefas concluidas do user com
+   * dueDate naquele dia (BRT). Usado quando o user filtra o calendario:
+   * mostra as concluidas numa secao colapsada abaixo das pendentes,
+   * pra dar visibilidade do que foi feito sem poluir a lista principal.
+   *
+   * Limite: 50 items (sanity check pra dias muito ativos).
+   */
+  async getTasksDoneByDay(userId: string, org: TenantContext, day: string) {
+    // Janela do dia em BRT — mesma logica de brtDayBoundaries mas pra
+    // uma data arbitraria, nao hoje.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+    if (!m) return [];
+    const [, yStr, monStr, dStr] = m;
+    const y = Number(yStr);
+    const mon = Number(monStr) - 1;
+    const d = Number(dStr);
+    // BRT 00:00 = UTC 03:00; BRT 24:00 = UTC do dia seguinte 03:00
+    const startUtc = new Date(Date.UTC(y, mon, d, 3, 0, 0, 0));
+    const endUtc = new Date(Date.UTC(y, mon, d + 1, 3, 0, 0, 0));
+
+    const baseWhereCl = {
+      assigneeId: userId,
+      isDone: true,
+      dueDate: { gte: startUtc, lt: endUtc },
+      checklist: {
+        card: {
+          organizationId: org.organizationId,
+          isArchived: false,
+          board: { isArchived: false },
+        },
+      },
+    } as const;
+    const baseWhereTask = {
+      assigneeId: userId,
+      isDone: true,
+      dueDate: { gte: startUtc, lt: endUtc },
+      organizationId: org.organizationId,
+    } as const;
+    const includeCl = {
+      checklist: {
+        include: {
+          card: {
+            select: {
+              id: true,
+              title: true,
+              boardId: true,
+              cardColor: true,
+              list: { select: { id: true, name: true } },
+              board: { select: { id: true, name: true, color: true } },
+            },
+          },
+        },
+      },
+    };
+
+    const [clDone, tDone] = await Promise.all([
+      this.prisma.checklistItem.findMany({
+        where: baseWhereCl,
+        include: includeCl,
+        orderBy: [{ doneAt: 'desc' }, { position: 'asc' }],
+        take: 50,
+      }),
+      this.prisma.task.findMany({
+        where: baseWhereTask,
+        orderBy: [{ doneAt: 'desc' }, { position: 'asc' }],
+        take: 50,
+      }),
+    ]);
+
+    type ClItem = (typeof clDone)[number];
+    type TItem = (typeof tDone)[number];
+    function mapCl(item: ClItem) {
+      return {
+        kind: 'checklist' as const,
+        id: item.id,
+        text: item.text,
+        isDone: item.isDone,
+        position: item.position,
+        dueDate: item.dueDate,
+        assigneeId: item.assigneeId,
+        doneAt: item.doneAt,
+        doneById: item.doneById,
+        checklistId: item.checklistId,
+        checklist: item.checklist,
+      };
+    }
+    function mapTask(item: TItem) {
+      return {
+        kind: 'standalone' as const,
+        id: item.id,
+        text: item.text,
+        isDone: item.isDone,
+        position: item.position,
+        dueDate: item.dueDate,
+        assigneeId: item.assigneeId,
+        doneAt: item.doneAt,
+        doneById: item.doneById,
+      };
+    }
+
+    // Ordena por doneAt desc — mais recentes em cima
+    const combined = [...clDone.map(mapCl), ...tDone.map(mapTask)].sort((a, b) => {
+      const da = a.doneAt?.getTime() ?? 0;
+      const db = b.doneAt?.getTime() ?? 0;
+      return db - da;
+    });
+    return combined.slice(0, 50);
+  }
+
+  /**
    * POST /me/tasks/bulk-reschedule-today — move o dueDate dos itens
    * informados pra hoje (00:00 BRT) em massa. Usado pelo atalho
    * "Atualizar todas as tarefas para hoje" da home.

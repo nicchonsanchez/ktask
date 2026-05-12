@@ -26,6 +26,17 @@ export class MeController {
     return this.me.getTasks(user.userId, org);
   }
 
+  @Get('tasks/done')
+  @ApiOperation({ summary: 'Tarefas concluidas do usuario com dueDate no dia (BRT)' })
+  getTasksDone(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query('day') day?: string,
+  ) {
+    if (!day) return [];
+    return this.me.getTasksDoneByDay(user.userId, org, day);
+  }
+
   @Post('tasks/bulk-reschedule-today')
   @ApiOperation({ summary: 'Move o dueDate de várias tarefas pra hoje (00:00 BRT)' })
   bulkRescheduleToday(

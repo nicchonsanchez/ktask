@@ -244,13 +244,15 @@ function ChecklistSection({
   // Doc 50: ao criar uma lista nova, parent (ChecklistBlock) marca esta
   // como auto-open. Abre o textarea de "Adicionar tarefa" focado e
   // consome o flag pra nao reabrir ao re-render.
+  // Deps intencionalmente minimas: so reage a transicao do flag
+  // autoOpenAddItem; addingItem e onAutoOpenConsumed sao lidos no
+  // momento da mudanca sem precisar re-disparar o effect.
   useEffect(() => {
     if (autoOpenAddItem && !addingItem) {
       setAddingItem(true);
       onAutoOpenConsumed?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenAddItem]);
+  }, [autoOpenAddItem, addingItem, onAutoOpenConsumed]);
 
   const renameMut = useMutation({
     mutationFn: (t: string) => renameChecklist(checklist.id, t),

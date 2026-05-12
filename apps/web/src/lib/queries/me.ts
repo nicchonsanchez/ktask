@@ -103,6 +103,11 @@ export const meQueries = {
     queryKey: ['me', 'tasks'] as const,
     queryFn: () => api.get<MeTasksResponse>('/api/v1/me/tasks'),
   }),
+  tasksDone: (day: string) => ({
+    queryKey: ['me', 'tasks', 'done', day] as const,
+    queryFn: () => api.get<MeTask[]>(`/api/v1/me/tasks/done?day=${day}`),
+    enabled: Boolean(day),
+  }),
   recentCards: () => ({
     queryKey: ['me', 'recent-cards'] as const,
     queryFn: () => api.get<RecentCardItem[]>('/api/v1/me/recent-cards'),
