@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Bell, Search, ChevronDown, Sparkles } from 'lucide-react';
+import { Bell, Search, ChevronDown } from 'lucide-react';
 import { DEMO_VIEWER } from './_data';
 
 /**
@@ -51,14 +51,6 @@ export function DemoTopbar({
               aria-hidden
               className="hidden dark:block"
             />
-          </Link>
-
-          {/* Badge DEMO */}
-          <Link
-            href="/demo"
-            className="hidden items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-400 hover:bg-violet-500/20 sm:inline-flex"
-          >
-            <Sparkles size={10} /> Demo
           </Link>
 
           {/* Nav primary */}
