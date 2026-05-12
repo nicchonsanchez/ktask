@@ -36,9 +36,10 @@ import { BookmarkPlus, FileText } from 'lucide-react';
 
 export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: string }) {
   const queryClient = useQueryClient();
-  const [adding, setAdding] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  // ID da lista recém-criada — usada pra ChecklistSection autodirecionar
+  // foco pro input de adicionar tarefa (UX em 1 passo).
+  const [autoOpenChecklistId, setAutoOpenChecklistId] = useState<string | null>(null);
   const notify = useNotify();
 
   function invalidate() {
@@ -50,13 +51,15 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
     mutationFn: () =>
       createChecklist({
         cardId: card.id,
-        title: newTitle.trim() || undefined,
+        // Default "Checklist" — user renomeia clicando no título depois.
+        // Pula o input de título (UX simplificada).
+        title: 'Checklist',
       }),
-    onSuccess: () => {
-      setAdding(false);
-      setNewTitle('');
+    onSuccess: (newChecklist) => {
+      setAutoOpenChecklistId(newChecklist.id);
       invalidate();
     },
+    onError: () => notify.error('Erro ao criar lista.'),
   });
 
   const applyTemplateMut = useMutation({
@@ -95,70 +98,37 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
           onChange={invalidate}
           list={listStub}
           boardId={boardId}
+          autoOpenAddItem={cl.id === autoOpenChecklistId}
+          onAutoOpenConsumed={() => setAutoOpenChecklistId(null)}
         />
       ))}
       {/* nota: AssigneePicker usa orgMembersQuery diretamente — qualquer membro
           da Org pode ser atribuído (mesmo critério do LeadPicker do card). */}
 
-      {adding ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            createMut.mutate();
-          }}
-          className="flex items-center gap-2"
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => createMut.mutate()}
+          disabled={createMut.isPending}
+          className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
         >
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setAdding(false);
-                setNewTitle('');
-              }
-            }}
-            placeholder="Título da lista"
-            maxLength={200}
-            className="bg-bg border-border focus-visible:ring-primary flex-1 rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2"
-          />
-          <Button type="submit" size="sm" disabled={createMut.isPending}>
-            {createMut.isPending && <Loader2 size={12} className="animate-spin" />}
-            Adicionar
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setAdding(false);
-              setNewTitle('');
-            }}
-          >
-            Cancelar
-          </Button>
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
-          >
+          {createMut.isPending ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
             <Plus size={12} />
-            Adicionar lista
-          </button>
-          <button
-            type="button"
-            onClick={() => setTemplatePickerOpen(true)}
-            className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
-            title="Aplicar checklist a partir de um template salvo"
-          >
-            <FileText size={12} />
-            Usar template
-          </button>
-        </div>
-      )}
+          )}
+          Adicionar lista
+        </button>
+        <button
+          type="button"
+          onClick={() => setTemplatePickerOpen(true)}
+          className="border-border/70 text-fg-muted hover:text-primary hover:border-primary/50 inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-xs font-medium transition-colors"
+          title="Aplicar checklist a partir de um template salvo"
+        >
+          <FileText size={12} />
+          Usar template
+        </button>
+      </div>
 
       {templatePickerOpen && (
         <TemplatePickerDialog
@@ -242,11 +212,17 @@ function ChecklistSection({
   onChange,
   list,
   boardId,
+  autoOpenAddItem,
+  onAutoOpenConsumed,
 }: {
   checklist: Checklist;
   onChange: () => void;
   list: ListWithCards;
   boardId: string;
+  /** Doc 50: quando true, abre o input de "Adicionar tarefa" automaticamente
+   *  (UX: criar lista pula o passo do título e ja foca em adicionar item). */
+  autoOpenAddItem?: boolean;
+  onAutoOpenConsumed?: () => void;
 }) {
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -264,6 +240,17 @@ function ChecklistSection({
 
   const [newItemText, setNewItemText] = useState('');
   const [addingItem, setAddingItem] = useState(false);
+
+  // Doc 50: ao criar uma lista nova, parent (ChecklistBlock) marca esta
+  // como auto-open. Abre o textarea de "Adicionar tarefa" focado e
+  // consome o flag pra nao reabrir ao re-render.
+  useEffect(() => {
+    if (autoOpenAddItem && !addingItem) {
+      setAddingItem(true);
+      onAutoOpenConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenAddItem]);
 
   const renameMut = useMutation({
     mutationFn: (t: string) => renameChecklist(checklist.id, t),
