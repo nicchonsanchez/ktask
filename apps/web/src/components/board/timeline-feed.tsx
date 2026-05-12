@@ -26,7 +26,7 @@ import {
   type Attachment,
   type CommentNode,
 } from '@/lib/queries/cards';
-import { ApiError } from '@/lib/api-client';
+import { ApiError, NetworkError } from '@/lib/api-client';
 import { formatRelativeTime, proseToPlainText } from '@/lib/prose';
 import { activityParts } from '@/lib/activity-format';
 import { renderInlineMentions } from '@/lib/mentions';
@@ -134,7 +134,16 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
         setError(`Alguns anexos falharam:\n${failed.join('\n')}`);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao enviar anotação.');
+      // Categoriza pra mensagem util ao user:
+      // - ApiError: usa mensagem do servidor (ex: validacao, permissao)
+      // - NetworkError: rede/CORS/offline — pt-BR ja vem boa do api-client
+      // - resto: bug do client, loga e mostra fallback generico
+      if (err instanceof ApiError || err instanceof NetworkError) {
+        setError(err.message);
+      } else {
+        console.error('[timeline submit]', err);
+        setError('Erro ao enviar anotação. Verifique o console pra detalhes.');
+      }
     } finally {
       setSubmitting(false);
     }
