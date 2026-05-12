@@ -12,9 +12,19 @@ import { useAuthStore } from '@/stores/auth-store';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
 
+/** YYYY-MM-DD do dia local (pra <input type=date>). */
+function todayLocalISODate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Dialog para criar uma tarefa standalone (sem vínculo a card) a partir
- * da home pessoal. Default assignee = caller; permite reatribuir.
+ * da home pessoal. Default assignee = caller; default prazo = hoje
+ * (user troca clicando no campo).
  */
 export function CreateTaskDialog({
   open,
@@ -29,14 +39,16 @@ export function CreateTaskDialog({
   const orgMembers = useQuery({ ...orgMembersQuery, enabled: open });
 
   const [text, setText] = useState('');
-  const [dueDate, setDueDate] = useState<string>(''); // YYYY-MM-DD do <input type=date>
+  // Default: hoje. User troca clicando no campo. Consistente com o
+  // quick-add da home e o add inline do ChecklistBlock.
+  const [dueDate, setDueDate] = useState<string>(() => todayLocalISODate());
   const [assigneeId, setAssigneeId] = useState<string>(user?.id ?? '');
 
   // Reset ao abrir
   useEffect(() => {
     if (open) {
       setText('');
-      setDueDate('');
+      setDueDate(todayLocalISODate());
       setAssigneeId(user?.id ?? '');
     }
   }, [open, user?.id]);
