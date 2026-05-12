@@ -1662,7 +1662,7 @@ export class CardsService {
     tenant: TenantContext,
     cardId: string,
     boardId: string,
-    input: { toListId: string; afterCardId?: string | null },
+    input: { toListId: string; afterCardId?: string | null; beforeCardId?: string | null },
   ) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
     await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
@@ -1679,14 +1679,38 @@ export class CardsService {
       throw new BadRequestException('Lista destino inválida pra este fluxo.');
     }
 
-    // Idempotência: se o card já está na coluna alvo, no-op.
-    if (presence.listId === input.toListId && !input.afterCardId) {
+    // Idempotência: só é no-op quando a posição também é "fim" (sem
+    // afterCardId nem beforeCardId). Reorder dentro da mesma lista
+    // (incluindo "mover pro topo" via beforeCardId) precisa passar.
+    if (presence.listId === input.toListId && !input.afterCardId && !input.beforeCardId) {
       return presence;
     }
 
-    // Posição: insere após afterCardId se passado, senão no fim da lista destino.
+    // Posição:
+    //   - beforeCardId  → entre o anterior e o alvo (insere antes do alvo)
+    //   - afterCardId   → entre o alvo e o seguinte (insere após o alvo)
+    //   - nenhum        → no fim da lista destino
     let position: number;
-    if (input.afterCardId) {
+    if (input.beforeCardId) {
+      const target = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId: input.beforeCardId, boardId } },
+      });
+      if (!target || target.listId !== input.toListId) {
+        throw new BadRequestException('beforeCardId inválido pra esta lista.');
+      }
+      const prev = await this.prisma.cardPresence.findFirst({
+        where: {
+          boardId,
+          listId: input.toListId,
+          removedAt: null,
+          position: { lt: target.position },
+          NOT: { cardId },
+        },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      position = computeInsertPosition(prev?.position ?? null, target.position);
+    } else if (input.afterCardId) {
       const after = await this.prisma.cardPresence.findUnique({
         where: { cardId_boardId: { cardId: input.afterCardId, boardId } },
       });

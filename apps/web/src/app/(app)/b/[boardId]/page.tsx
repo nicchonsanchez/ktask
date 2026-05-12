@@ -237,10 +237,11 @@ export default function BoardPage() {
     // Se droppou em outro card, reordena dentro da lista
     const overIsCard = cardIdToListId.has(overId);
     let afterCardId: string | null = null;
+    let beforeCardId: string | null = null;
     let toListId = activeListId;
 
     if (overIsCard && overId !== activeId) {
-      // Reorder: pegar índice do card alvo e usar o anterior como afterCardId
+      // Reorder: pegar índice do card alvo
       const overListId = cardIdToListId.get(overId)!;
       toListId = overListId;
       const destList2 = board.lists.find((l) => l.id === overListId);
@@ -264,7 +265,14 @@ export default function BoardPage() {
             }
             return next;
           });
-          afterCardId = overIndex > 0 ? (destList2.cards[overIndex - 1]?.id ?? null) : null;
+          // overIndex===0 → mover pro topo: usa beforeCardId pra evitar no-op
+          // do backend (que trata afterCardId:null como "fim", e mesma-lista
+          // + afterCardId:null como no-op).
+          if (overIndex === 0) {
+            beforeCardId = overId;
+          } else {
+            afterCardId = destList2.cards[overIndex - 1]?.id ?? null;
+          }
         }
       }
     }
@@ -273,7 +281,7 @@ export default function BoardPage() {
       // Multi-fluxo: move por presença no board atual (não no Card.boardId
       // primário). Permite arrastar cards vinculados em fluxos não-primários
       // sem afetar a posição em outros fluxos.
-      await moveCardInFlow(activeId, boardId, { toListId, afterCardId });
+      await moveCardInFlow(activeId, boardId, { toListId, afterCardId, beforeCardId });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Erro ao mover card.';
       console.error('[board] move failed:', msg);

@@ -125,7 +125,7 @@ export function unlinkCardFromFlow(cardId: string, boardId: string) {
 export function moveCardInFlow(
   cardId: string,
   boardId: string,
-  input: { toListId: string; afterCardId?: string | null },
+  input: { toListId: string; afterCardId?: string | null; beforeCardId?: string | null },
 ) {
   return api.patch(`/api/v1/cards/${cardId}/flows/${boardId}/move`, input);
 }
