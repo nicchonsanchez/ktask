@@ -92,10 +92,36 @@ const TYPE_MAP = {
   AutomationRemoveTags: 'REMOVE_TAGS',
   AutomationChangeStatusCard: 'SET_CARD_STATUS',
   AutomationAddManager: 'SET_LEAD',
-  // PENDENTES (anotados em tarefas-md/47-automacoes-pendentes.md):
-  // AutomationAlertTimeExceeded, AutomationAlertLastInteraction,
-  // AutomationSendEmail, AutomationAddCustomFieldsInProject,
-  // AutomationUpdateStep, AutomationCreateProjectParent
+  AutomationUpdateStep: 'MOVE_CARD',
+  AutomationCreateProjectParent: 'CREATE_CHILD_CARD', // semantica invertida — Ummense cria pai, KTask cria filho
+  AutomationAlertTimeExceeded: 'FLAG_OVERDUE', // handler stub no engine — importa mas nao executa ate FLAG_OVERDUE ter handler
+  AutomationAlertLastInteraction: 'FLAG_OVERDUE',
+  AutomationAlertTodayDueDate: 'FLAG_DUE_TODAY',
+  AutomationSendEmail: 'SEND_EMAIL', // handler stub no engine
+  // SEM EQUIVALENTE no KTask (precisa feature nova):
+  // AutomationAddCustomFieldsInProject — KTask nao tem CustomFields
+};
+
+// Mapeia trigger por tipo Ummense. Default CARD_ENTERED.
+const TRIGGER_MAP = {
+  AutomationAlertTimeExceeded: 'TIME_IN_LIST',
+  AutomationAlertLastInteraction: 'TIME_NO_INTERACTION',
+  AutomationAlertTodayDueDate: 'DUE_DATE_TODAY',
+};
+
+// bg_color Ummense -> cor abstrata pro flag
+const FLAG_COLOR_MAP = {
+  'bg-orange1': 'orange',
+  'bg-yellow1': 'yellow',
+  'bg-pink1': 'pink',
+  'bg-red1': 'red',
+};
+
+// recipients[].value Ummense -> tipo abstrato KTask SEND_EMAIL
+const EMAIL_RECIPIENT_MAP = {
+  project_leader_column: 'LIST_LEADER',
+  project_leader_card: 'CARD_LEAD',
+  project_leader: 'CARD_LEAD',
 };
 
 // Ummense visibility -> KTask privacy
@@ -309,6 +335,60 @@ function mapAutomation(umm, board, stats) {
       actionConfig = { status };
       break;
     }
+    case 'AutomationUpdateStep': {
+      // structure = { flow_id, flow_column_id, flowColumn: { id, name }, isFinishFlow }
+      // Mapeia pra MOVE_CARD do mesmo board via nome da coluna.
+      const targetName = s?.flowColumn?.name;
+      if (!targetName) return null;
+      const targetList = resolveList(board, targetName);
+      if (!targetList) {
+        stats.listsNotFound.push({ board: board?.name, column: targetName, reason: 'UpdateStep destino' });
+        return null;
+      }
+      actionConfig = { targetListId: targetList.id, position: 'BOTTOM' };
+      break;
+    }
+    case 'AutomationCreateProjectParent': {
+      // ATENCAO: semantica invertida. KTask CREATE_CHILD_CARD cria filho;
+      // Ummense AutomationCreateProjectParent cria pai. Importamos como
+      // CHILD com aviso — comportamento sera "criar filho com nome composto".
+      const nameParts = Array.isArray(s?.name) ? s.name : [];
+      const titleTemplate = nameParts
+        .map((p) => (typeof p === 'string' ? p : p?.key === 'parent_name' ? '{{card.title}}' : ''))
+        .join('')
+        .trim() || 'Sub-tarefa de {{card.title}}';
+      actionConfig = {
+        titleTemplate,
+        copyLead: s?.leader === true,
+        copyTeam: s?.team === true,
+        copyTags: false, // Ummense nao tem flag explicita
+        copyDueDate: false,
+      };
+      break;
+    }
+    case 'AutomationAlertTimeExceeded':
+    case 'AutomationAlertLastInteraction': {
+      // structure = { bg_color }, period = { time, interval: 'hours'|'days'|'minutes' }
+      const color = FLAG_COLOR_MAP[s?.bg_color] ?? 'orange';
+      actionConfig = { flagColor: color };
+      break;
+    }
+    case 'AutomationAlertTodayDueDate': {
+      const color = FLAG_COLOR_MAP[s?.bg_color] ?? 'orange';
+      actionConfig = { flagColor: color };
+      break;
+    }
+    case 'AutomationSendEmail': {
+      // structure = { smtp, subject, body, recipients: [{ value }], files }
+      const recipientValue = s?.recipients?.[0]?.value;
+      const recipientType = EMAIL_RECIPIENT_MAP[recipientValue] ?? 'CARD_LEAD';
+      actionConfig = {
+        subject: typeof s?.subject === 'string' ? s.subject : '',
+        body: typeof s?.body === 'string' ? s.body : '',
+        recipientType,
+      };
+      break;
+    }
     case 'AutomationAddManager': {
       // structure = { userId: NumericUmmenseId, currentLeader: 'replace_and_add_in_team' }
       // userId é numérico — preciso achar pelo numero. Mas nao tenho mapa user_id Ummense -> nome
@@ -338,8 +418,23 @@ function mapAutomation(umm, board, stats) {
     return null;
   }
 
+  const trigger = TRIGGER_MAP[umm.name] ?? 'CARD_ENTERED';
+
+  // Pra triggers temporais, deriva minutes do period.
+  let triggerConfig;
+  if (trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION') {
+    const p = umm.period;
+    if (p?.time && p?.interval) {
+      const time = Number(p.time);
+      const mult = p.interval === 'minutes' ? 1 : p.interval === 'hours' ? 60 : p.interval === 'days' ? 1440 : 60;
+      if (!isNaN(time) && time > 0) triggerConfig = { minutes: time * mult };
+    }
+    if (!triggerConfig) triggerConfig = { minutes: 1440 }; // default 24h
+  }
+
   return {
-    trigger: 'CARD_ENTERED',
+    trigger,
+    ...(triggerConfig ? { triggerConfig } : {}),
     actionType,
     actionConfig,
     label: deriveLabel(umm),
@@ -358,6 +453,12 @@ function deriveLabel(umm) {
     AutomationRemoveTags: 'Remover etiquetas',
     AutomationChangeStatusCard: 'Mudar status',
     AutomationAddManager: 'Definir líder',
+    AutomationUpdateStep: 'Mover card pra outra coluna',
+    AutomationCreateProjectParent: 'Criar card vinculado',
+    AutomationAlertTimeExceeded: 'Sinalizar tempo excedido',
+    AutomationAlertLastInteraction: 'Sinalizar sem interação',
+    AutomationAlertTodayDueDate: 'Sinalizar prazo hoje',
+    AutomationSendEmail: 'Enviar e-mail',
   };
   return typeLabels[umm.name] ?? umm.name;
 }
