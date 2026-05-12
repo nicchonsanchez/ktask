@@ -180,7 +180,11 @@ async function api(ep, opts = {}, retries = 3) {
       const fields = b?.errors?.fields ? ' | ' + JSON.stringify(b.errors.fields) : '';
       throw new Error(r.status + ' ' + (opts.method || 'GET') + ' ' + ep + ': ' + msg + fields);
     }
-    await sleep(700);
+    // Throttle global do servidor: 100 req/60s = 1.67 req/s sustentado.
+    // 1500ms aqui + ~300ms de latencia = ~0.55 req/s — bem abaixo do limite,
+    // evita 429 em bursts de pulagem de cards ja feitos (auto-restart
+    // entra de novo no inicio da lista e dispara muitos GETs rapidos).
+    await sleep(1500);
     return b;
   }
 }
@@ -236,15 +240,14 @@ async function main() {
       }
       stats.cardsMatched++;
 
-      // 2. Reutiliza checklist "Tarefas" se ja existe (com items ou nao);
-      //    se a anterior tem items na mesma quantidade do JSON, pula.
+      // 2. Reutiliza checklist "Tarefas" se ja existe. Antes tinha um
+      // early-skip "items.length >= card.tasks.length" que dava falso
+      // positivo com JSON delta (card pode ter 50 items, JSON delta so
+      // 5 faltantes, 50 >= 5 = pula incorretamente). Removido — dedup-
+      // por-texto subsequente ja garante idempotencia.
       let checklist = (ktaskCard.checklists || []).find(
         (c) => c.title?.toLowerCase() === 'tarefas',
       );
-      if (checklist && (checklist.items?.length ?? 0) >= card.tasks.length) {
-        stats.cardsSkipped++;
-        continue;
-      }
 
       try {
         if (!checklist) {

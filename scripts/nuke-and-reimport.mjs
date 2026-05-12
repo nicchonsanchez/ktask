@@ -136,6 +136,7 @@ function isCsvEmpty(csv) {
   const initialBoards = await api('/boards');
   log('Total atual: ' + initialBoards.length);
   let deleted = 0;
+  let deleteErrors = 0;
   for (const b of initialBoards) {
     if (PRESERVE.has(b.name)) {
       log('  PRESERVANDO: ' + b.name);
@@ -144,15 +145,20 @@ function isCsvEmpty(csv) {
     try {
       await api('/boards/' + b.id + '/delete', {
         method: 'POST',
-        body: JSON.stringify({ strategy: 'delete-all' }),
+        body: JSON.stringify({ strategy: 'delete-all', confirmName: b.name }),
       });
-      log('  DELETADO: ' + b.name);
+      log('  DELETADO: ' + b.name + ' (' + b.id + ')');
       deleted++;
     } catch (e) {
-      log('  ERRO ao deletar ' + b.name + ': ' + e.message);
+      log('  ERRO ao deletar ' + b.name + ' (' + b.id + '): ' + e.message);
+      deleteErrors++;
     }
   }
-  log('\nBoards deletados: ' + deleted);
+  log('\nBoards deletados: ' + deleted + ' (erros: ' + deleteErrors + ')');
+  if (deleteErrors > 0) {
+    log('ABORTANDO — alguns deletes falharam, nao quero criar mais duplicatas.');
+    return;
+  }
 
   // ================ FASE 2: CRIA BOARDS DOS TEMPLATES ================
   sep('FASE 2: CRIA BOARDS A PARTIR DOS TEMPLATES');
