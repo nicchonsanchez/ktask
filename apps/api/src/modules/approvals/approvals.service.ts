@@ -339,9 +339,13 @@ export class ApprovalsService {
     if (reviewer.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: reviewer.userId },
-        select: { phone: true, notifyApprovalsOnWhatsApp: true },
+        select: { phone: true },
       });
-      if (user?.notifyApprovalsOnWhatsApp && user.phone) return user.phone;
+      // Para pedidos de aprovacao direcionados: o reviewer foi selecionado
+      // explicitamente, entao notifica se tem phone. O opt-in
+      // (notifyApprovalsOnWhatsApp) vale apenas pra notificacoes automaticas
+      // de fundo (cron de lembretes) — nao pra eventos solicitados pelo user.
+      if (user?.phone) return user.phone;
     }
     return null;
   }
@@ -556,6 +560,27 @@ export class ApprovalsService {
       actorId: decider.decidedById ?? undefined,
       cardId: updated.approval.cardId,
     });
+
+    // Quando a aprovacao moveu o card pra outra lista, emite CARD_MOVED
+    // pra UI Kanban animar a transicao em tempo real. CARD_UPDATED sozinho
+    // nao desloca o card visualmente.
+    const sideEff = updated.approval.sideEffects as SideEffectsShape | null;
+    if (sideEff?.movedToListId && sideEff?.movedFromListId) {
+      // Pega posicao final no destino (foi setada na update da tx acima).
+      const movedCard = await this.prisma.card.findUnique({
+        where: { id: updated.approval.cardId },
+        select: { position: true },
+      });
+      this.events.emit(EVENT_NAMES.CARD_MOVED, {
+        boardId: updated.card.boardId,
+        organizationId: updated.approval.organizationId,
+        actorId: decider.decidedById ?? undefined,
+        cardId: updated.approval.cardId,
+        fromListId: sideEff.movedFromListId,
+        toListId: sideEff.movedToListId,
+        position: movedCard?.position ?? 0,
+      });
+    }
 
     // Notifica o requester com contexto: quem decidiu + titulo do card +
     // nota opcional. Antes era so titulo generico ("Aprovacao concedida")
