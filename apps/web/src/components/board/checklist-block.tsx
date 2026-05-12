@@ -552,7 +552,7 @@ function ItemRow({
 
   const priorityMeta = PRIORITY_META[item.priority];
   const borderClass =
-    !item.isDone && item.priority !== 'NONE' ? `border-l-2 ${priorityMeta.borderClass}` : '';
+    !item.isDone && item.priority !== 'NONE' ? `border-l-3 ${priorityMeta.borderClass}` : '';
 
   return (
     <li
