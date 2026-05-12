@@ -157,9 +157,20 @@ async function api(ep, opts = {}, retries = 3) {
   }
 }
 
+/**
+ * Resolve ticket Ummense -> Card KTask DETALHADO (com checklists).
+ * by-code retorna apenas {id,boardId}; precisamos chamar GET /cards/:id
+ * pra ter o `checklists` populado e detectar duplicacao.
+ *
+ * Sem isso, o script crIA uma checklist "Tarefas" nova a cada execucao
+ * — bug que afetou 675 cards na 1a leva, corrigido por SQL de
+ * consolidacao (scripts/ops/_consolidate-duplicate-checklists.sql).
+ */
 async function getCardByCode(code) {
   try {
-    return await api('/cards/by-code/' + encodeURIComponent(code));
+    const ref = await api('/cards/by-code/' + encodeURIComponent(code));
+    if (!ref?.id) return null;
+    return await api('/cards/' + ref.id);
   } catch (e) {
     if (e.message.includes('404')) return null;
     throw e;

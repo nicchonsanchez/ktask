@@ -54,6 +54,7 @@ export function CardItem({ card }: { card: CardListItem }) {
   }
 
   const bgClass = isCardColor(card.cardColor) ? CARD_COLOR_BG[card.cardColor] : 'bg-bg';
+  const flagHex = flagHexFor(card.flagColor);
 
   return (
     <div
@@ -75,10 +76,18 @@ export function CardItem({ card }: { card: CardListItem }) {
       }}
       role="button"
       tabIndex={0}
-      className={`${bgClass} cursor-pointer rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-all hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1] ${
+      className={`${bgClass} relative cursor-pointer overflow-hidden rounded-lg p-3 text-left shadow-[0_1px_2px_rgba(15,15,20,0.06)] ring-1 ring-black/[0.05] transition-all hover:shadow-[0_2px_8px_rgba(15,15,20,0.08)] hover:ring-black/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4)] dark:ring-white/[0.06] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:hover:ring-white/[0.1] ${
         card.status === 'CANCELED' ? 'opacity-60 hover:opacity-100' : ''
       }`}
     >
+      {flagHex && (
+        <span
+          aria-hidden
+          title="Card sinalizado pela automação"
+          className="absolute inset-x-0 top-0 h-1"
+          style={{ backgroundColor: flagHex }}
+        />
+      )}
       <CardInner card={card} />
     </div>
   );
@@ -86,13 +95,37 @@ export function CardItem({ card }: { card: CardListItem }) {
 
 export function CardOverlay({ card }: { card: CardListItem }) {
   const bgClass = isCardColor(card.cardColor) ? CARD_COLOR_BG[card.cardColor] : 'bg-bg';
+  const flagHex = flagHexFor(card.flagColor);
   return (
     <div
-      className={`${bgClass} cursor-grabbing rounded-lg p-3 shadow-[0_8px_24px_rgba(15,15,20,0.18)] ring-1 ring-black/10 dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] dark:ring-white/10`}
+      className={`${bgClass} relative cursor-grabbing overflow-hidden rounded-lg p-3 shadow-[0_8px_24px_rgba(15,15,20,0.18)] ring-1 ring-black/10 dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] dark:ring-white/10`}
     >
+      {flagHex && (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1"
+          style={{ backgroundColor: flagHex }}
+        />
+      )}
       <CardInner card={card} />
     </div>
   );
+}
+
+/** Mapeia o flagColor armazenado no card pro hex de exibicao. */
+function flagHexFor(color: string | null): string | null {
+  switch (color) {
+    case 'orange':
+      return '#F97316';
+    case 'yellow':
+      return '#EAB308';
+    case 'pink':
+      return '#EC4899';
+    case 'red':
+      return '#EF4444';
+    default:
+      return null;
+  }
 }
 
 function CardInner({ card }: { card: CardListItem }) {

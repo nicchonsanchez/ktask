@@ -61,6 +61,13 @@ export class AutomationsEngine {
 
   @OnEvent(EVENT_NAMES.CARD_MOVED, { async: true })
   async onCardMoved(payload: CardMovedPayload) {
+    // Doc 47: limpa flag visual ao mudar de coluna — alerta nao deve
+    // "vazar" pra nova coluna. Idempotente: noop se flagColor ja null.
+    await this.prisma.card.updateMany({
+      where: { id: payload.cardId, flagColor: { not: null } },
+      data: { flagColor: null, flagAt: null },
+    });
+
     // Dispara automações dos dois lados: CARD_LEFT na origem + CARD_ENTERED no destino
     await Promise.all([
       this.dispatchTrigger({
@@ -332,15 +339,17 @@ export class AutomationsEngine {
         return this.handleSendWhatsApp(automation, cardId);
       case 'SET_PRIVACY':
         return this.handleSetPrivacy(automation, cardId);
+      case 'FLAG_OVERDUE':
+      case 'FLAG_DUE_TODAY':
+        return this.handleFlag(automation, cardId);
+      case 'SEND_EMAIL':
+        return this.handleSendEmail(automation, cardId);
 
       // Handlers ainda não implementados
       case 'FILL_FIELDS':
       case 'SAVE_DESCRIPTION_VERSION':
-      case 'SEND_EMAIL':
       case 'LINK_FLOW':
       case 'UNLINK_FLOW':
-      case 'FLAG_DUE_TODAY':
-      case 'FLAG_OVERDUE':
         await this.prisma.automationRun.updateMany({
           where: { automationId: automation.id, status: 'RUNNING' },
           data: { status: 'SKIPPED' },
@@ -1219,6 +1228,146 @@ export class AutomationsEngine {
    * fica SUCCESS com `delivered: false` pra debug, em vez de FAILED, pra
    * nao bloquear cadeias de automacao.
    */
+
+  /**
+   * FLAG_OVERDUE / FLAG_DUE_TODAY — seta uma cor de flag visual no card.
+   * Espelha o comportamento do Ummense AutomationAlertTimeExceeded/etc:
+   * destaca visualmente cards problematicos (prazo vencido, sem
+   * interacao, etc) sem alterar listId ou outros campos. Flag eh limpo
+   * automaticamente quando o card muda de lista (listener CARD_MOVED).
+   *
+   * actionConfig: { flagColor: 'orange'|'yellow'|'pink'|'red' }
+   */
+  private async handleFlag(automation: Automation, cardId: string): Promise<{ flagColor: string }> {
+    const config = automation.actionConfig as { flagColor?: string };
+    const validColors = ['orange', 'yellow', 'pink', 'red'];
+    const flagColor = validColors.includes(config.flagColor ?? '')
+      ? (config.flagColor as string)
+      : 'orange';
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { id: true, boardId: true, organizationId: true, flagColor: true },
+    });
+    if (!card) throw new Error('Card nao encontrado.');
+
+    // Idempotente: se ja esta na cor alvo, nao registra activity nem
+    // emite event (evita ruido em re-execucoes do scheduler).
+    if (card.flagColor === flagColor) {
+      return { flagColor };
+    }
+
+    await this.prisma.card.update({
+      where: { id: cardId },
+      data: { flagColor, flagAt: new Date() },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: 'CARD_UPDATED',
+        payload: {
+          kind: 'flag_set',
+          color: flagColor,
+          via: 'automation',
+          automationId: automation.id,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+    });
+
+    return { flagColor };
+  }
+
+  /**
+   * SEND_EMAIL — envia email com subject + body renderizados (Mustache
+   * simples). Destinatario resolvido conforme recipientType:
+   *   - CARD_LEAD: email do lead atual do card
+   *   - LIST_LEADER: lider da coluna (List.leadId quando existir; fallback CARD_LEAD)
+   *   - CUSTOM: emails fixos em config.customEmails[]
+   *
+   * Falha gracioso: run fica SUCCESS com delivered:false pra debug;
+   * nao quebra cadeia de automacao.
+   */
+  private async handleSendEmail(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ delivered: boolean; to: string | null; reason?: string }> {
+    const config = automation.actionConfig as {
+      subject?: string;
+      body?: string;
+      recipientType?: 'CARD_LEAD' | 'LIST_LEADER' | 'CUSTOM';
+      customEmails?: string[];
+    };
+    const subjectTpl = (config.subject ?? '').trim();
+    const bodyTpl = (config.body ?? '').trim();
+    if (!subjectTpl || !bodyTpl) {
+      return { delivered: false, to: null, reason: 'subject/body vazio' };
+    }
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      include: {
+        lead: { select: { id: true, name: true, email: true } },
+        list: { select: { id: true, name: true } },
+        board: { select: { id: true, name: true } },
+      },
+    });
+    if (!card) return { delivered: false, to: null, reason: 'card nao encontrado' };
+
+    // Resolve destinatario
+    const mode = config.recipientType ?? 'CARD_LEAD';
+    let to: string | null = null;
+    if (mode === 'CUSTOM') {
+      to =
+        (config.customEmails ?? []).find((e) => typeof e === 'string' && e.includes('@')) ?? null;
+    } else if (mode === 'LIST_LEADER' || mode === 'CARD_LEAD') {
+      // KTask nao tem 'lead da lista' formal — fallback pro lead do card.
+      to = card.lead?.email ?? null;
+    }
+    if (!to) {
+      return { delivered: false, to: null, reason: `sem destinatario (${mode})` };
+    }
+
+    // Render Mustache simples
+    const vars: Record<string, string> = {
+      'card.title': card.title,
+      'card.list.name': card.list?.name ?? '',
+      'card.board.name': card.board?.name ?? '',
+      'card.lead.name': card.lead?.name ?? '',
+      // Aliases Ummense pra compatibilidade com templates importados
+      nome_do_card: card.title,
+      nome_do_destinatario: card.lead?.name ?? '',
+      cliente: card.lead?.name ?? '',
+    };
+    const subject = renderTemplate(subjectTpl, vars);
+    const body = renderTemplate(bodyTpl, vars);
+
+    // Importa MailService lazy via DI runtime — engine evita acoplamento
+    // direto. Caller usa eventEmitter pra delegar pro modulo Mail.
+    try {
+      this.events.emit('mail.send-direct', {
+        to,
+        subject,
+        html: body,
+        organizationId: card.organizationId,
+      });
+      return { delivered: true, to };
+    } catch (e) {
+      this.logger.warn(`SEND_EMAIL falhou ${cardId}: ${(e as Error).message}`);
+      return { delivered: false, to, reason: (e as Error).message };
+    }
+  }
+
   private async handleSendWhatsApp(
     automation: Automation,
     cardId: string,

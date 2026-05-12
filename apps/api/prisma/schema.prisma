@@ -506,6 +506,15 @@ model Card {
   /// agrupamento visual livre em vez de escala semantica de urgencia.
   /// ChecklistItem.priority continua existindo (escala real pra Home).
   cardColor         String?
+  /// Doc 47: flag visual setado por automation (FLAG_OVERDUE/FLAG_DUE_TODAY).
+  /// Valores: 'orange' | 'yellow' | 'pink' | 'red' | null. Espelha cores
+  /// que o Ummense usa nos bg_color (orange1, yellow1, pink1) — render
+  /// no card-item como faixa colorida no topo. Limpado quando o card
+  /// muda de coluna (event CARD_MOVED no engine) — alerta nao "vaza"
+  /// pra nova coluna.
+  flagColor         String?
+  /// Quando o flag foi setado. Usado pra ordenacao/exibicao.
+  flagAt            DateTime?
   coverAttachmentId String?
   startDate         DateTime?
   dueDate           DateTime?

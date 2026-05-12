@@ -41,6 +41,8 @@ export interface CardListItem {
   position: number;
   /** Cor decorativa livre (substituiu Priority). null = sem cor. */
   cardColor: string | null;
+  /** Doc 47: flag visual setado por automation (orange/yellow/pink/red). */
+  flagColor: string | null;
   /** Doc 25: privacidade do card (cadeado mostrado no mini se nao-PUBLIC). */
   privacy: CardPrivacy;
   /** Doc 42: status (icone no canto sup-direito do mini se nao-ACTIVE). */

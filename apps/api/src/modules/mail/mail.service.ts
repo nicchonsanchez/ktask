@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import nodemailer, { type Transporter } from 'nodemailer';
 
 import { env } from '@/config/env';
@@ -49,6 +50,27 @@ export class MailService implements OnModuleInit, OnModuleDestroy {
    * Subir excecao quebraria fluxos secundarios (convite tem link
    * copiavel como fallback).
    */
+  /**
+   * Doc 47: listener pro event 'mail.send-direct' usado por
+   * automations.engine.handleSendEmail. Evita acoplamento circular
+   * entre AutomationsModule e MailModule.
+   */
+  @OnEvent('mail.send-direct', { async: true })
+  async onSendDirect(payload: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    organizationId?: string;
+  }) {
+    await this.send({
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
+  }
+
   async send(params: {
     to: string;
     subject: string;
