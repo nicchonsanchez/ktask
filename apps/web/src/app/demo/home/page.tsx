@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { CheckCircle2, ChevronRight, Clock, Plus } from 'lucide-react';
+import { DemoProvider } from '../_DemoProvider';
 import { DemoTopbar } from '../_DemoTopbar';
 import { DEMO_TAREFAS_MARINA, DEMO_CARDS, DEMO_VIEWER } from '../_data';
 
@@ -11,6 +12,14 @@ import { DEMO_TAREFAS_MARINA, DEMO_CARDS, DEMO_VIEWER } from '../_data';
  * pendente com nome do card destacado).
  */
 export default function DemoHomePage() {
+  return (
+    <DemoProvider auth="marina">
+      <Painel />
+    </DemoProvider>
+  );
+}
+
+function Painel() {
   return (
     <>
       <DemoTopbar active="inicio" pendingApprovals={2} notificationsCount={3} />
