@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
-import type { ListWithCards } from '@/lib/queries/boards';
+import { boardsQueries, type ListWithCards } from '@/lib/queries/boards';
 import {
   automationsQueries,
   createAutomation,
@@ -150,6 +150,11 @@ export function CreateAutomationForm({
   const [flowPosition, setFlowPosition] = useState<'TOP' | 'BOTTOM'>(
     initial?.flowPosition ?? 'TOP',
   );
+  // MOVE_CARD: target list (CUID) e posicao no destino
+  const [moveTargetListId, setMoveTargetListId] = useState<string>(initial?.moveTargetListId ?? '');
+  const [movePosition, setMovePosition] = useState<'TOP' | 'BOTTOM'>(
+    initial?.movePosition ?? 'BOTTOM',
+  );
   // SEND_WHATSAPP: 3 modos de destinatário (lead do card / member da org / phone literal)
   const [waRecipientMode, setWaRecipientMode] = useState<
     'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT'
@@ -186,6 +191,8 @@ export function CreateAutomationForm({
     setCopyTags(next.copyTags);
     setCopyDueDate(next.copyDueDate);
     setFlowPosition(next.flowPosition);
+    setMoveTargetListId(next.moveTargetListId);
+    setMovePosition(next.movePosition);
     setWaRecipientMode(next.waRecipientMode);
     setWaUserId(next.waUserId);
     setWaPhone(next.waPhone);
@@ -203,6 +210,12 @@ export function CreateAutomationForm({
   // de tags/lead.
   const labelsQ = useQuery(labelsQueries.byBoard(boardId));
   const membersQ = useQuery(orgMembersQuery);
+  // Pra MOVE_CARD precisamos das listas do board (excluindo a atual,
+  // se houver — automation em coluna nao deve "mover" pra propria).
+  const boardQ = useQuery({
+    ...boardsQueries.detail(boardId),
+    enabled: actionType === 'MOVE_CARD',
+  });
   const contactsQ = useQuery({
     ...contactsQueries.list(),
     enabled: actionType === 'SEND_WHATSAPP',
@@ -226,6 +239,8 @@ export function CreateAutomationForm({
         copyTags,
         copyDueDate,
         flowPosition,
+        moveTargetListId,
+        movePosition,
         waRecipientMode,
         waUserId,
         waPhone,
@@ -286,6 +301,7 @@ export function CreateAutomationForm({
       teamUserIds,
       commentTemplate,
       childTitleTemplate,
+      moveTargetListId,
       waRecipientMode,
       waUserId,
       waPhone,
@@ -415,6 +431,16 @@ export function CreateAutomationForm({
 
           {actionType === 'UPDATE_FLOW_POSITION' && (
             <FlowPositionConfig value={flowPosition} onChange={setFlowPosition} />
+          )}
+
+          {actionType === 'MOVE_CARD' && (
+            <MoveCardConfig
+              lists={(boardQ.data?.lists ?? []).filter((l) => l.id !== list.id && !l.isArchived)}
+              targetListId={moveTargetListId}
+              onChangeTarget={setMoveTargetListId}
+              position={movePosition}
+              onChangePosition={setMovePosition}
+            />
           )}
 
           {actionType === 'SET_LEAD' && (
@@ -587,6 +613,8 @@ interface ConfigState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
+  moveTargetListId: string;
+  movePosition: 'TOP' | 'BOTTOM';
   waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
   waUserId: string;
   waPhone: string;
@@ -641,6 +669,8 @@ function buildActionConfig(
       };
     case 'UPDATE_FLOW_POSITION':
       return { position: s.flowPosition };
+    case 'MOVE_CARD':
+      return { targetListId: s.moveTargetListId, position: s.movePosition };
     case 'SET_LEAD':
       return { userId: s.leadUserId, replaceMode: s.leadReplaceMode };
     case 'ADD_TEAM':
@@ -682,6 +712,7 @@ function validateAction(
     teamUserIds: string[];
     commentTemplate: string;
     childTitleTemplate: string;
+    moveTargetListId: string;
     waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
     waUserId: string;
     waPhone: string;
@@ -698,6 +729,8 @@ function validateAction(
       return s.checklistItems.some((i) => i.text.trim().length > 0);
     case 'UPDATE_FLOW_POSITION':
       return true;
+    case 'MOVE_CARD':
+      return Boolean(s.moveTargetListId);
     case 'SET_LEAD':
       return Boolean(s.leadUserId);
     case 'ADD_TEAM':
@@ -770,6 +803,8 @@ interface InitialState {
   copyTags: boolean;
   copyDueDate: boolean;
   flowPosition: 'TOP' | 'BOTTOM';
+  moveTargetListId: string;
+  movePosition: 'TOP' | 'BOTTOM';
   waRecipientMode: 'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT';
   waUserId: string;
   waPhone: string;
@@ -901,6 +936,11 @@ function extractInitial(a: Automation): InitialState {
     copyTags: cfg.copyTags === true,
     copyDueDate: cfg.copyDueDate === true,
     flowPosition: cfg.position === 'BOTTOM' ? 'BOTTOM' : 'TOP',
+    moveTargetListId: typeof cfg.targetListId === 'string' ? (cfg.targetListId as string) : '',
+    movePosition:
+      a.actionType === 'MOVE_CARD' && cfg.position === 'TOP'
+        ? 'TOP'
+        : ('BOTTOM' as 'TOP' | 'BOTTOM'),
     waRecipientMode:
       a.actionType === 'SEND_WHATSAPP'
         ? cfg.useCardContacts === true
@@ -1569,6 +1609,76 @@ function FlowPositionConfig({
           <span className="text-fg text-[13px]">{opt.label}</span>
         </label>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Subform da action MOVE_CARD. Seletor de coluna alvo do mesmo board
+ * (a coluna atual e arquivadas sao filtradas) + posicao no destino.
+ */
+function MoveCardConfig({
+  lists,
+  targetListId,
+  onChangeTarget,
+  position,
+  onChangePosition,
+}: {
+  lists: Array<{ id: string; name: string; isFinalList?: boolean; isBacklog?: boolean }>;
+  targetListId: string;
+  onChangeTarget: (v: string) => void;
+  position: 'TOP' | 'BOTTOM';
+  onChangePosition: (v: 'TOP' | 'BOTTOM') => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <label className="text-fg-muted text-[11px] font-medium">Mover para</label>
+        <select
+          value={targetListId}
+          onChange={(e) => onChangeTarget(e.target.value)}
+          className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-2"
+        >
+          <option value="">(escolha a coluna)</option>
+          {lists.map((l) => {
+            const tag = l.isFinalList ? ' · final' : l.isBacklog ? ' · backlog' : '';
+            return (
+              <option key={l.id} value={l.id}>
+                {l.name}
+                {tag}
+              </option>
+            );
+          })}
+        </select>
+        {!targetListId && (
+          <p className="text-warning text-[11px]">Selecione uma coluna de destino.</p>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-fg-muted text-[11px] font-medium">Posição no destino</label>
+        <div className="flex gap-2">
+          {(['TOP', 'BOTTOM'] as const).map((p) => (
+            <label
+              key={p}
+              className={`flex flex-1 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] ${
+                position === p
+                  ? 'border-primary bg-primary-subtle/30'
+                  : 'border-border/60 hover:border-border-strong'
+              }`}
+            >
+              <input
+                type="radio"
+                name="move-position"
+                value={p}
+                checked={position === p}
+                onChange={() => onChangePosition(p)}
+                className="accent-primary"
+              />
+              {p === 'TOP' ? 'Topo' : 'Base'}
+            </label>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

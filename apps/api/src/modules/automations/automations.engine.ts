@@ -326,6 +326,8 @@ export class AutomationsEngine {
         return this.handleInsertChecklistGroup(automation, cardId);
       case 'UPDATE_FLOW_POSITION':
         return this.handleUpdateFlowPosition(automation, cardId);
+      case 'MOVE_CARD':
+        return this.handleMoveCard(automation, cardId);
       case 'SEND_WHATSAPP':
         return this.handleSendWhatsApp(automation, cardId);
       case 'SET_PRIVACY':
@@ -1097,6 +1099,110 @@ export class AutomationsEngine {
     const newPos = computeInsertPosition(last?.position ?? null, null);
     await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
     return { position: newPos };
+  }
+
+  /**
+   * MOVE_CARD — move o card pra outra lista do mesmo board.
+   * actionConfig: { targetListId: cuid, position?: 'TOP' | 'BOTTOM' }
+   *
+   * Validacoes:
+   *   - targetListId existe, mesmo board, nao arquivada
+   *   - nao move se ja esta na lista alvo (idempotente, retorna noop)
+   *
+   * Side effects:
+   *   - Atualiza listId + position + enteredListAt do card
+   *   - Emite CARD_MOVED pra UI Kanban reagir
+   *   - Cria Activity CARD_MOVED com payload via=automation
+   *
+   * Importante: a engine ja tem anti-loop via chainDepth. Se essa
+   * automation move pra coluna que tem outra automation CARD_ENTERED, a
+   * proxima dispatcha com chainDepth+1 — corta acima de 5.
+   */
+  private async handleMoveCard(
+    automation: Automation,
+    cardId: string,
+  ): Promise<{ movedToListId: string | null; skipped?: boolean; reason?: string }> {
+    const config = automation.actionConfig as {
+      targetListId?: string;
+      position?: 'TOP' | 'BOTTOM';
+    };
+    if (!config.targetListId) {
+      throw new Error('Lista de destino nao informada.');
+    }
+    const pos = config.position === 'TOP' ? 'TOP' : 'BOTTOM';
+
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { listId: true, boardId: true, organizationId: true },
+    });
+    if (!card) throw new Error('Card nao encontrado.');
+
+    if (card.listId === config.targetListId) {
+      return { movedToListId: null, skipped: true, reason: 'ja-na-lista' };
+    }
+
+    const target = await this.prisma.list.findUnique({
+      where: { id: config.targetListId },
+      select: { id: true, boardId: true, isArchived: true },
+    });
+    if (!target || target.boardId !== card.boardId || target.isArchived) {
+      return { movedToListId: null, skipped: true, reason: 'lista-invalida' };
+    }
+
+    let newPos: number;
+    if (pos === 'TOP') {
+      const first = await this.prisma.card.findFirst({
+        where: { listId: target.id, isArchived: false },
+        orderBy: { position: 'asc' },
+        select: { position: true },
+      });
+      newPos = computeInsertPosition(null, first?.position ?? null);
+    } else {
+      const last = await this.prisma.card.findFirst({
+        where: { listId: target.id, isArchived: false },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      newPos = computeInsertPosition(last?.position ?? null, null);
+    }
+
+    const fromListId = card.listId;
+    await this.prisma.card.update({
+      where: { id: cardId },
+      data: {
+        listId: target.id,
+        position: newPos,
+        enteredListAt: new Date(),
+      },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: 'CARD_MOVED',
+        payload: {
+          fromListId,
+          toListId: target.id,
+          via: 'automation',
+          automationId: automation.id,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_MOVED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+      fromListId,
+      toListId: target.id,
+      position: newPos,
+    });
+
+    return { movedToListId: target.id };
   }
 
   /**

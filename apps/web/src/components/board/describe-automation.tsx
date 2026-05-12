@@ -162,6 +162,13 @@ export function describeAutomationRich(automation: Automation, lookups: Lookups)
       return 'Mover para o topo da coluna';
     }
 
+    case 'MOVE_CARD': {
+      const targetListId = typeof cfg.targetListId === 'string' ? cfg.targetListId : null;
+      const pos = cfg.position === 'TOP' ? 'topo' : 'base';
+      if (!targetListId) return 'Mover para outra coluna (não configurada)';
+      return `Mover para outra coluna (${pos})`;
+    }
+
     default:
       return ACTION_FALLBACK[automation.actionType] ?? automation.actionType;
   }

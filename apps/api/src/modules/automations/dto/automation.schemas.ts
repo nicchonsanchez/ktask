@@ -63,6 +63,7 @@ export const AutomationActionTypeSchema = z.enum([
   'LINK_FLOW',
   'UNLINK_FLOW',
   'UPDATE_FLOW_POSITION',
+  'MOVE_CARD',
   'FLAG_DUE_TODAY',
   'FLAG_OVERDUE',
   'SET_PRIVACY',
