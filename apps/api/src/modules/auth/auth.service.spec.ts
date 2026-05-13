@@ -9,6 +9,7 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { UsersService } from '@/modules/users/users.service';
 import { InvitationsService } from '@/modules/organizations/invitations.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
 type MockedUser = {
   id: string;
@@ -106,6 +107,15 @@ describe('AuthService', () => {
           provide: MailService,
           useValue: {
             sendPasswordResetEmail: jest.fn(),
+            sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        // Doc 43+: WhatsApp como canal adicional do reset (forgotPassword).
+        // Mock vazio cobre testes que nao chamam forgotPassword.
+        {
+          provide: WhatsAppHelper,
+          useValue: {
+            sendText: jest.fn().mockResolvedValue(true),
           },
         },
       ],

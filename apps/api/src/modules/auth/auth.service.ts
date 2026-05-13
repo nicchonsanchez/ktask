@@ -15,6 +15,7 @@ import { TokenService } from '@/common/crypto/token.service';
 import { UsersService, type PublicUser } from '@/modules/users/users.service';
 import { InvitationsService } from '@/modules/organizations/invitations.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
 import type { JwtAccessPayload, LoginResult } from './auth.types';
 
@@ -76,6 +77,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly invitations: InvitationsService,
     private readonly mail: MailService,
+    private readonly whatsapp: WhatsAppHelper,
   ) {}
 
   /**
@@ -347,6 +349,22 @@ export class AuthService {
       .catch((err) => {
         this.logger.error(`[forgotPassword] mail failed pra ${user.email}: ${err.message}`);
       });
+
+    // Canal adicional: WhatsApp. Envia sempre que o user tem phone — cenario
+    // tipico de "esqueci senha" tambem inclui "perdi acesso ao email", entao
+    // WhatsApp e a 2a chance. Fire-and-forget identico ao email.
+    if (user.phone) {
+      const firstName = user.name.split(' ')[0] || user.name;
+      const msg =
+        `Olá ${firstName}, recebemos um pedido de redefinição da sua senha no KTask.\n\n` +
+        `Clique pra criar uma nova senha (válido por 1h):\n${resetUrl}\n\n` +
+        `Se não foi você, pode ignorar esta mensagem — sua senha atual continua valendo.`;
+      this.whatsapp.sendText(user.phone, msg).catch((err) => {
+        this.logger.error(
+          `[forgotPassword] whatsapp failed pra ${user.phone}: ${err.message ?? err}`,
+        );
+      });
+    }
 
     return { ok: true };
   }

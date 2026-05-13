@@ -7,6 +7,7 @@ import { env } from '@/config/env';
 import { UsersModule } from '@/modules/users/users.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
 import { MailModule } from '@/modules/mail/mail.module';
+import { WhatsAppModule } from '@/modules/whatsapp/whatsapp.module';
 
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     forwardRef(() => UsersModule),
     OrganizationsModule,
     MailModule,
+    WhatsAppModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: env.JWT_ACCESS_SECRET,
