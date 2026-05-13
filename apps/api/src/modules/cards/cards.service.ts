@@ -1081,9 +1081,20 @@ export class CardsService {
               undefined)
             : undefined;
 
+      // Increment atomico do counter da Org pra gerar shortCode unico.
+      // Mesmo padrao do create() principal — sem isso, card fica com
+      // shortCode null (bug que deixava 8 cards "invisiveis" no kanban).
+      const orgUpdated = await tx.organization.update({
+        where: { id: parent.organizationId },
+        data: { cardSequence: { increment: 1 } },
+        select: { cardSequence: true },
+      });
+      const shortCode = String(orgUpdated.cardSequence);
+
       const newCard = await tx.card.create({
         data: {
           organizationId: parent.organizationId,
+          shortCode,
           boardId: destBoardId,
           listId: destListId,
           title: input.title,
@@ -1095,6 +1106,18 @@ export class CardsService {
           position,
           createdById: userId,
           leadId: input.copyLead && parent.leadId ? parent.leadId : userId,
+        },
+      });
+
+      // Cria a presenca "primaria" pra esse card aparecer no kanban do
+      // board destino. Sem isso, o GET /boards/:id (que le de CardPresence)
+      // nao mostra o card — ele fica "invisivel" mas acessivel via link.
+      await tx.cardPresence.create({
+        data: {
+          cardId: newCard.id,
+          boardId: destBoardId,
+          listId: destListId,
+          position,
         },
       });
 
