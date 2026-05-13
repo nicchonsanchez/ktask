@@ -198,6 +198,12 @@ jobs:
             echo "[$i] api=$api_status web=$web_status"
             if [ "$api_status" = "healthy" ] && [ "$web_status" = "healthy" ]; then
               echo "--- deploy ok ---"
+              # Limpa imagens antigas (mantem so as em uso pelos containers
+              # ativos). Sem isso, deploys acumulam ~1.4GB de cache no
+              # disco a cada execucao — em semanas estoura o filesystem.
+              # Original: GHCR ja guarda todas as versoes pra rollback.
+              echo "--- limpando imagens nao-usadas ---"
+              docker image prune -af 2>&1 | tail -3 || true
               docker logout ghcr.io || true
               trap - EXIT
               exit 0
