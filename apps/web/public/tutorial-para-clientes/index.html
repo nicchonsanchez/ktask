@@ -445,21 +445,69 @@
     .toolbar button:hover { background: var(--violet-800); }
 
     /* ---------------- Print ---------------- */
-    @page { size: A4; margin: 12mm; }
+    /* @page sem margem — o padding interno do .page e' que controla.
+       Permite que a capa sangre ate' a borda do papel (com gradiente),
+       e mantem o mesmo respiro das seções normais. */
+    @page { size: A4; margin: 0; }
+
     @media print {
-      body { background: #fff; }
+      /* Forca todos os elementos a imprimir cores/gradientes/sombras de
+         fundo. Sem isso o Chrome/Edge tiram tudo pra "economizar tinta" —
+         a capa fica branca, callouts sem fundo, chips sem cor. */
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body {
+        background: #fff;
+        font-size: 14px; /* leve compactacao pra caber bem em A4 */
+      }
+
       .page {
         max-width: 100%;
         margin: 0;
-        padding: 0;
+        padding: 56px 60px 64px;       /* respiro generoso, similar ao site */
         box-shadow: none;
         page-break-after: always;
+        page-break-inside: avoid;
+        min-height: 100vh;
+        box-sizing: border-box;
       }
-      .cover { min-height: 100vh; padding: 60px 50px; }
-      .toolbar { display: none; }
+
+      /* Capa ocupa pagina inteira com sangria (bleed) ate' a borda */
+      .cover {
+        min-height: 100vh;
+        padding: 80px 60px 60px;
+        page-break-after: always;
+      }
+
+      /* Toolbar (botao "salvar como PDF") nao aparece no PDF final */
+      .toolbar { display: none !important; }
+
+      /* Headings forçam reaparecer com a cor da identidade */
       h2.section, .toc h2 { color: var(--violet-700) !important; }
-      figure.shot img { box-shadow: none; border: 1px solid #ddd; }
+
+      /* Evita que imagens dos prints sejam cortadas entre paginas */
+      figure.shot {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      figure.shot img {
+        box-shadow: 0 2px 8px rgba(0,0,0,.08);
+        border: 1px solid #e5e5e5;
+        max-height: none; /* destrava o cap de 90vh — em PDF o que importa e a altura util */
+      }
+
+      /* Steps, obs e pills mantem cor de fundo */
+      .obs, .pill, .cover-chip, .section-tag {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Links ficam pretos sem sublinhado (texto mais limpo no impresso) */
       a { color: var(--ink-900); text-decoration: none; }
+      .toc a { color: var(--ink-700); }
     }
 
     /* ---------------- Responsive ---------------- */
