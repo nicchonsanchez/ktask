@@ -521,15 +521,21 @@
       /* Headings forçam reaparecer com a cor da identidade */
       h2.section, .toc h2 { color: var(--violet-700) !important; }
 
-      /* Evita que imagens dos prints sejam cortadas entre paginas */
+      /* Evita que imagens dos prints sejam cortadas entre paginas. Cap de
+         altura conservador (80vh = ~237mm em A4) garante que imagem +
+         figcaption + respiro cabem numa pagina A4 (~270mm uteis). */
       figure.shot {
         page-break-inside: avoid;
-        break-inside: avoid;
+        break-inside: avoid-page;
       }
       figure.shot img {
         box-shadow: 0 2px 8px rgba(0,0,0,.08);
         border: 1px solid #e5e5e5;
-        max-height: none; /* destrava o cap de 90vh — em PDF o que importa e a altura util */
+        max-height: 80vh;
+        max-width: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
       }
 
       /* Steps, obs e pills mantem cor de fundo */
