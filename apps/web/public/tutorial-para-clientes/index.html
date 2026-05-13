@@ -424,13 +424,18 @@
     .shot-frame .shot-note  { color: var(--ink-500); font-size: 13px; margin-top: 12px; }
     .shot-frame code { background: #fff; }
 
-    /* Quando a imagem real for inserida, comentar a div .shot-frame e usar isso aqui: */
+    /* Imagens dos prints — sem forcar 100% width, pra prints verticais
+       (WhatsApp mobile) nao estourarem em altura. Centraliza horizontal,
+       limita a 90vh pra caber bem na tela sem precisar de scroll. */
     figure.shot img {
-      width: 100%;
+      width: auto;
       height: auto;
+      max-width: 100%;
+      max-height: 90vh;
       border-radius: 12px;
       box-shadow: 0 8px 24px rgba(0,0,0,.08);
       display: block;
+      margin: 0 auto;
     }
     figure.shot figcaption {
       font-size: 14px;
