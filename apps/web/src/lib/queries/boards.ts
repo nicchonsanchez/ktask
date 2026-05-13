@@ -122,9 +122,12 @@ export interface CompletedCardsPage {
 }
 
 export const boardsQueries = {
-  all: () => ({
-    queryKey: ['boards'] as const,
-    queryFn: () => api.get<BoardListItem[]>('/api/v1/boards'),
+  all: (opts: { includeArchived?: boolean } = {}) => ({
+    queryKey: ['boards', { includeArchived: !!opts.includeArchived }] as const,
+    queryFn: () =>
+      api.get<BoardListItem[]>(
+        opts.includeArchived ? '/api/v1/boards?includeArchived=true' : '/api/v1/boards',
+      ),
   }),
   detail: (boardId: string) => ({
     queryKey: ['boards', boardId] as const,

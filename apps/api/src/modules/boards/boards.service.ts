@@ -124,14 +124,23 @@ export class BoardsService {
    * (a diferença está no role efetivo: MEMBER → EDITOR, GUEST → VIEWER, conforme
    * resolveBoardRole). Board PRIVATE só aparece via BoardMember explícito.
    */
-  async listForUser(userId: string, tenant: TenantContext) {
+  async listForUser(
+    userId: string,
+    tenant: TenantContext,
+    opts: { includeArchived?: boolean } = {},
+  ) {
     const bypass = (ORG_ROLES_WITH_BOARD_BYPASS as readonly string[]).includes(tenant.role);
+    // Arquivados so aparecem pra quem pode desarquivar (OWNER/ADMIN/GESTOR =
+    // bypass). MEMBER/GUEST nunca recebem arquivados, mesmo passando ?includeArchived.
+    const showArchived = !!opts.includeArchived && bypass;
+
+    const archivedFilter: Prisma.BoardWhereInput = showArchived ? {} : { isArchived: false };
 
     const where: Prisma.BoardWhereInput = bypass
-      ? { organizationId: tenant.organizationId, isArchived: false }
+      ? { organizationId: tenant.organizationId, ...archivedFilter }
       : {
           organizationId: tenant.organizationId,
-          isArchived: false,
+          ...archivedFilter,
           OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
         };
 

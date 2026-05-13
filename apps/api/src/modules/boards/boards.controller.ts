@@ -39,8 +39,14 @@ export class BoardsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar quadros visíveis ao usuário na Org atual' })
-  list(@CurrentUser() user: AuthenticatedRequestContext, @CurrentOrg() org: TenantContext) {
-    return this.boards.listForUser(user.userId, org);
+  list(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query('includeArchived') includeArchived?: string,
+  ) {
+    return this.boards.listForUser(user.userId, org, {
+      includeArchived: includeArchived === 'true' || includeArchived === '1',
+    });
   }
 
   @Post()

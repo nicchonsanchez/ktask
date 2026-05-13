@@ -9,6 +9,8 @@ import { z } from 'zod';
 import {
   Activity as ActivityIcon,
   AlertTriangle,
+  Archive,
+  ArchiveRestore,
   CalendarClock,
   Clock,
   Globe2,
@@ -36,12 +38,21 @@ import {
   boardsQueries,
   createBoard,
   favoriteBoard,
+  restoreBoard,
   unfavoriteBoard,
   type BoardListItem,
 } from '@/lib/queries/boards';
 import { meQueries, type OrgActivityItem } from '@/lib/queries/me';
 import { UserAvatar } from '@/components/user-avatar';
-import { ApiError } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
+import type { OrgRole } from '@ktask/contracts';
+
+interface CurrentOrgRoleResponse {
+  id: string;
+  myRole: OrgRole;
+}
+
+const PRIVILEGED_ROLES: OrgRole[] = ['OWNER', 'ADMIN', 'GESTOR'];
 
 const CreateSchema = z.object({
   name: z.string().min(2, 'Mínimo 2 caracteres.').max(120),
@@ -50,36 +61,61 @@ const CreateSchema = z.object({
 type CreateInput = z.infer<typeof CreateSchema>;
 
 export default function BoardsPage() {
-  const boards = useQuery(boardsQueries.all());
+  const [showArchived, setShowArchived] = useState(false);
+  const orgQuery = useQuery({
+    queryKey: ['org', 'current'],
+    queryFn: () => api.get<CurrentOrgRoleResponse>('/api/v1/organizations/current'),
+  });
+  const canManageArchived = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
+
+  const boards = useQuery(
+    boardsQueries.all({ includeArchived: showArchived && canManageArchived }),
+  );
   const activity = useQuery(meQueries.orgActivity(8));
   const [open, setOpen] = useState(false);
 
+  const active = (boards.data ?? []).filter((b) => !b.isArchived);
+  const archived = (boards.data ?? []).filter((b) => b.isArchived);
+
   return (
     <div className="container py-10">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Seus quadros</h1>
           <p className="text-fg-muted mt-1 text-sm">
             Kanban para organizar fluxos, tarefas e responsáveis.
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus size={16} />
-              Novo quadro
+        <div className="flex items-center gap-2">
+          {canManageArchived && (
+            <Button
+              type="button"
+              variant={showArchived ? 'secondary' : 'ghost'}
+              onClick={() => setShowArchived((v) => !v)}
+              title={showArchived ? 'Ocultar quadros arquivados' : 'Mostrar quadros arquivados'}
+            >
+              <Archive size={16} />
+              {showArchived ? 'Ocultar arquivados' : 'Arquivados'}
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar quadro</DialogTitle>
-              <DialogDescription>
-                Ele já virá com 3 listas padrão: A Fazer, Fazendo, Concluído.
-              </DialogDescription>
-            </DialogHeader>
-            <CreateBoardForm onCreated={() => setOpen(false)} />
-          </DialogContent>
-        </Dialog>
+          )}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus size={16} />
+                Novo quadro
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Criar quadro</DialogTitle>
+                <DialogDescription>
+                  Ele já virá com 3 listas padrão: A Fazer, Fazendo, Concluído.
+                </DialogDescription>
+              </DialogHeader>
+              <CreateBoardForm onCreated={() => setOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {boards.isLoading && (
@@ -88,7 +124,7 @@ export default function BoardsPage() {
         </div>
       )}
 
-      {boards.data && boards.data.length === 0 && (
+      {boards.data && active.length === 0 && archived.length === 0 && (
         <div className="border-border bg-bg-subtle rounded-lg border border-dashed p-10 text-center">
           <Layers size={32} className="text-fg-muted mx-auto" />
           <p className="mt-3 text-sm font-medium">Nenhum quadro ainda</p>
@@ -98,14 +134,84 @@ export default function BoardsPage() {
         </div>
       )}
 
-      {boards.data && boards.data.length > 0 && (
+      {boards.data && (active.length > 0 || archived.length > 0) && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <BoardsListing boards={boards.data} />
+          <div className="flex flex-col gap-8">
+            {active.length > 0 && <BoardsListing boards={active} />}
+            {showArchived && canManageArchived && <ArchivedListing boards={archived} />}
+          </div>
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <ActivityFeedPanel items={activity.data ?? []} loading={activity.isLoading} />
           </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+function ArchivedListing({ boards }: { boards: BoardListItem[] }) {
+  const sorted = [...boards].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  return (
+    <section>
+      <h2 className="text-fg-muted mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+        <Archive size={12} /> Arquivados ({sorted.length})
+      </h2>
+      {sorted.length === 0 ? (
+        <p className="text-fg-subtle border-border bg-bg-subtle/40 rounded-lg border border-dashed p-6 text-center text-xs">
+          Nenhum quadro arquivado.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {sorted.map((b) => (
+            <ArchivedBoardCard key={b.id} board={b} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ArchivedBoardCard({ board }: { board: BoardListItem }) {
+  const queryClient = useQueryClient();
+  const restoreMut = useMutation({
+    mutationFn: () => restoreBoard(board.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards'] }),
+  });
+
+  return (
+    <div className="border-border bg-bg-subtle/50 group relative overflow-hidden rounded-lg border border-dashed p-4 opacity-70 transition-opacity hover:opacity-100">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <h3 className="text-fg-muted line-clamp-2 pr-2 text-sm font-medium">{board.name}</h3>
+        <Archive size={14} className="text-fg-subtle shrink-0" aria-label="Arquivado" />
+      </div>
+      {board.description && (
+        <p className="text-fg-subtle line-clamp-2 text-xs">{board.description}</p>
+      )}
+      <div className="text-fg-subtle mt-3 flex items-center gap-x-3 text-xs">
+        <span className="inline-flex items-center gap-1" title="Total de cards">
+          <Layers size={12} /> {board.cardsCount}
+        </span>
+        {board.membersCount > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <Users size={12} /> {board.membersCount}
+          </span>
+        )}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => restoreMut.mutate()}
+        disabled={restoreMut.isPending}
+        className="mt-3 w-full"
+      >
+        {restoreMut.isPending ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <ArchiveRestore size={14} />
+        )}
+        Desarquivar
+      </Button>
     </div>
   );
 }
