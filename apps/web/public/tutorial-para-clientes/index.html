@@ -115,45 +115,57 @@
     .cover-top, .cover-center, .cover-bottom { position: relative; z-index: 1; }
     .cover-center { text-align: center; }
 
-    /* Lockup KTask (simbolo + checklist + wordmark) com glow halo atras.
-       Sem quadrado branco — o lockup ja vem desenhado pra fundo escuro. */
-    .cover-logo-wrap {
+    /* Identidade visual da capa: app-icon (PNG transparente rounded) +
+       wordmark transparente abaixo. Sem retangulo de fundo — ambos PNGs
+       flutuam direto no gradiente da capa. Halo glow ao redor dao
+       presenca visual e separam do background. */
+    .cover-brand {
       position: relative;
-      width: min(520px, 78%);
-      margin: 0 auto 56px;
+      margin: 0 auto 48px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
+      gap: 28px;
     }
-    /* Halo grande, multi-camada — teal por baixo, violeta por cima,
-       gera glow suave que difunde o lockup no gradiente da capa. */
-    .cover-logo-wrap::before {
+    /* Halo atras do icon — multi-camada, teal+violet+branco */
+    .cover-brand::before {
       content: "";
       position: absolute;
-      inset: -80px;
+      top: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 360px;
+      height: 360px;
       background:
-        radial-gradient(circle at 25% 50%, rgba(46,232,184,.35), transparent 55%),
-        radial-gradient(circle at 75% 50%, rgba(139,92,246,.40), transparent 55%),
-        radial-gradient(circle at 50% 50%, rgba(255,255,255,.10), transparent 60%);
-      filter: blur(40px);
+        radial-gradient(circle at 50% 50%, rgba(46,232,184,.30), transparent 55%),
+        radial-gradient(circle at 30% 50%, rgba(139,92,246,.35), transparent 60%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.10), transparent 65%);
+      filter: blur(50px);
       pointer-events: none;
       z-index: 0;
     }
-    .cover-logo {
+    .cover-icon {
       position: relative;
       z-index: 1;
-      width: 100%;
-      border-radius: 28px;
-      overflow: hidden;
-      box-shadow:
-        0 32px 80px rgba(0,0,0,.45),
-        0 0 0 1px rgba(255,255,255,.10) inset,
-        0 0 60px rgba(46,232,184,.15);
+      width: 140px;
+      height: 140px;
+      filter: drop-shadow(0 20px 40px rgba(0,0,0,.45)) drop-shadow(0 0 24px rgba(46,232,184,.20));
     }
-    .cover-logo img {
+    .cover-icon img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .cover-wordmark {
+      position: relative;
+      z-index: 1;
+      width: min(320px, 70%);
+    }
+    .cover-wordmark img {
       width: 100%;
       height: auto;
       display: block;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,.30));
     }
 
     /* Chip "TUTORIAL DO CLIENTE" */
@@ -570,9 +582,12 @@
     <div class="cover-top"></div>
 
     <div class="cover-center">
-      <div class="cover-logo-wrap">
-        <div class="cover-logo">
-          <img src="/tutorial-para-clientes/assets/ktask-lockup.png" alt="KTask — Sistema de gestão de tarefas e fluxos">
+      <div class="cover-brand">
+        <div class="cover-icon">
+          <img src="/tutorial-para-clientes/assets/ktask-icon.png" alt="">
+        </div>
+        <div class="cover-wordmark">
+          <img src="/tutorial-para-clientes/assets/ktask-wordmark.png" alt="KTask">
         </div>
       </div>
 
