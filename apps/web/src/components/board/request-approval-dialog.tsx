@@ -12,6 +12,7 @@ import { requestApproval, type ReviewerInputDTO } from '@/lib/queries/approvals'
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
 import { TemplateVarsBar } from './template-vars-bar';
+import { MessageTemplateButtons } from './message-template-buttons';
 
 type Mode = 'user' | 'phone-existing' | 'phone-new';
 
@@ -193,9 +194,12 @@ export function RequestApprovalDialog({
           )}
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="approval-message" className="text-fg-muted text-xs font-medium">
-              Mensagem (opcional)
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="approval-message" className="text-fg-muted text-xs font-medium">
+                Mensagem (opcional)
+              </label>
+              <MessageTemplateButtons type="whatsapp" value={message} onChange={setMessage} />
+            </div>
             <textarea
               ref={messageRef}
               id="approval-message"
