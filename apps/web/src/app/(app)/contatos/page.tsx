@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -35,28 +35,23 @@ import {
 export default function ContatosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Inicializa filtro a partir de ?type=PERSON|COMPANY na URL (suporta
-  // /empresas redirecionando aqui com type=COMPANY).
-  const initialType: 'ALL' | ContactType = (() => {
-    const raw = searchParams.get('type');
-    return raw === 'PERSON' || raw === 'COMPANY' ? raw : 'ALL';
-  })();
-  const [filterType, setFilterType] = useState<'ALL' | ContactType>(initialType);
+  // URL é a source of truth pro filtro. Antes usava useState(initialType) +
+  // useEffect estado→URL, mas como a página não desmonta ao alternar entre
+  // /empresas (?type=COMPANY) e /contatos (sem query), o state ficava preso
+  // no valor antigo e o effect reescrevia a URL pra COMPANY.
+  const rawType = searchParams.get('type');
+  const filterType: 'ALL' | ContactType =
+    rawType === 'PERSON' || rawType === 'COMPANY' ? rawType : 'ALL';
+  const setFilterType = (next: 'ALL' | ContactType) => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (next === 'ALL') sp.delete('type');
+    else sp.set('type', next);
+    const qs = sp.toString();
+    router.replace(qs ? `/contatos?${qs}` : '/contatos', { scroll: false });
+  };
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-
-  // Sincroniza filtro na URL pra permitir compartilhar/refresh.
-  useEffect(() => {
-    const sp = new URLSearchParams(searchParams.toString());
-    if (filterType === 'ALL') sp.delete('type');
-    else sp.set('type', filterType);
-    const next = sp.toString();
-    const current = searchParams.toString();
-    if (next !== current) {
-      router.replace(next ? `/contatos?${next}` : '/contatos', { scroll: false });
-    }
-  }, [filterType, router, searchParams]);
 
   const listQ = useQuery({
     ...contactsQueries.list({
@@ -247,6 +242,7 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [document, setDocument] = useState('');
+  const [parentId, setParentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mut = useMutation({
@@ -257,6 +253,7 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         document: document.trim() || undefined,
+        parentId: type === 'PERSON' ? parentId : null,
       };
       return createContact(input);
     },
@@ -344,6 +341,11 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
               className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
             />
           </Field>
+          {type === 'PERSON' && (
+            <Field label="Empresa vinculada">
+              <CompanyPicker value={parentId} onChange={setParentId} />
+            </Field>
+          )}
 
           {error && (
             <p className="bg-danger-subtle text-danger rounded px-2 py-1 text-xs">{error}</p>
@@ -579,6 +581,7 @@ function ContactEditForm({
     phone: string | null;
     document: string | null;
     note: string | null;
+    parentId?: string | null;
   };
   onSaved: () => void;
   onCancel: () => void;
@@ -589,6 +592,7 @@ function ContactEditForm({
   const [phone, setPhone] = useState(contact.phone ?? '');
   const [document, setDocument] = useState(contact.document ?? '');
   const [note, setNote] = useState(contact.note ?? '');
+  const [parentId, setParentId] = useState<string | null>(contact.parentId ?? null);
   const [error, setError] = useState<string | null>(null);
 
   const mut = useMutation({
@@ -600,6 +604,7 @@ function ContactEditForm({
         phone: phone.trim() || undefined,
         document: document.trim() || undefined,
         note: note.trim() || undefined,
+        parentId: type === 'PERSON' ? parentId : null,
       }),
     onSuccess: onSaved,
     onError: (err) => {
@@ -659,6 +664,11 @@ function ContactEditForm({
           className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
         />
       </Field>
+      {type === 'PERSON' && (
+        <Field label="Empresa vinculada">
+          <CompanyPicker value={parentId} onChange={setParentId} excludeId={contact.id} />
+        </Field>
+      )}
       <Field label="Observações">
         <textarea
           value={note}
@@ -696,5 +706,36 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-fg-muted mb-1 block text-[11px] font-medium">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Combobox de empresa-pai pra vincular uma pessoa. Lista todas as empresas
+ * da Org. `excludeId` evita auto-referência ao editar a própria empresa.
+ */
+function CompanyPicker({
+  value,
+  onChange,
+  excludeId,
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+  excludeId?: string;
+}) {
+  const companiesQ = useQuery({ ...contactsQueries.list({ type: 'COMPANY' }) });
+  const companies = (companiesQ.data ?? []).filter((c) => c.id !== excludeId);
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+    >
+      <option value="">— Nenhuma —</option>
+      {companies.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -318,6 +318,49 @@ export class ContactsService {
       },
     });
 
+    // Auto-vincular empresa-pai: se a pessoa tem parentId e o card ainda
+    // não tem nenhuma empresa vinculada, traz a empresa-pai junto.
+    // Regra conservadora — se já existe qualquer empresa no card, respeita
+    // a escolha manual e não toca.
+    const linked = await this.prisma.contact.findUnique({
+      where: { id: contactId },
+      select: { type: true, parentId: true },
+    });
+    if (linked?.type === 'PERSON' && linked.parentId) {
+      const hasCompany = await this.prisma.cardContact.findFirst({
+        where: { cardId, contact: { type: 'COMPANY', deletedAt: null } },
+        select: { contactId: true },
+      });
+      if (!hasCompany) {
+        const parent = await this.prisma.contact.findUnique({
+          where: { id: linked.parentId },
+          select: { id: true, organizationId: true, deletedAt: true, type: true },
+        });
+        if (
+          parent &&
+          parent.type === 'COMPANY' &&
+          parent.organizationId === tenant.organizationId &&
+          !parent.deletedAt
+        ) {
+          await this.prisma.cardContact.upsert({
+            where: { cardId_contactId: { cardId, contactId: parent.id } },
+            update: {},
+            create: { cardId, contactId: parent.id },
+          });
+          await this.prisma.activity.create({
+            data: {
+              organizationId: tenant.organizationId,
+              boardId: card.boardId,
+              cardId,
+              actorId: userId,
+              type: 'CARD_CONTACT_LINKED',
+              payload: { cardId, contactId: parent.id, viaParentOf: contactId },
+            },
+          });
+        }
+      }
+    }
+
     return this.getOne(tenant, contactId);
   }
 
