@@ -115,35 +115,46 @@
     .cover-top, .cover-center, .cover-bottom { position: relative; z-index: 1; }
     .cover-center { text-align: center; }
 
-    /* Logo com halo brilhando atras */
+    /* Lockup KTask (simbolo + checklist + wordmark) com glow halo atras.
+       Sem quadrado branco — o lockup ja vem desenhado pra fundo escuro. */
     .cover-logo-wrap {
       position: relative;
-      width: 200px;
-      height: 200px;
+      width: min(520px, 78%);
       margin: 0 auto 56px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
+    /* Halo grande, multi-camada — teal por baixo, violeta por cima,
+       gera glow suave que difunde o lockup no gradiente da capa. */
     .cover-logo-wrap::before {
       content: "";
       position: absolute;
-      inset: -40px;
-      background: radial-gradient(circle, rgba(255,255,255,.20), transparent 60%);
-      filter: blur(20px);
+      inset: -80px;
+      background:
+        radial-gradient(circle at 25% 50%, rgba(46,232,184,.35), transparent 55%),
+        radial-gradient(circle at 75% 50%, rgba(139,92,246,.40), transparent 55%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.10), transparent 60%);
+      filter: blur(40px);
+      pointer-events: none;
+      z-index: 0;
     }
     .cover-logo {
       position: relative;
-      width: 200px;
-      height: 200px;
-      background: #fff;
-      border-radius: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 32px 80px rgba(0,0,0,.40), inset 0 0 0 1px rgba(255,255,255,.6);
+      z-index: 1;
+      width: 100%;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow:
+        0 32px 80px rgba(0,0,0,.45),
+        0 0 0 1px rgba(255,255,255,.10) inset,
+        0 0 60px rgba(46,232,184,.15);
     }
-    .cover-logo img { width: 70%; height: auto; }
+    .cover-logo img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
 
     /* Chip "TUTORIAL DO CLIENTE" */
     .cover-chip {
@@ -555,15 +566,15 @@
     <div class="cover-center">
       <div class="cover-logo-wrap">
         <div class="cover-logo">
-          <img src="/tutorial-para-clientes/assets/ktask-logo.png" alt="Logo KTask">
+          <img src="/tutorial-para-clientes/assets/ktask-lockup.png" alt="KTask — Sistema de gestão de tarefas e fluxos">
         </div>
       </div>
 
       <span class="cover-chip">Tutorial do cliente</span>
 
       <h1>
-        <small>Como acessar e usar o</small>
-        KTask
+        <small>Como acessar e</small>
+        usar o sistema
       </h1>
 
       <div class="cover-divider"></div>
