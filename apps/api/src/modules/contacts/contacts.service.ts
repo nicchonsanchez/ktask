@@ -17,6 +17,8 @@ import type {
   LinkContactRequest,
 } from './dto/contacts.schemas';
 
+const READONLY_WHEN_LINKED = ['name', 'email', 'phone'] as const;
+
 const PRIVILEGED_ROLES: ReadonlyArray<TenantContext['role']> = ['OWNER', 'ADMIN', 'GESTOR'];
 
 @Injectable()
@@ -43,6 +45,8 @@ export class ContactsService {
       ...(query.parentId ? { parentId: query.parentId } : {}),
       ...(query.hasCards === true ? { cards: { some: {} } } : {}),
       ...(query.hasCards === false ? { cards: { none: {} } } : {}),
+      ...(query.linkStatus === 'linked' ? { userId: { not: null } } : {}),
+      ...(query.linkStatus === 'unlinked' ? { userId: null } : {}),
       ...(query.q
         ? {
             OR: [
@@ -59,6 +63,7 @@ export class ContactsService {
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
       include: {
         parent: { select: { id: true, name: true, type: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
         _count: { select: { cards: true, children: true } },
       },
     });
@@ -149,6 +154,19 @@ export class ContactsService {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing || existing.organizationId !== tenant.organizationId || existing.deletedAt) {
       throw new NotFoundException('Contato não encontrado.');
+    }
+
+    // Quando o Contact está vinculado a um User, name/email/phone são
+    // read-only no CRM — fonte autoritativa é o User (editável só via
+    // /perfil ou /equipe).
+    if (existing.userId) {
+      for (const k of READONLY_WHEN_LINKED) {
+        if (body[k] !== undefined) {
+          throw new BadRequestException(
+            `O campo "${k}" é gerenciado pelo usuário vinculado. Edite em "Meu perfil" ou na página de equipe.`,
+          );
+        }
+      }
     }
 
     if (body.parentId !== undefined && body.parentId !== null) {
@@ -390,6 +408,104 @@ export class ContactsService {
     });
 
     return { ok: true };
+  }
+
+  // ==================================================
+  // Vínculo Contact <-> User (FK direto, 1:1)
+  // ==================================================
+  async linkToUser(actorId: string, tenant: TenantContext, contactId: string, userId: string) {
+    this.assertPrivileged(tenant);
+
+    const contact = await this.prisma.contact.findUnique({ where: { id: contactId } });
+    if (!contact || contact.organizationId !== tenant.organizationId || contact.deletedAt) {
+      throw new NotFoundException('Contato não encontrado.');
+    }
+    if (contact.userId === userId) {
+      // Idempotente — já vinculado
+      return this.getOne(tenant, contactId);
+    }
+    if (contact.userId) {
+      throw new BadRequestException('Este contato já está vinculado a outro usuário.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, suspendedAt: true, linkedContact: { select: { id: true } } },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    // Confirma que o user pertence à mesma Org via Membership
+    const member = await this.prisma.membership.findFirst({
+      where: { userId, organizationId: tenant.organizationId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Usuário não pertence à organização.');
+    if (user.linkedContact) {
+      throw new BadRequestException(`Usuário "${user.name}" já tem outro contato vinculado.`);
+    }
+
+    const updated = await this.prisma.contact.update({
+      where: { id: contactId },
+      data: { userId },
+    });
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        actorId,
+        type: 'CONTACT_LINKED_TO_USER',
+        payload: { contactId, userId },
+      },
+    });
+    return this.getOne(tenant, updated.id);
+  }
+
+  async unlinkFromUser(actorId: string, tenant: TenantContext, contactId: string) {
+    this.assertPrivileged(tenant);
+    const contact = await this.prisma.contact.findUnique({ where: { id: contactId } });
+    if (!contact || contact.organizationId !== tenant.organizationId || contact.deletedAt) {
+      throw new NotFoundException('Contato não encontrado.');
+    }
+    if (!contact.userId) {
+      return this.getOne(tenant, contactId); // idempotente
+    }
+    const previousUserId = contact.userId;
+    await this.prisma.contact.update({ where: { id: contactId }, data: { userId: null } });
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        actorId,
+        type: 'CONTACT_UNLINKED_FROM_USER',
+        payload: { contactId, userId: previousUserId },
+      },
+    });
+    return this.getOne(tenant, contactId);
+  }
+
+  /**
+   * Sugere Contacts para vincular a um User, casando por email (priori-
+   * dade) ou phone. Usado pela UI de "criar User" pra evitar duplicatas
+   * quando a pessoa já existia como Contact externo.
+   */
+  async suggestionsForUser(tenant: TenantContext, userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, phone: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    const phoneDigits = user.phone ? user.phone.replace(/\D/g, '') : null;
+    const or: Prisma.ContactWhereInput[] = [];
+    if (user.email) or.push({ email: { equals: user.email, mode: 'insensitive' } });
+    if (phoneDigits && phoneDigits.length >= 8) or.push({ phone: phoneDigits });
+    if (or.length === 0) return [];
+    return this.prisma.contact.findMany({
+      where: {
+        organizationId: tenant.organizationId,
+        deletedAt: null,
+        userId: null, // ainda não vinculados
+        OR: or,
+      },
+      take: 5,
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   // ==================================================

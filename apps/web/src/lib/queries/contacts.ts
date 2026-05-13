@@ -18,11 +18,21 @@ export interface ContactRow {
   document: string | null;
   note: string | null;
   parentId: string | null;
+  /** FK pra User. Quando setado, name/email/phone vêm do User e são read-only no CRM. */
+  userId: string | null;
   createdAt: string;
   updatedAt: string;
   parent?: { id: string; name: string; type: ContactType } | null;
-  /** Usuario da Org que casa por email ou phone (cross-reference). Null se sem match. */
-  userMatch: ContactUserMatch | null;
+  /** User vinculado via FK direto (Contact.userId). */
+  user?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    avatarUrl: string | null;
+  } | null;
+  /** Cross-reference por email/phone (NÃO é vínculo formal). Usado em getOne pra sugerir link. */
+  userMatch?: ContactUserMatch | null;
   _count?: { cards: number; children: number };
 }
 
@@ -56,6 +66,8 @@ export interface ListContactsParams {
   q?: string;
   parentId?: string;
   hasCards?: boolean;
+  /** Filtro pelo vínculo a User: 'linked' / 'unlinked' / undefined (todos). */
+  linkStatus?: 'linked' | 'unlinked';
 }
 
 export const contactsQueries = {
@@ -67,6 +79,7 @@ export const contactsQueries = {
       if (params?.q) sp.set('q', params.q);
       if (params?.parentId) sp.set('parentId', params.parentId);
       if (params?.hasCards !== undefined) sp.set('hasCards', String(params.hasCards));
+      if (params?.linkStatus) sp.set('linkStatus', params.linkStatus);
       const qs = sp.toString();
       return api.get<ContactRow[]>(`/api/v1/contacts${qs ? `?${qs}` : ''}`);
     },
@@ -111,4 +124,12 @@ export function linkContactToCard(cardId: string, input: LinkContactInput) {
 
 export function unlinkContactFromCard(cardId: string, contactId: string) {
   return api.delete(`/api/v1/cards/${cardId}/contacts/${contactId}`);
+}
+
+export function linkContactToUser(contactId: string, userId: string) {
+  return api.post<ContactDetail>(`/api/v1/contacts/${contactId}/link-user`, { userId });
+}
+
+export function unlinkContactFromUser(contactId: string) {
+  return api.delete<ContactDetail>(`/api/v1/contacts/${contactId}/link-user`);
 }

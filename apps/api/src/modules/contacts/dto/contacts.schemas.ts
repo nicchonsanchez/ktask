@@ -60,5 +60,12 @@ export const ListContactsQuerySchema = z.object({
     .string()
     .optional()
     .transform((v) => (v === 'true' ? true : v === 'false' ? false : undefined)),
+  /** Filtro pelo vínculo a User: 'linked' | 'unlinked' | undefined (todos) */
+  linkStatus: z.enum(['linked', 'unlinked']).optional(),
 });
 export type ListContactsQuery = z.infer<typeof ListContactsQuerySchema>;
+
+export const LinkUserToContactSchema = z.object({
+  userId: z.string().min(1),
+});
+export type LinkUserToContactRequest = z.infer<typeof LinkUserToContactSchema>;

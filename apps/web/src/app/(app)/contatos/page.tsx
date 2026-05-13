@@ -21,12 +21,15 @@ import { ApiError } from '@/lib/api-client';
 import {
   contactsQueries,
   createContact,
+  linkContactToUser,
   removeContact,
+  unlinkContactFromUser,
   updateContact,
   type ContactRow,
   type ContactType,
   type CreateContactInput,
 } from '@/lib/queries/contacts';
+import { membersQueries } from '@/lib/queries/members';
 
 /**
  * Agenda de contatos da Org. Filtros (Pessoa/Empresa, busca, "tem cards"),
@@ -182,6 +185,9 @@ function FilterBtn({
 
 function ContactRowItem({ contact, onClick }: { contact: ContactRow; onClick: () => void }) {
   const Icon = contact.type === 'COMPANY' ? Building2 : UserIcon;
+  // Quando há vínculo FK direto (Contact.userId), usa avatar real do User;
+  // userMatch (cross-reference por email/phone) só sugere link.
+  const linked = contact.user ?? null;
   return (
     <li>
       <button
@@ -189,24 +195,40 @@ function ContactRowItem({ contact, onClick }: { contact: ContactRow; onClick: ()
         onClick={onClick}
         className="border-border bg-bg hover:border-border-strong flex w-full items-center gap-3 rounded-md border p-3 text-left shadow-sm transition-colors"
       >
-        <span className="bg-bg-muted text-fg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-full">
-          <Icon size={16} />
-        </span>
+        {linked?.avatarUrl ? (
+          <img
+            src={linked.avatarUrl}
+            alt=""
+            className="size-9 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span className="bg-bg-muted text-fg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-full">
+            <Icon size={16} />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="text-fg truncate text-sm font-medium">{contact.name}</span>
             {contact.parent && (
               <span className="text-fg-subtle truncate text-[11px]">· {contact.parent.name}</span>
             )}
-            {contact.userMatch && (
+            {linked ? (
               <span
-                className="bg-primary-subtle/60 text-primary inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                title={`Tambem cadastrado como membro: ${contact.userMatch.name}`}
+                className="bg-primary text-primary-fg inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                title={`Vinculado ao membro ${linked.name}`}
               >
                 <Check size={9} />
                 membro
               </span>
-            )}
+            ) : contact.userMatch ? (
+              <span
+                className="bg-primary-subtle/60 text-primary inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                title={`Pode ser ${contact.userMatch.name} (email/telefone bate). Vincule no detalhe.`}
+              >
+                <Check size={9} />
+                vincular?
+              </span>
+            ) : null}
           </div>
           {(contact.email || contact.phone) && (
             <div className="text-fg-muted mt-0.5 flex items-center gap-3 text-[11px]">
@@ -429,7 +451,7 @@ function ContactDetailModal({ id, onClose }: { id: string; onClose: () => void }
         {error && <p className="bg-danger-subtle text-danger px-5 py-2 text-xs">{error}</p>}
 
         {q.data && !editing && (
-          <div className="border-border/60 flex justify-between border-t px-5 py-3">
+          <div className="border-border/60 flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3">
             <button
               type="button"
               onClick={() => {
@@ -445,13 +467,19 @@ function ContactDetailModal({ id, onClose }: { id: string; onClose: () => void }
               )}
               Remover
             </button>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="bg-primary text-primary-fg hover:bg-primary-hover rounded-md px-3 py-1.5 text-sm font-medium"
-            >
-              Editar
-            </button>
+            <div className="flex items-center gap-2">
+              <UserLinkControl
+                contact={q.data}
+                onChange={() => queryClient.invalidateQueries({ queryKey: ['contacts'] })}
+              />
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="bg-primary text-primary-fg hover:bg-primary-hover rounded-md px-3 py-1.5 text-sm font-medium"
+              >
+                Editar
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -582,6 +610,7 @@ function ContactEditForm({
     document: string | null;
     note: string | null;
     parentId?: string | null;
+    userId?: string | null;
   };
   onSaved: () => void;
   onCancel: () => void;
@@ -595,13 +624,24 @@ function ContactEditForm({
   const [parentId, setParentId] = useState<string | null>(contact.parentId ?? null);
   const [error, setError] = useState<string | null>(null);
 
+  // Quando há vínculo com User (Contact.userId), name/email/phone são
+  // read-only — fonte autoritativa é o User. UI sinaliza com disabled +
+  // hint clicável que leva ao /perfil ou /equipe.
+  const isLinkedToUser = Boolean(contact.userId);
+  const lockedHint = 'Vem do usuário vinculado. Edite em "Meu perfil" ou na página de equipe.';
+
   const mut = useMutation({
     mutationFn: () =>
       updateContact(contact.id, {
         type,
-        name: name.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
+        // Quando vinculado, NÃO envia campos read-only no PATCH
+        ...(isLinkedToUser
+          ? {}
+          : {
+              name: name.trim(),
+              email: email.trim() || undefined,
+              phone: phone.trim() || undefined,
+            }),
         document: document.trim() || undefined,
         note: note.trim() || undefined,
         parentId: type === 'PERSON' ? parentId : null,
@@ -640,21 +680,27 @@ function ContactEditForm({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          disabled={isLinkedToUser}
+          title={isLinkedToUser ? lockedHint : undefined}
+          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
       </Field>
       <Field label="Email">
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          disabled={isLinkedToUser}
+          title={isLinkedToUser ? lockedHint : undefined}
+          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
       </Field>
       <Field label="Telefone">
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+          disabled={isLinkedToUser}
+          title={isLinkedToUser ? lockedHint : undefined}
+          className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
       </Field>
       <Field label="Documento">
@@ -706,6 +752,105 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-fg-muted mb-1 block text-[11px] font-medium">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Botão de vincular/desvincular Contact ↔ User. No modo desvinculado
+ * mostra dropdown de membros disponíveis (excluí os que já têm Contact).
+ * No modo vinculado mostra o nome + botão de desvincular.
+ */
+function UserLinkControl({
+  contact,
+  onChange,
+}: {
+  contact: { id: string; userId: string | null; user?: { id: string; name: string } | null };
+  onChange: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const membersQ = useQuery({ ...membersQueries.all(), enabled: open });
+  const linkMut = useMutation({
+    mutationFn: (userId: string) => linkContactToUser(contact.id, userId),
+    onSuccess: () => {
+      onChange();
+      setOpen(false);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erro ao vincular.'),
+  });
+  const unlinkMut = useMutation({
+    mutationFn: () => unlinkContactFromUser(contact.id),
+    onSuccess: () => {
+      onChange();
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erro ao desvincular.'),
+  });
+
+  if (contact.userId && contact.user) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-fg-muted text-[11px]">
+          Vinculado a <span className="text-fg font-medium">{contact.user.name}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm(`Desvincular este contato de ${contact.user?.name}?`)) unlinkMut.mutate();
+          }}
+          disabled={unlinkMut.isPending}
+          className="text-fg-muted hover:text-danger rounded px-2 py-1 text-xs disabled:opacity-50"
+        >
+          Desvincular
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="border-border hover:bg-bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+      >
+        <Plus size={11} />
+        Vincular a usuário
+      </button>
+      {open && (
+        <div className="border-border bg-bg absolute bottom-full right-0 z-30 mb-1 flex w-64 flex-col overflow-hidden rounded-md border shadow-lg">
+          {membersQ.isLoading && (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 size={14} className="text-fg-muted animate-spin" />
+            </div>
+          )}
+          <ul className="max-h-72 overflow-y-auto py-1">
+            {(membersQ.data ?? []).map((m) => (
+              <li key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => linkMut.mutate(m.userId)}
+                  disabled={linkMut.isPending}
+                  className="hover:bg-bg-muted flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-50"
+                >
+                  <UserIcon size={12} className="text-fg-muted shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium">{m.user.name}</span>
+                    <span className="text-fg-muted ml-1.5 text-[11px]">· {m.user.email}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {error && (
+            <p className="bg-danger-subtle text-danger border-border/60 border-t px-3 py-1.5 text-[11px]">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

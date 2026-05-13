@@ -26,9 +26,11 @@ import {
   UpdateContactSchema,
   ListContactsQuerySchema,
   LinkContactSchema,
+  LinkUserToContactSchema,
   type CreateContactRequest,
   type UpdateContactRequest,
   type LinkContactRequest,
+  type LinkUserToContactRequest,
 } from './dto/contacts.schemas';
 
 /**
@@ -127,5 +129,32 @@ export class ContactsController {
     @Param('contactId') contactId: string,
   ) {
     await this.contacts.unlinkFromCard(user.userId, org, cardId, contactId);
+  }
+
+  @Post('contacts/:id/link-user')
+  @ApiOperation({ summary: 'Vincula contato a um usuário da Org (GESTOR+)' })
+  linkToUser(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(LinkUserToContactSchema)) body: LinkUserToContactRequest,
+  ) {
+    return this.contacts.linkToUser(user.userId, org, id, body.userId);
+  }
+
+  @Delete('contacts/:id/link-user')
+  @ApiOperation({ summary: 'Remove vínculo do contato com o usuário (GESTOR+)' })
+  unlinkFromUser(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.contacts.unlinkFromUser(user.userId, org, id);
+  }
+
+  @Get('users/:userId/contact-suggestions')
+  @ApiOperation({ summary: 'Sugere Contacts pra vincular a um User (match email/phone)' })
+  suggestionsForUser(@CurrentOrg() org: TenantContext, @Param('userId') userId: string) {
+    return this.contacts.suggestionsForUser(org, userId);
   }
 }
