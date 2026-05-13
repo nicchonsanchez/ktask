@@ -3,14 +3,17 @@ import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
+import { AuthService } from '@/modules/auth/auth.service';
 
 import type { UpdateMemberRequest, SuspendMemberRequest } from './dto/members-admin.schemas';
 
@@ -27,7 +30,11 @@ import type { UpdateMemberRequest, SuspendMemberRequest } from './dto/members-ad
 export class MembersAdminService {
   private readonly logger = new Logger(MembersAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => AuthService))
+    private readonly auth: AuthService,
+  ) {}
 
   /**
    * Detalhe completo do membro pra modal admin: dados + role na Org +
@@ -219,25 +226,42 @@ export class MembersAdminService {
 
   /**
    * Forca redefinicao de senha. Admin nunca define a senha direto —
-   * sistema gera token, envia email pro user. Aqui apenas marca um
-   * marker e deixa pro mailer enviar.
-   *
-   * MVP: invalida sessoes existentes (forca relogin) + log do token.
-   * Quando mailer estiver pronto, manda link de redefinicao real.
+   * sistema gera token, invalida sessoes ativas e dispara link de reset
+   * via email + WhatsApp (se phone). Reusa AuthService.dispatchPasswordResetForUser
+   * pra unificar a logica com o /auth/forgot-password publico.
    */
   async forcePasswordReset(actorUserId: string, actorTenant: TenantContext, targetUserId: string) {
     await this.assertCanModify(actorUserId, actorTenant, targetUserId);
 
-    // Invalida todas as sessoes ativas
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        suspendedAt: true,
+        deletedAt: true,
+      },
+    });
+    if (!target || target.deletedAt) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    // Invalida todas as sessoes ativas (forca relogin)
     await this.prisma.session.updateMany({
       where: { userId: targetUserId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
 
-    const token = randomBytes(24).toString('base64url');
-    this.logger.warn(
-      `[force-password-reset] User ${targetUserId} sessoes invalidadas. ` +
-        `Token de reset (TODO send email): ${token}`,
+    // Dispara token + email + WhatsApp via AuthService.
+    await this.auth.dispatchPasswordResetForUser(
+      { id: target.id, email: target.email, name: target.name, phone: target.phone },
+      { source: 'admin' },
+    );
+    this.logger.log(
+      `[force-password-reset] User ${targetUserId} sessoes invalidadas + link enviado por ` +
+        `${actorUserId} (email${target.phone ? ' + whatsapp' : ''})`,
     );
 
     await this.prisma.activity.create({
@@ -251,7 +275,9 @@ export class MembersAdminService {
 
     return {
       ok: true,
-      message: 'Sessões invalidadas. Token de reset gerado (envio de email pendente).',
+      message: target.phone
+        ? 'Sessões invalidadas. Link de redefinição enviado por email e WhatsApp.'
+        : 'Sessões invalidadas. Link de redefinição enviado por email.',
     };
   }
 

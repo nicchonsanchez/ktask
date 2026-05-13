@@ -328,6 +328,28 @@ export class AuthService {
       return { ok: true };
     }
 
+    await this.dispatchPasswordResetForUser(user, {
+      ip: params.ip ?? null,
+      userAgent: params.userAgent ?? null,
+      source: 'self',
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Helper compartilhado entre forgotPassword (publico, anti-enumeracao) e
+   * forcePasswordReset (admin via members-admin). Gera token + persiste +
+   * dispara email + WhatsApp (se phone). Fire-and-forget nos canais —
+   * falha de envio nao bloqueia (token continua valido).
+   *
+   * `source` aparece nos logs e diferencia caminho 'self' (user pediu) de
+   * 'admin' (forcado por OWNER/ADMIN). Mensagens podem variar levemente
+   * baseado nisso no futuro; hoje uso o mesmo template.
+   */
+  async dispatchPasswordResetForUser(
+    user: { id: string; email: string; name: string; phone: string | null },
+    opts: { ip?: string | null; userAgent?: string | null; source: 'self' | 'admin' },
+  ): Promise<void> {
     const rawToken = this.tokens.generate();
     const tokenHash = this.tokens.hash(rawToken);
     const expiresAt = new Date(Date.now() + 60 * 60_000); // 1h
@@ -337,22 +359,23 @@ export class AuthService {
         userId: user.id,
         tokenHash,
         expiresAt,
-        requestIp: params.ip ?? null,
-        userAgent: params.userAgent ?? null,
+        requestIp: opts.ip ?? null,
+        userAgent: opts.userAgent ?? null,
       },
     });
 
     const resetUrl = `${env.APP_URL.replace(/\/$/, '')}/redefinir-senha/${rawToken}`;
-    // Fire-and-forget — se SMTP cair, log mas nao quebra o request.
+    const logPrefix = `[dispatchPasswordReset:${opts.source}]`;
+
+    // Email — fire-and-forget; SMTP caindo nao quebra o flow.
     this.mail
       .sendPasswordReset({ to: user.email, name: user.name, resetUrl, expiresAt })
       .catch((err) => {
-        this.logger.error(`[forgotPassword] mail failed pra ${user.email}: ${err.message}`);
+        this.logger.error(`${logPrefix} mail failed pra ${user.email}: ${err.message}`);
       });
 
-    // Canal adicional: WhatsApp. Envia sempre que o user tem phone — cenario
-    // tipico de "esqueci senha" tambem inclui "perdi acesso ao email", entao
-    // WhatsApp e a 2a chance. Fire-and-forget identico ao email.
+    // WhatsApp — canal adicional. Cenario "esqueci senha" tambem inclui
+    // "perdi acesso ao email", entao WhatsApp e a 2a chance.
     if (user.phone) {
       const firstName = user.name.split(' ')[0] || user.name;
       const msg =
@@ -360,13 +383,9 @@ export class AuthService {
         `Clique pra criar uma nova senha (válido por 1h):\n${resetUrl}\n\n` +
         `Se não foi você, pode ignorar esta mensagem — sua senha atual continua valendo.`;
       this.whatsapp.sendText(user.phone, msg).catch((err) => {
-        this.logger.error(
-          `[forgotPassword] whatsapp failed pra ${user.phone}: ${err.message ?? err}`,
-        );
+        this.logger.error(`${logPrefix} whatsapp failed pra ${user.phone}: ${err.message ?? err}`);
       });
     }
-
-    return { ok: true };
   }
 
   /**
