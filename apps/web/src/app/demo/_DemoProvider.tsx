@@ -2,22 +2,21 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from 'next-themes';
 import { useAuthStore } from '@/stores/auth-store';
 import type { User } from '@ktask/contracts';
 import { DEMO_TAREFAS_MARINA } from './_data';
 
 /**
- * Wrapper das telas /demo. Faz tres coisas:
+ * Wrapper das telas /demo. Responsabilidades:
  *
- *   1. Forca light mode via next-themes (tutorial cliente fica padronizado).
- *   2. Cria um QueryClient isolado com `retry:false` e `staleTime:Infinity`
- *      pra qualquer query que nao tenha sido pre-populada nao tentar fetch
- *      (e silenciosamente nao mostrar nada).
- *   3. Pre-popula o cache do React Query com os mocks (tarefas, aprovacoes,
+ *   1. Cria QueryClient isolado com retry:false + staleTime:Infinity pra
+ *      qualquer query nao mockada falhar silenciosa.
+ *   2. Pre-popula cache do React Query com mocks (tarefas, aprovacoes,
  *      org corrente etc) que os componentes reais consomem.
- *   4. Hidrata o auth store com Marina (cliente Member) — ou deixa null
- *      se `auth="none"` (pra tela de login/convite que esperam nao-logado).
+ *   3. Hidrata o auth store com Marina (Member) — ou null se `auth="none"`.
+ *
+ * Light mode e forcado pelo DemoLightTheme no demo/layout.tsx (precisa
+ * envolver tambem a tela de indice que nao usa esse provider).
  */
 export function DemoProvider({
   children,
@@ -28,6 +27,7 @@ export function DemoProvider({
 }) {
   const [client] = useState(() => makeDemoQueryClient());
 
+  // Hidrata auth store
   useEffect(() => {
     if (auth === 'marina') {
       useAuthStore.setState({
@@ -43,7 +43,6 @@ export function DemoProvider({
       });
     }
     return () => {
-      // Limpa ao sair de /demo pra nao vazar pra rotas reais.
       useAuthStore.setState({
         user: null,
         accessToken: null,
@@ -52,11 +51,7 @@ export function DemoProvider({
     };
   }, [auth]);
 
-  return (
-    <ThemeProvider attribute="class" forcedTheme="light" enableSystem={false}>
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    </ThemeProvider>
-  );
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
 // ─── Usuario "logado" nas telas demo (Marina, Member) ──────────────────

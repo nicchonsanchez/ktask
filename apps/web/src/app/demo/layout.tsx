@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { DemoLightTheme } from './_DemoLightTheme';
 
 export const metadata = {
   title: 'Demo · KTask',
@@ -8,5 +9,9 @@ export const metadata = {
 };
 
 export default function DemoLayout({ children }: { children: ReactNode }) {
-  return <div className="bg-bg text-fg min-h-screen">{children}</div>;
+  return (
+    <DemoLightTheme>
+      <div className="bg-bg text-fg min-h-screen">{children}</div>
+    </DemoLightTheme>
+  );
 }
