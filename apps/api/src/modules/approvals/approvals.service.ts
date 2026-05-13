@@ -387,11 +387,12 @@ export class ApprovalsService {
       return [greeting, '', p.customMessage, '', link].join('\n');
     }
 
-    // Template padrao
+    // Template padrao. Asteriscos sao a marcacao de negrito do WhatsApp
+    // (renderiza bold no app); idem `*${cardTitle}*` na linha abaixo.
     return [
       greeting,
       '',
-      `${requesterName} pediu sua aprovação:`,
+      `*${requesterName}* pediu sua aprovação para o card:`,
       '',
       `*${cardTitle}*`,
       '',
