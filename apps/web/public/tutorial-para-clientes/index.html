@@ -395,34 +395,11 @@
       font-size: 15px;
     }
 
-    /* ---------------- Screenshot placeholders ---------------- */
+    /* ---------------- Screenshots ---------------- */
     figure.shot {
       margin: 24px 0;
       padding: 0;
     }
-    .shot-frame {
-      border: 2px dashed var(--violet-300);
-      background: var(--violet-50);
-      border-radius: 12px;
-      padding: 24px;
-      text-align: left;
-      font-size: 14px;
-      color: var(--ink-700);
-    }
-    .shot-frame .shot-id {
-      display: inline-block;
-      background: var(--violet-700);
-      color: #fff;
-      font-weight: 700;
-      padding: 4px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      letter-spacing: .05em;
-      margin-bottom: 12px;
-    }
-    .shot-frame .shot-what  { font-size: 16px; color: var(--ink-900); font-weight: 600; margin-bottom: 12px; }
-    .shot-frame .shot-note  { color: var(--ink-500); font-size: 13px; margin-top: 12px; }
-    .shot-frame code { background: #fff; }
 
     /* Imagens dos prints — sem forcar 100% width, pra prints verticais
        (WhatsApp mobile) nao estourarem em altura. Centraliza horizontal,
@@ -467,32 +444,6 @@
     }
     .toolbar button:hover { background: var(--violet-800); }
 
-    /* ---------------- Manifest (lista de prints) ---------------- */
-    .manifest {
-      background: #fffbeb;
-      border: 2px solid #fcd34d;
-      border-radius: 12px;
-      padding: 28px;
-      margin-top: 40px;
-    }
-    .manifest h3 {
-      color: #92400e;
-      margin-top: 0;
-    }
-    .manifest table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    .manifest th, .manifest td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid #fde68a;
-      vertical-align: top;
-    }
-    .manifest th { background: #fef3c7; color: #92400e; font-weight: 700; }
-    .manifest td code { background: #fff; }
-
     /* ---------------- Print ---------------- */
     @page { size: A4; margin: 12mm; }
     @media print {
@@ -505,9 +456,8 @@
         page-break-after: always;
       }
       .cover { min-height: 100vh; padding: 60px 50px; }
-      .toolbar, .manifest { display: none; }
+      .toolbar { display: none; }
       h2.section, .toc h2 { color: var(--violet-700) !important; }
-      .shot-frame { border-style: solid; border-color: #ccc; background: #fafafa; }
       figure.shot img { box-shadow: none; border: 1px solid #ddd; }
       a { color: var(--ink-900); text-decoration: none; }
     }
@@ -946,48 +896,6 @@
     </p>
     <p style="margin-top: 80px;">
       <img src="/tutorial-para-clientes/assets/kharis-logo.png" alt="Kharis" style="max-width: 120px; opacity: .8;">
-    </p>
-  </section>
-
-
-  <!-- ===================== MANIFESTO DE PRINTS (não imprime) ===================== -->
-  <section class="page manifest">
-    <h3>📋 Checklist de prints necessários</h3>
-    <p style="color: #92400e;">
-      Esta seção <strong>não aparece na impressão</strong>. Use como guia pra saber
-      quais screenshots tirar. Salve todos em <code>docs/tutorial-cliente/img/</code>
-      com o nome indicado, depois substitua cada bloco <code>.shot-frame</code> do HTML por
-      uma tag <code>&lt;img&gt;</code>.
-    </p>
-    <table>
-      <thead>
-        <tr><th>#</th><th>Arquivo</th><th>O que capturar</th><th>Anotação</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>01</td><td><code>img/01-convite.png</code></td><td>Mensagem de convite no WhatsApp/e-mail com link</td><td>Seta no link</td></tr>
-        <tr><td>02</td><td><code>img/02-criar-senha.png</code></td><td>Tela <code>/convite/[token]</code> de criação de senha</td><td>Círculo no botão confirmar</td></tr>
-        <tr><td>03</td><td><code>img/03-login.png</code></td><td>Tela <code>/entrar</code> com "Permanecer logado"</td><td>Círculo no checkbox</td></tr>
-        <tr><td>04</td><td><code>img/04-painel-topbar.png</code></td><td>Tela inicial inteira com topbar visível</td><td>Numerar itens da topbar</td></tr>
-        <tr><td>05</td><td><code>img/05-tarefa-home.png</code></td><td>Bloco "Tarefas" da home com tarefa+nome do card</td><td>Seta no nome do card</td></tr>
-        <tr><td>06</td><td><code>img/06-aprovar.png</code></td><td>Card aberto com bloco Aprovações</td><td>Círculo verde no Aprovar</td></tr>
-        <tr><td>07</td><td><code>img/07-comentar-refacao.png</code></td><td>Comentário sendo digitado na timeline</td><td>Seta no campo</td></tr>
-        <tr><td>08</td><td><code>img/08-reprovar.png</code></td><td>Bloco aprovações com Reprovar</td><td>Círculo vermelho no Reprovar</td></tr>
-        <tr><td>09</td><td><code>img/09-mencao.png</code></td><td>Dropdown de @ aparecendo no comentário</td><td>Círculo no dropdown</td></tr>
-        <tr><td>10</td><td><code>img/10-whats-notif.png</code></td><td>Notificação WhatsApp com link</td><td>Círculo no link</td></tr>
-        <tr><td>11</td><td><code>img/11-sino.png</code></td><td>Sino na topbar com badge</td><td>Seta</td></tr>
-        <tr><td>12</td><td><code>img/12-notif-list.png</code></td><td>Painel de notificações aberto</td><td>—</td></tr>
-        <tr><td>13</td><td><code>img/13-quadros.png</code></td><td>Lista de quadros (<code>/quadros</code>)</td><td>Círculo num quadro</td></tr>
-        <tr><td>14</td><td><code>img/14-board.png</code></td><td>Quadro aberto, visão Kanban</td><td>—</td></tr>
-        <tr><td>15</td><td><code>img/15-criar-card.png</code></td><td>Botão + na coluna de entrada</td><td>Círculo no +</td></tr>
-      </tbody>
-    </table>
-
-    <h4 style="color:#92400e;margin-top:24px">Como substituir um print no HTML</h4>
-    <p style="color:#92400e">
-      Em cada <code>&lt;figure class="shot"&gt;</code> tem um bloco
-      <code>&lt;div class="shot-frame"&gt;</code> (o quadradinho roxo tracejado) e logo
-      abaixo um comentário HTML com a tag <code>&lt;img&gt;</code> pronta. Apaga a div
-      e descomenta a img — pronto.
     </p>
   </section>
 
