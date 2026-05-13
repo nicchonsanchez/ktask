@@ -802,9 +802,20 @@ export class CardsService {
       prevPos = position;
 
       const copy = await this.prisma.$transaction(async (tx) => {
+        // Increment atomico do counter da Org pra gerar shortCode unico.
+        // Mesmo padrao do create() — sem isso, copia fica com shortCode null
+        // e some do kanban junto com a falta de CardPresence.
+        const orgUpdated = await tx.organization.update({
+          where: { id: source.organizationId },
+          data: { cardSequence: { increment: 1 } },
+          select: { cardSequence: true },
+        });
+        const shortCode = String(orgUpdated.cardSequence);
+
         const newCard = await tx.card.create({
           data: {
             organizationId: source.organizationId,
+            shortCode,
             boardId: destBoardId,
             listId: destListId,
             title: count > 1 ? `${source.title} (cópia ${i + 1})` : `${source.title} (cópia)`,
@@ -823,6 +834,11 @@ export class CardsService {
             createdById: userId,
             leadId: options.copyLead && source.leadId ? source.leadId : userId,
           },
+        });
+
+        // Presença primária pra aparecer no kanban (modelo multi-fluxo).
+        await tx.cardPresence.create({
+          data: { cardId: newCard.id, boardId: destBoardId, listId: destListId, position },
         });
 
         if (labelsToCopy.length > 0) {

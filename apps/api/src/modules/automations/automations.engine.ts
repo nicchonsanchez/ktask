@@ -972,6 +972,17 @@ export class AutomationsEngine {
       },
     });
 
+    // Presença primária pra o card aparecer no kanban (modelo multi-fluxo
+    // CardPresence — sem essa row, GET /boards/:id não retorna o card).
+    await this.prisma.cardPresence.create({
+      data: {
+        cardId: child.id,
+        boardId: targetList.boardId,
+        listId: targetListId,
+        position: (last?.position ?? 0) + 1,
+      },
+    });
+
     if (config.copyTeam && parent.members.length > 0) {
       await this.prisma.cardMember.createMany({
         data: parent.members.map((m) => ({ cardId: child.id, userId: m.userId })),
