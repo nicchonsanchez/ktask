@@ -23,6 +23,7 @@ import { ApiError } from '@/lib/api-client';
 import { ORG_ROLE_LABELS, type OrgRole } from '@ktask/contracts';
 import {
   forcePasswordReset,
+  sendPasswordResetLink,
   membersAdminQueries,
   suspendMember,
   unsuspendMember,
@@ -396,6 +397,16 @@ function SecurityTab({
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erro.'),
   });
 
+  const sendResetMut = useMutation({
+    mutationFn: () => sendPasswordResetLink(member.id),
+    onSuccess: (r) => {
+      setInfo(r.message);
+      setError(null);
+      onChanged();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Erro.'),
+  });
+
   const suspendMut = useMutation({
     mutationFn: () => suspendMember(member.id, suspendReason.trim()),
     onSuccess: () => {
@@ -441,18 +452,49 @@ function SecurityTab({
         </div>
       )}
 
-      {/* Reset senha */}
+      {/* Reset senha — 2 caminhos: enviar (atendimento) ou forçar (incidente).
+          A diferença critica: Forçar invalida TODAS as sessoes ativas.
+          Enviar so dispara o link. Admin nunca define a senha direto. */}
       <div className="border-border rounded-md border p-3">
         <div className="flex items-start gap-2">
           <KeyRound size={14} className="text-fg-muted mt-0.5" />
           <div className="flex-1">
-            <p className="text-fg text-sm font-medium">Forçar redefinição de senha</p>
+            <p className="text-fg text-sm font-medium">Redefinição de senha</p>
             <p className="text-fg-subtle text-[11px]">
-              Invalida todas as sessões e (quando mailer estiver pronto) envia link de redefinição
-              pro e-mail do usuário. Admin nunca define a senha direto — segurança.
+              Envia link de redefinição pelo e-mail + WhatsApp (se tem telefone). Admin nunca define
+              senha direto — segurança.
             </p>
           </div>
-          {canEdit && (
+        </div>
+        {canEdit && (
+          <div className="border-border/40 mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-start sm:justify-between">
+            {/* Enviar — caminho de atendimento (user esqueceu, nao corta sessao). */}
+            <div className="flex-1">
+              <p className="text-fg text-[12px] font-medium">Enviar link</p>
+              <p className="text-fg-subtle text-[10px]">
+                Pra quando o usuário esqueceu a senha. <strong>Não desloga ele.</strong>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => sendResetMut.mutate()}
+              disabled={sendResetMut.isPending || resetMut.isPending}
+              className="bg-primary-subtle text-primary hover:bg-primary hover:text-primary-fg shrink-0 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            >
+              {sendResetMut.isPending ? <Loader2 size={11} className="animate-spin" /> : 'Enviar'}
+            </button>
+          </div>
+        )}
+        {canEdit && (
+          <div className="border-border/40 mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-start sm:justify-between">
+            {/* Forcar — caminho de incidente (suspeita de uso indevido). */}
+            <div className="flex-1">
+              <p className="text-fg text-[12px] font-medium">Forçar redefinição</p>
+              <p className="text-fg-subtle text-[10px]">
+                Quando suspeitar de uso indevido. <strong>Desloga</strong> de todas as sessões e
+                exige nova senha.
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -460,13 +502,13 @@ function SecurityTab({
                   resetMut.mutate();
                 }
               }}
-              disabled={resetMut.isPending}
-              className="border-border hover:bg-bg-muted text-fg shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              disabled={resetMut.isPending || sendResetMut.isPending}
+              className="border-danger/40 text-danger hover:bg-danger hover:text-primary-fg shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
             >
               {resetMut.isPending ? <Loader2 size={11} className="animate-spin" /> : 'Forçar'}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Suspender */}

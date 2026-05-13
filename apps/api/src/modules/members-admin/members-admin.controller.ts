@@ -71,6 +71,18 @@ export class MembersAdminController {
     return this.service.forcePasswordReset(actor.userId, org, userId);
   }
 
+  @Post(':userId/send-password-reset')
+  @ApiOperation({
+    summary: 'Envia link de redefinicao (email + whatsapp) SEM invalidar sessoes',
+  })
+  sendPasswordReset(
+    @CurrentUser() actor: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('userId') userId: string,
+  ) {
+    return this.service.sendPasswordResetLink(actor.userId, org, userId);
+  }
+
   @Post(':userId/suspend')
   @ApiOperation({ summary: 'Suspende conta (preserva dados, bloqueia login)' })
   suspend(

@@ -281,6 +281,53 @@ export class MembersAdminService {
     };
   }
 
+  /**
+   * Envia link de redefinicao SEM invalidar sessoes ativas. Pra cenarios
+   * de atendimento (user esqueceu, prazo apertado pra logar dnv): facilita
+   * sem cortar trabalho em andamento. Diferente de forcePasswordReset
+   * que e pra incidente/suspeita de uso indevido.
+   */
+  async sendPasswordResetLink(
+    actorUserId: string,
+    actorTenant: TenantContext,
+    targetUserId: string,
+  ) {
+    await this.assertCanModify(actorUserId, actorTenant, targetUserId);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, email: true, name: true, phone: true, deletedAt: true },
+    });
+    if (!target || target.deletedAt) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    await this.auth.dispatchPasswordResetForUser(
+      { id: target.id, email: target.email, name: target.name, phone: target.phone },
+      { source: 'admin' },
+    );
+    this.logger.log(
+      `[send-password-reset] User ${targetUserId} link enviado por ${actorUserId} ` +
+        `(email${target.phone ? ' + whatsapp' : ''}, sessoes preservadas)`,
+    );
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: actorTenant.organizationId,
+        actorId: actorUserId,
+        type: 'MEMBER_PASSWORD_RESET_SENT',
+        payload: { targetUserId } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      ok: true,
+      message: target.phone
+        ? 'Link de redefinição enviado por email e WhatsApp.'
+        : 'Link de redefinição enviado por email.',
+    };
+  }
+
   async suspend(
     actorUserId: string,
     actorTenant: TenantContext,

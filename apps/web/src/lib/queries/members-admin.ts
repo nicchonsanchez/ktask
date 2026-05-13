@@ -57,6 +57,13 @@ export function forcePasswordReset(userId: string) {
   );
 }
 
+/** Envia link de redefinição (email + WhatsApp se phone) SEM invalidar sessões ativas. */
+export function sendPasswordResetLink(userId: string) {
+  return api.post<{ ok: boolean; message: string }>(
+    `/api/v1/admin/members/${userId}/send-password-reset`,
+  );
+}
+
 export function suspendMember(userId: string, reason: string) {
   return api.post(`/api/v1/admin/members/${userId}/suspend`, { reason });
 }
