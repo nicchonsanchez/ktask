@@ -102,6 +102,8 @@ export interface CreateContactInput {
   document?: string;
   note?: string;
   parentId?: string | null;
+  /** Cria + vincula a User existente atomicamente (cria+linka num call). */
+  linkToUserId?: string;
 }
 
 export function createContact(input: CreateContactInput) {

@@ -110,6 +110,12 @@ export class ContactsService {
       },
     });
 
+    // Atalho atômico: cria + linka pra User existente em 1 chamada.
+    // Reaproveita validações/regras do linkToUser (membership, unique, etc).
+    if (body.linkToUserId) {
+      return this.linkToUser(userId, tenant, contact.id, body.linkToUserId);
+    }
+
     return this.attachUserMatch(contact, tenant.organizationId);
   }
 
@@ -430,7 +436,14 @@ export class ContactsService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, suspendedAt: true, linkedContact: { select: { id: true } } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        suspendedAt: true,
+        linkedContact: { select: { id: true } },
+      },
     });
     if (!user) throw new NotFoundException('Usuário não encontrado.');
     // Confirma que o user pertence à mesma Org via Membership
@@ -443,9 +456,17 @@ export class ContactsService {
       throw new BadRequestException(`Usuário "${user.name}" já tem outro contato vinculado.`);
     }
 
+    // Sync inicial: copia identidade do User pro Contact no momento do
+    // vínculo. UI prefere `contact.user.*` quando disponível, mas leituras
+    // SQL sem JOIN ainda encontram dados coerentes.
     const updated = await this.prisma.contact.update({
       where: { id: contactId },
-      data: { userId },
+      data: {
+        userId,
+        name: user.name,
+        email: user.email ?? null,
+        phone: user.phone ?? null,
+      },
     });
     await this.prisma.activity.create({
       data: {

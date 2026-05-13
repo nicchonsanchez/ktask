@@ -35,6 +35,9 @@ export const CreateContactSchema = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   parentId: z.string().min(1).optional().nullable(),
+  /** Cria Contact JÁ vinculado a um User existente (atomicamente). UI
+   *  usa quando o operador escolhe "criar contato a partir de membro". */
+  linkToUserId: z.string().min(1).optional(),
 });
 export type CreateContactRequest = z.infer<typeof CreateContactSchema>;
 

@@ -185,9 +185,13 @@ function FilterBtn({
 
 function ContactRowItem({ contact, onClick }: { contact: ContactRow; onClick: () => void }) {
   const Icon = contact.type === 'COMPANY' ? Building2 : UserIcon;
-  // Quando há vínculo FK direto (Contact.userId), usa avatar real do User;
+  // Quando há vínculo FK direto (Contact.userId), o User é a fonte
+  // autoritativa de identidade — sobrescreve name/email/phone na exibição.
   // userMatch (cross-reference por email/phone) só sugere link.
   const linked = contact.user ?? null;
+  const displayName = linked?.name ?? contact.name;
+  const displayEmail = linked?.email ?? contact.email;
+  const displayPhone = linked?.phone ?? contact.phone;
   return (
     <li>
       <button
@@ -208,7 +212,7 @@ function ContactRowItem({ contact, onClick }: { contact: ContactRow; onClick: ()
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-fg truncate text-sm font-medium">{contact.name}</span>
+            <span className="text-fg truncate text-sm font-medium">{displayName}</span>
             {contact.parent && (
               <span className="text-fg-subtle truncate text-[11px]">· {contact.parent.name}</span>
             )}
@@ -230,18 +234,18 @@ function ContactRowItem({ contact, onClick }: { contact: ContactRow; onClick: ()
               </span>
             ) : null}
           </div>
-          {(contact.email || contact.phone) && (
+          {(displayEmail || displayPhone) && (
             <div className="text-fg-muted mt-0.5 flex items-center gap-3 text-[11px]">
-              {contact.email && (
+              {displayEmail && (
                 <span className="inline-flex items-center gap-1">
                   <Mail size={10} />
-                  {contact.email}
+                  {displayEmail}
                 </span>
               )}
-              {contact.phone && (
+              {displayPhone && (
                 <span className="inline-flex items-center gap-1">
                   <Phone size={10} />
-                  {contact.phone}
+                  {displayPhone}
                 </span>
               )}
             </div>
@@ -265,7 +269,18 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
   const [phone, setPhone] = useState('');
   const [document, setDocument] = useState('');
   const [parentId, setParentId] = useState<string | null>(null);
+  /** Quando setado, cria Contact JÁ vinculado a esse User (atomic) e
+   *  trava name/email/phone com os valores dele. */
+  const [linkToUserId, setLinkToUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-preenche name/email/phone quando o operador escolhe vincular a
+  // um membro existente. Lista de membros carregada uma vez no mount.
+  const membersQ = useQuery({ ...membersQueries.all() });
+  const selectedMember = (membersQ.data ?? []).find((m) => m.userId === linkToUserId) ?? null;
+  // Effect-free: ao mudar linkToUserId, atualiza os states pra refletir
+  // os dados do membro. Usuário pode "soltar" e voltar pro modo livre.
+  // (Sem useEffect pra evitar render cycle — handled inline no onChange.)
 
   const mut = useMutation({
     mutationFn: () => {
@@ -276,6 +291,7 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
         phone: phone.trim() || undefined,
         document: document.trim() || undefined,
         parentId: type === 'PERSON' ? parentId : null,
+        ...(linkToUserId ? { linkToUserId } : {}),
       };
       return createContact(input);
     },
@@ -287,6 +303,19 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
       setError(err instanceof ApiError ? err.message : 'Erro ao criar contato.');
     },
   });
+
+  function pickMember(userId: string | null) {
+    setLinkToUserId(userId);
+    if (userId) {
+      const m = (membersQ.data ?? []).find((m) => m.userId === userId);
+      if (m) {
+        setType('PERSON');
+        setName(m.user.name);
+        setEmail(m.user.email ?? '');
+        setPhone(m.user.phone ?? '');
+      }
+    }
+  }
 
   const canSubmit = name.trim().length > 0 && !mut.isPending;
 
@@ -312,19 +341,42 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex flex-col gap-3">
+          <Field label="Vincular a um membro existente?">
+            <select
+              value={linkToUserId ?? ''}
+              onChange={(e) => pickMember(e.target.value || null)}
+              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+            >
+              <option value="">— Criar contato externo (livre) —</option>
+              {(membersQ.data ?? [])
+                .filter((m) => !m.user || true) /* todos os membros */
+                .map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.user.name} ({m.user.email})
+                  </option>
+                ))}
+            </select>
+          </Field>
+          {selectedMember && (
+            <p className="bg-primary-subtle/40 text-primary-fg rounded px-2 py-1 text-[11px]">
+              Vinculando a <strong>{selectedMember.user.name}</strong>. Nome, email e telefone vêm
+              do membro.
+            </p>
+          )}
+
           <div>
             <label className="text-fg-muted mb-1 block text-[11px] font-medium">Tipo</label>
             <div className="flex gap-1">
               <FilterBtn
                 active={type === 'PERSON'}
-                onClick={() => setType('PERSON')}
+                onClick={() => !linkToUserId && setType('PERSON')}
                 icon={<UserIcon size={12} />}
               >
                 Pessoa
               </FilterBtn>
               <FilterBtn
                 active={type === 'COMPANY'}
-                onClick={() => setType('COMPANY')}
+                onClick={() => !linkToUserId && setType('COMPANY')}
                 icon={<Building2 size={12} />}
               >
                 Empresa
@@ -338,7 +390,8 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={200}
-              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+              disabled={Boolean(linkToUserId)}
+              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:opacity-60"
             />
           </Field>
           <Field label="Email">
@@ -346,14 +399,16 @@ function CreateContactModal({ onClose }: { onClose: () => void }) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+              disabled={Boolean(linkToUserId)}
+              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:opacity-60"
             />
           </Field>
           <Field label="Telefone">
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+              disabled={Boolean(linkToUserId)}
+              className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:opacity-60"
             />
           </Field>
           <Field label={type === 'COMPANY' ? 'CNPJ' : 'CPF'}>
@@ -497,38 +552,51 @@ function ContactDetailView({
     : never;
 }) {
   const Icon = contact.type === 'COMPANY' ? Building2 : UserIcon;
+  const linked = contact.user ?? null;
+  const displayName = linked?.name ?? contact.name;
+  const displayEmail = linked?.email ?? contact.email;
+  const displayPhone = linked?.phone ?? contact.phone;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <span className="bg-bg-muted text-fg-muted inline-flex size-12 items-center justify-center rounded-full">
-          <Icon size={20} />
-        </span>
+        {linked?.avatarUrl ? (
+          <img
+            src={linked.avatarUrl}
+            alt=""
+            className="size-12 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span className="bg-bg-muted text-fg-muted inline-flex size-12 items-center justify-center rounded-full">
+            <Icon size={20} />
+          </span>
+        )}
         <div>
-          <h3 className="text-lg font-semibold">{contact.name}</h3>
+          <h3 className="text-lg font-semibold">{displayName}</h3>
           <p className="text-fg-muted text-xs">
             {contact.type === 'COMPANY' ? 'Empresa' : 'Pessoa'}
             {contact.parent && ` · vinculada a ${contact.parent.name}`}
+            {linked && ' · membro do KTask'}
           </p>
         </div>
-        {contact.userMatch && (
+        {!linked && contact.userMatch && (
           <span className="bg-primary-subtle/60 text-primary ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium">
             <Check size={11} />
-            Tambem é membro: {contact.userMatch.name}
+            Pode ser o membro {contact.userMatch.name}
           </span>
         )}
       </div>
 
       <dl className="grid grid-cols-2 gap-3 text-sm">
-        {contact.email && (
+        {displayEmail && (
           <div>
             <dt className="text-fg-muted text-[11px]">Email</dt>
-            <dd className="text-fg">{contact.email}</dd>
+            <dd className="text-fg">{displayEmail}</dd>
           </div>
         )}
-        {contact.phone && (
+        {displayPhone && (
           <div>
             <dt className="text-fg-muted text-[11px]">Telefone</dt>
-            <dd className="text-fg">{contact.phone}</dd>
+            <dd className="text-fg">{displayPhone}</dd>
           </div>
         )}
         {contact.document && (
@@ -611,14 +679,18 @@ function ContactEditForm({
     note: string | null;
     parentId?: string | null;
     userId?: string | null;
+    user?: { id: string; name: string; email: string | null; phone: string | null } | null;
   };
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(contact.name);
+  // Quando vinculado, esses 3 campos vêm do User (read-only). State usa
+  // os valores do User pra ficar coerente com o que está sendo exibido.
+  const linked = contact.user ?? null;
+  const [name, setName] = useState(linked?.name ?? contact.name);
   const [type, setType] = useState<ContactType>(contact.type);
-  const [email, setEmail] = useState(contact.email ?? '');
-  const [phone, setPhone] = useState(contact.phone ?? '');
+  const [email, setEmail] = useState(linked?.email ?? contact.email ?? '');
+  const [phone, setPhone] = useState(linked?.phone ?? contact.phone ?? '');
   const [document, setDocument] = useState(contact.document ?? '');
   const [note, setNote] = useState(contact.note ?? '');
   const [parentId, setParentId] = useState<string | null>(contact.parentId ?? null);
