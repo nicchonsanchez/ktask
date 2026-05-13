@@ -581,7 +581,7 @@
     </ol>
 
     <div class="obs" style="margin-top: 40px;">
-      <strong>Importante:</strong> Diferente de outras ferramentas, no KTask <strong>você não precisa mover cards entre colunas</strong>. As automações configuradas pela Kharis movem os cards sozinhas quando você aprova, reprova ou marca tarefas — sua função é só interagir com o que aparece pra você.
+      <strong>Importante:</strong> No KTask <strong>você não precisa mover cards entre colunas</strong>. As automações configuradas pela Kharis movem os cards sozinhas quando você aprova, reprova ou marca tarefas.
     </div>
   </section>
 
@@ -598,7 +598,7 @@
 
     <h3>O que você vai fazer no KTask</h3>
     <ul>
-      <li><strong>Acompanhar</strong> o andamento das suas demandas em tempo real.</li>
+      <li><strong>Acompanhar</strong> o andamento das demandas em tempo real.</li>
       <li><strong>Aprovar ou reprovar</strong> entregas (copy, arte, vídeo, briefing).</li>
       <li><strong>Comentar</strong> ajustes na timeline do card e marcar pessoas.</li>
       <li><strong>Criar cards novos</strong> quando tiver uma solicitação extra.</li>
@@ -737,13 +737,14 @@
 
     <ol class="steps">
       <li><strong>Conferir o material</strong> — se é copy, está na descrição do card; se é arte ou vídeo, tem um link na descrição ou no anexo.</li>
-      <li><strong>Clique no botão <span class="pill accent">✓ Aprovar</span></strong> dentro do bloco de aprovação.</li>
+      <li><strong>Role o card até o final</strong> — o bloco de aprovação fica no fim da coluna esquerda, abaixo de Anexos.</li>
+      <li><strong>Clique no botão <span class="pill accent">✓ Aprovar</span></strong>.</li>
       <li><strong>Pronto.</strong> A automação move o card pra próxima etapa do fluxo e notifica a equipe da Kharis.</li>
     </ol>
 
     <figure class="shot">
-      <img src="/tutorial-para-clientes/img/06-aprovar.png" alt="Card aberto com bloco Aprovações destacado">
-      <figcaption>Bloco Aprovações com botão verde Aprovar — clique pra liberar.</figcaption>
+      <img src="/tutorial-para-clientes/img/06-aprovar.png" alt="Bloco Aprovações do card com botões Aprovar e Reprovar">
+      <figcaption>Bloco Aprovações — fica no final do card, role pra baixo pra encontrar.</figcaption>
     </figure>
 
     <div class="obs">
@@ -752,24 +753,29 @@
 
     <h3>4.3 — Solicitando alterações (reprovar)</h3>
     <p>
-      Se o material precisa de ajustes, o processo tem <strong>duas etapas</strong> —
-      e a ordem importa:
+      Se o material precisa de ajustes, é simples — a justificativa entra
+      junto com a reprovação, num único passo:
     </p>
 
     <ol class="steps">
-      <li><strong>Primeiro, comente na timeline</strong> explicando o que você quer que mude. Seja específico ("Trocar a foto pela versão sem fundo" funciona melhor do que "Não gostei").</li>
-      <li><strong>Depois, clique em <span class="pill" style="background:#fee2e2;color:#991b1b">✗ Reprovar</span></strong> no bloco de Aprovações. A automação cria automaticamente uma nova tarefa de refação pra quem produziu o material, já com seu comentário linkado.</li>
+      <li><strong>Clique em <span class="pill" style="background:#fee2e2;color:#991b1b">✗ Reprovar</span></strong> no bloco de Aprovações.</li>
+      <li><strong>Abre um popup pedindo a justificativa</strong> (mínimo 5 caracteres). Seja específico ("Trocar a foto pela versão sem fundo" funciona melhor do que "Não gostei").</li>
+      <li><strong>Confirme</strong>. A reprovação fica registrada no próprio card com seu motivo visível, e a automação cria uma tarefa de refação pra equipe da Kharis.</li>
     </ol>
 
     <figure class="shot">
-      <img src="/tutorial-para-clientes/img/07-comentar-refacao.png" alt="Comentário sendo digitado na timeline do card">
-      <figcaption>Digite o ajuste que você quer na timeline ANTES de reprovar.</figcaption>
+      <img src="/tutorial-para-clientes/img/07-reprovar-popup.png" alt="Popup de Reprovar com justificativa">
+      <figcaption>O popup já pede o motivo na hora — não precisa comentar antes.</figcaption>
     </figure>
 
     <figure class="shot">
-      <img src="/tutorial-para-clientes/img/08-reprovar.png" alt="Botão Reprovar destacado no bloco de aprovações">
-      <figcaption>Reprovar — só clique depois de comentar o que precisa ajustar.</figcaption>
+      <img src="/tutorial-para-clientes/img/08-reprovado-desfazer.png" alt="Card reprovado mostrando o motivo e o botão Desfazer com cronômetro">
+      <figcaption>Após reprovar, seu motivo aparece no card e fica disponível o botão Desfazer.</figcaption>
     </figure>
+
+    <div class="obs">
+      <strong>Janela de 5 minutos pra desfazer:</strong> se você clicou sem querer, ainda dá pra reverter no botão <strong>Desfazer</strong> que aparece após reprovar. O contador mostra quanto tempo resta. <strong>Se alguém interagir no card</strong> (comentário, edição), a janela fecha antes — a partir daí só a Kharis consegue reverter.
+    </div>
 
     <div class="obs danger">
       <strong>Atenção:</strong> Diferente do antigo sistema (Ummense), <strong>você NÃO precisa mover o card</strong> pra coluna "Design" ou "Copies a fazer". A automação faz isso sozinha quando você clica em Reprovar. Se você mover manualmente, pode confundir o fluxo.

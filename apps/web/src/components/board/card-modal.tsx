@@ -44,6 +44,7 @@ import { DueDatePicker } from './due-date-picker';
 import { CardTimerButton } from './card-timer-button';
 import { DuplicateCardDialog } from './duplicate-card-dialog';
 import { CreateChildCardDialog } from './create-child-card-dialog';
+import { SetParentCardDialog } from './set-parent-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
@@ -223,6 +224,7 @@ export function CardModalContent({
 
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [createChildOpen, setCreateChildOpen] = useState(false);
+  const [setParentOpen, setSetParentOpen] = useState(false);
   const [tab, setTab] = useState<CardTab>('home');
 
   // Drag-and-drop wide: 2 zonas de drop com alvos diferentes.
@@ -350,6 +352,7 @@ export function CardModalContent({
             }}
             onDuplicate={() => setDuplicateOpen(true)}
             onCreateChild={() => setCreateChildOpen(true)}
+            onSetParent={() => setSetParentOpen(true)}
             onDelete={async () => {
               const confirmation = await promptDialog({
                 title: `Excluir "${card.title}" permanentemente?`,
@@ -534,40 +537,6 @@ export function CardModalContent({
                     </div>
                   </Block>
 
-                  {/* Doc 25: Privacidade do card */}
-                  <Block icon={<Lock size={14} />} label="Privacidade">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => privacyMut.mutate('PUBLIC')}
-                        disabled={privacyMut.isPending}
-                        aria-pressed={card.privacy === 'PUBLIC'}
-                        className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                          card.privacy === 'PUBLIC'
-                            ? 'border-fg/20 bg-bg text-fg shadow-sm'
-                            : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
-                        }`}
-                        title="Todos do fluxo veem"
-                      >
-                        <Unlock size={10} /> Público
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => privacyMut.mutate('TEAM_ONLY')}
-                        disabled={privacyMut.isPending}
-                        aria-pressed={card.privacy === 'TEAM_ONLY'}
-                        className={`focus-visible:ring-primary inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                          card.privacy === 'TEAM_ONLY'
-                            ? 'border-fg/30 bg-bg-muted text-fg shadow-sm'
-                            : 'border-border/60 text-fg-muted hover:border-border-strong hover:text-fg opacity-80 hover:opacity-100'
-                        }`}
-                        title="Só líder e equipe (admin/gestor da Org sempre veem)"
-                      >
-                        <Lock size={10} /> Só equipe
-                      </button>
-                    </div>
-                  </Block>
-
                   {/* Tags (labels) */}
                   <Block
                     icon={<Tag size={14} />}
@@ -588,16 +557,18 @@ export function CardModalContent({
                     </div>
                   </Block>
 
-                  {/* Doc 38: Empresa(s) vinculada(s) — separado de Contatos pra
-                    nao misturar cliente com pessoas. Mesma fonte (CardContact). */}
-                  <Block icon={<Building2 size={14} />} label="Empresa">
-                    <ContactsBlock cardId={card.id} filterType="COMPANY" />
-                  </Block>
-
-                  {/* Contatos (pessoas) vinculados */}
-                  <Block icon={<ContactIcon size={14} />} label="Contatos">
-                    <ContactsBlock cardId={card.id} filterType="PERSON" />
-                  </Block>
+                  {/* Doc 38: Empresa(s) + Contatos vinculados. Dois Blocks
+                      lado-a-lado em md+, empilhados em mobile. Grid 1fr 1fr
+                      pra dar peso igual; gap-7 vertical pra casar com o
+                      espaçamento dos outros Blocks quando empilhado. */}
+                  <div className="grid grid-cols-1 gap-7 md:grid-cols-2">
+                    <Block icon={<Building2 size={14} />} label="Empresa">
+                      <ContactsBlock cardId={card.id} filterType="COMPANY" />
+                    </Block>
+                    <Block icon={<ContactIcon size={14} />} label="Contatos">
+                      <ContactsBlock cardId={card.id} filterType="PERSON" />
+                    </Block>
+                  </div>
 
                   {/* Aprovações por cliente */}
                   <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
@@ -677,6 +648,7 @@ export function CardModalContent({
         open={createChildOpen}
         onOpenChange={setCreateChildOpen}
       />
+      <SetParentCardDialog card={card} open={setParentOpen} onOpenChange={setSetParentOpen} />
     </div>
   );
 }
@@ -829,6 +801,7 @@ function CardMenu({
   onDuplicate,
   onDelete,
   onCreateChild,
+  onSetParent,
   busy,
 }: {
   cardId: string;
@@ -837,6 +810,7 @@ function CardMenu({
   onDuplicate: () => void;
   onDelete: () => void;
   onCreateChild: () => void;
+  onSetParent: () => void;
   busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -891,7 +865,14 @@ function CardMenu({
                 onCreateChild();
               }}
             />
-            <MenuItem disabled label="Tornar filho de..." icon={<Copy size={14} />} />
+            <MenuItem
+              label="Tornar filho de..."
+              icon={<Copy size={14} />}
+              onClick={() => {
+                setOpen(false);
+                onSetParent();
+              }}
+            />
             <div className="border-border my-1 border-t" />
             <MenuItem
               label={copied ? 'URL copiada' : 'Copiar URL do card'}
