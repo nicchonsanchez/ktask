@@ -35,6 +35,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: tutorial.title,
       description: tutorial.description,
       type: 'article',
+      images: ['/opengraph-image'],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: tutorial.title,
+      description: tutorial.description,
+      images: ['/opengraph-image'],
     },
   };
 }

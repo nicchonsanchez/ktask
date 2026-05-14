@@ -85,10 +85,10 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="data-[state=open]:animate-fade-in fixed inset-0 z-50 bg-black/50" />
+        <DialogOverlay className="data-[state=open]:animate-fade-in fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
         <DialogContent
           aria-describedby={undefined}
-          className="border-border bg-bg data-[state=open]:animate-fade-in fixed left-1/2 top-[10vh] z-50 w-[92vw] max-w-2xl -translate-x-1/2 overflow-hidden rounded-xl border shadow-lg focus:outline-none"
+          className="bg-bg border-border data-[state=open]:animate-fade-in fixed left-1/2 top-[18%] z-50 flex max-h-[calc(100vh-9rem)] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border shadow-xl focus:outline-none"
         >
           <DialogTitle className="sr-only">Buscar na Central de Ajuda</DialogTitle>
           <div className="border-border flex items-center gap-2 border-b px-4">
@@ -113,7 +113,7 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
             </button>
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto p-2">
             {loadState === 'loading' && (
               <p className="text-fg-muted px-3 py-6 text-center text-sm">Carregando índice…</p>
             )}
@@ -123,9 +123,24 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
               </p>
             )}
             {loadState === 'ready' && debounced.length < 2 && (
-              <p className="text-fg-muted px-3 py-6 text-center text-sm">
-                Digite pelo menos 2 caracteres para buscar.
-              </p>
+              <div className="text-fg-muted flex flex-col items-center gap-2 px-3 py-10 text-center text-xs">
+                <Search size={20} className="opacity-50" aria-hidden />
+                <p>Digite ao menos 2 caracteres pra buscar.</p>
+                <p className="text-fg-subtle text-[11px]">
+                  Use{' '}
+                  <kbd className="border-border bg-bg-muted rounded border px-1 py-0.5 font-mono text-[10px]">
+                    ↑
+                  </kbd>{' '}
+                  <kbd className="border-border bg-bg-muted rounded border px-1 py-0.5 font-mono text-[10px]">
+                    ↓
+                  </kbd>{' '}
+                  pra navegar e{' '}
+                  <kbd className="border-border bg-bg-muted rounded border px-1 py-0.5 font-mono text-[10px]">
+                    Enter
+                  </kbd>{' '}
+                  pra abrir.
+                </p>
+              </div>
             )}
             {loadState === 'ready' && debounced.length >= 2 && results.length === 0 && (
               <p className="text-fg-muted px-3 py-6 text-center text-sm">
@@ -179,17 +194,6 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
                 })}
               </ul>
             )}
-          </div>
-
-          <div className="border-border bg-bg-subtle text-fg-subtle flex items-center justify-between gap-3 border-t px-4 py-2 text-xs">
-            <span className="hidden sm:inline">
-              <kbd className="border-border bg-bg rounded border px-1.5 py-0.5">↑↓</kbd> navegar{' '}
-              <kbd className="border-border bg-bg ml-2 rounded border px-1.5 py-0.5">Enter</kbd>{' '}
-              abrir
-            </span>
-            <span>
-              <kbd className="border-border bg-bg rounded border px-1.5 py-0.5">Esc</kbd> fechar
-            </span>
           </div>
         </DialogContent>
       </DialogPortal>

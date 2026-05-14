@@ -34,12 +34,12 @@ export function HelpSearchTrigger() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="border-border bg-bg-subtle text-fg-muted hover:bg-bg-muted hover:text-fg group flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm transition-colors sm:w-72"
+        className="border-border bg-bg-subtle text-fg-muted hover:bg-bg-muted hover:text-fg group flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm leading-none transition-colors sm:w-72"
         aria-label="Buscar na ajuda"
       >
-        <Search size={15} className="shrink-0" aria-hidden />
-        <span className="flex-1 text-left">Buscar tutoriais…</span>
-        <kbd className="border-border text-fg-subtle hidden rounded border px-1.5 py-0.5 text-[10px] font-medium sm:inline-block">
+        <Search size={16} className="shrink-0" aria-hidden />
+        <span className="flex-1 text-left leading-none">Buscar tutoriais…</span>
+        <kbd className="border-border text-fg-subtle hidden h-5 items-center rounded border px-1.5 font-mono text-[10px] font-medium leading-none sm:inline-flex">
           /
         </kbd>
       </button>

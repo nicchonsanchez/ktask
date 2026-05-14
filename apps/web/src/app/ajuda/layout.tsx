@@ -17,6 +17,30 @@ export const metadata: Metadata = {
     follow: true,
     googleBot: { index: true, follow: true },
   },
+  openGraph: {
+    type: 'website',
+    locale: 'pt_BR',
+    siteName: 'KTask',
+    title: 'Central de Ajuda · KTask',
+    description:
+      'Tutoriais, guias e respostas para usar o KTask — para operadores internos e clientes externos.',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'KTask — Sistema de gestão de tarefas e fluxos da Kharis',
+        type: 'image/png',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Central de Ajuda · KTask',
+    description:
+      'Tutoriais, guias e respostas para usar o KTask — para operadores internos e clientes externos.',
+    images: ['/opengraph-image'],
+  },
 };
 
 export default async function AjudaLayout({ children }: { children: ReactNode }) {

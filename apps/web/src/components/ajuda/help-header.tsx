@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
@@ -43,13 +44,28 @@ export function HelpHeader({ categorias }: HelpHeaderProps) {
 
           <Link
             href="/ajuda"
-            className="text-fg flex items-center gap-2 text-sm font-semibold tracking-tight"
+            aria-label="Central de Ajuda KTask"
+            className="group flex shrink-0 items-center gap-2.5 transition-opacity hover:opacity-85"
           >
-            <span className="bg-primary text-primary-fg flex size-7 items-center justify-center rounded-md text-xs font-bold">
-              K
-            </span>
-            <span>
-              KTask <span className="text-fg-muted font-normal">Ajuda</span>
+            <Image
+              src="/brand/lockup-wordmark-dark.png"
+              alt="KTask"
+              width={88}
+              height={25}
+              priority
+              className="block shrink-0 dark:hidden"
+            />
+            <Image
+              src="/brand/lockup-wordmark.png"
+              alt=""
+              aria-hidden
+              width={88}
+              height={25}
+              priority
+              className="hidden shrink-0 dark:block"
+            />
+            <span className="border-border/70 text-fg-muted ml-0.5 border-l pl-2.5 text-sm font-medium">
+              Ajuda
             </span>
           </Link>
 
