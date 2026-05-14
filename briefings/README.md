@@ -26,6 +26,9 @@ Esta pasta contém **prompts auto-suficientes** para gerar a documentação téc
 | 06  | `06-postmortem-template-e-cannes.md` | `docs/postmortems/` template + caso CARROSSEL CANNES | Média      |
 | 07  | `07-onboarding-dev.md`               | `docs/onboarding.md` (checklist 30/60/90 dias)       | Média      |
 | 08  | `08-architecture-overview.md`        | `docs/architecture.md` (1 página, C4 nível 1+2)      | Baixa      |
+| 09  | `09-ajuda-frontend.md`               | Central de Ajuda (`/ajuda/*`) — estrutura frontend   | Média      |
+| 10  | `10-suporte-formulario-card.md`      | Formulário `/ajuda/suporte` que vira card no KTask   | Média      |
+| 11  | `11-conteudo-tutoriais.md`           | Conteúdo escrito dos 15 tutoriais (após 09)          | Média      |
 
 ## Princípios dos briefings
 
