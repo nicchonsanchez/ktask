@@ -228,9 +228,13 @@ export class ContactsService {
     }
     if (existing.deletedAt) return { ok: true }; // idempotente
 
+    // Limpa userId junto com o soft-delete: senao a relacao User.linkedContact
+    // continua apontando pro contato morto e o User fica preso a ele, o que
+    // bloqueia criar novo Contact pro mesmo User com erro "ja tem outro
+    // contato vinculado".
     await this.prisma.contact.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), userId: null },
     });
 
     await this.prisma.activity.create({
@@ -238,7 +242,7 @@ export class ContactsService {
         organizationId: tenant.organizationId,
         actorId: userId,
         type: 'CONTACT_DELETED',
-        payload: { contactId: id, name: existing.name },
+        payload: { contactId: id, name: existing.name, previousUserId: existing.userId },
       },
     });
 
