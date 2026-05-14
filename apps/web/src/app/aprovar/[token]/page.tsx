@@ -161,7 +161,7 @@ export default function PublicApprovalPage() {
         </div>
       )}
 
-      {isDecided && <DecidedBanner status={approval.status} />}
+      {isDecided && <DecidedBanner approval={approval} />}
 
       {error && (
         <p className="bg-danger-subtle text-danger mt-3 rounded-md px-3 py-2 text-sm">{error}</p>
@@ -588,7 +588,8 @@ function humanActivity(type: string): string {
   return map[type] ?? type.toLowerCase().replace(/_/g, ' ');
 }
 
-function DecidedBanner({ status }: { status: string }) {
+function DecidedBanner({ approval }: { approval: PublicApprovalView['approval'] }) {
+  const status = approval.status;
   if (status === 'APPROVED') {
     return (
       <div className="border-success bg-success-subtle/50 mt-4 flex items-center gap-2 rounded-md border-l-2 px-3 py-3">
@@ -620,6 +621,35 @@ function DecidedBanner({ status }: { status: string }) {
           <p className="text-fg-muted text-xs">
             Quem pediu a aprovação reverteu a decisão. Aguarde uma nova solicitação.
           </p>
+        </div>
+      </div>
+    );
+  }
+  if (status === 'CANCELED') {
+    const who = approval.canceledBy?.name ?? 'a equipe';
+    const when = approval.canceledAt
+      ? new Date(approval.canceledAt).toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : null;
+    return (
+      <div className="border-fg-muted bg-bg-muted/40 mt-4 flex items-start gap-2 rounded-md border-l-2 px-3 py-3">
+        <XCircle size={18} className="text-fg-muted mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm font-medium">Pedido de aprovação cancelado</p>
+          <p className="text-fg-muted text-xs">
+            Cancelado por {who}
+            {when ? ` em ${when}` : ''}. Você não precisa mais decidir.
+          </p>
+          {approval.cancelReason && (
+            <p className="text-fg-muted bg-bg/60 mt-2 rounded px-2 py-1 text-xs italic">
+              Motivo: {approval.cancelReason}
+            </p>
+          )}
         </div>
       </div>
     );

@@ -70,3 +70,19 @@ export const UndoApprovalSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 export type UndoApprovalRequest = z.infer<typeof UndoApprovalSchema>;
+
+export const CancelApprovalSchema = z.object({
+  /** Motivo opcional do cancelamento (aparece na timeline + WhatsApp pros revisores). */
+  reason: z.string().max(500).trim().optional(),
+});
+export type CancelApprovalRequest = z.infer<typeof CancelApprovalSchema>;
+
+export const ResendApprovalSchema = z.object({
+  /**
+   * ID do reviewer especifico pra reenviar. Se omitido ou null, reenvia
+   * pra TODOS os reviewers do pedido. Modo "todos" e o default da UI
+   * quando o pedido tem 2+ revisores.
+   */
+  reviewerId: z.string().cuid().nullable().optional(),
+});
+export type ResendApprovalRequest = z.infer<typeof ResendApprovalSchema>;

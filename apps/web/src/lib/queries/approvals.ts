@@ -1,6 +1,6 @@
 import { api } from '@/lib/api-client';
 
-export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVERTED';
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVERTED' | 'CANCELED';
 
 export interface ApprovalReviewer {
   id: string;
@@ -29,10 +29,20 @@ export interface CardApproval {
   revertedAt: string | null;
   revertedById: string | null;
   revertReason: string | null;
+  canceledAt: string | null;
+  canceledById: string | null;
+  cancelReason: string | null;
+  /** Mensagem original digitada pelo requester. Null em pedidos pré-migration. */
+  message: string | null;
+  /** Timestamp do último envio agregado (initial ou resend). */
+  lastNotifiedAt: string | null;
+  /** Total de envios (1 = só o initial, 2+ = teve resend). */
+  notifyCount: number;
   reviewers: ApprovalReviewer[];
   requestedBy?: { id: string; name: string; avatarUrl: string | null };
   decidedBy?: { id: string; name: string; avatarUrl: string | null } | null;
   revertedBy?: { id: string; name: string; avatarUrl: string | null } | null;
+  canceledBy?: { id: string; name: string; avatarUrl: string | null } | null;
   defaultApproveList?: { id: string; name: string } | null;
   defaultRejectList?: { id: string; name: string } | null;
 }
@@ -182,4 +192,25 @@ export function undoApproval(approvalId: string, reason?: string) {
 
 export function publicDecideApproval(token: string, input: DecideApprovalInput) {
   return api.post<CardApproval>(`/api/v1/public/approvals/${token}/decide`, input);
+}
+
+export function cancelApproval(approvalId: string, reason?: string) {
+  return api.delete<CardApproval>(`/api/v1/approvals/${approvalId}`, { reason });
+}
+
+/**
+ * Reenvia WhatsApp + notificação in-app pros revisores.
+ * - `reviewerId` omitido: reenvia pra TODOS.
+ * - `reviewerId` setado: reenvia só pra aquele revisor específico.
+ */
+export function resendApproval(approvalId: string, reviewerId?: string | null) {
+  return api.post<CardApproval>(`/api/v1/approvals/${approvalId}/resend`, {
+    reviewerId: reviewerId ?? null,
+  });
+}
+
+export function removeApprovalReviewer(approvalId: string, reviewerId: string) {
+  return api.delete<{ id: string; removed: boolean }>(
+    `/api/v1/approvals/${approvalId}/reviewers/${reviewerId}`,
+  );
 }

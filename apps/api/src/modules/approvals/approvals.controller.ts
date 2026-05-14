@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { TenantGuard } from '@/common/tenant/tenant.guard';
@@ -13,9 +13,13 @@ import {
   RequestApprovalSchema,
   DecideApprovalSchema,
   UndoApprovalSchema,
+  CancelApprovalSchema,
+  ResendApprovalSchema,
   type RequestApprovalRequest,
   type DecideApprovalRequest,
   type UndoApprovalRequest,
+  type CancelApprovalRequest,
+  type ResendApprovalRequest,
 } from './dto/approvals.schemas';
 
 /**
@@ -81,5 +85,38 @@ export class ApprovalsController {
   @ApiOperation({ summary: 'Aprovações pendentes do user logado' })
   myPending(@CurrentUser() user: AuthenticatedRequestContext, @CurrentOrg() org: TenantContext) {
     return this.service.listPendingForUser(user.userId, org);
+  }
+
+  @Delete('approvals/:id')
+  @ApiOperation({ summary: 'Cancela pedido de aprovação pendente' })
+  cancel(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') approvalId: string,
+    @Body(new ZodValidationPipe(CancelApprovalSchema)) body: CancelApprovalRequest,
+  ) {
+    return this.service.cancel(user.userId, org, approvalId, body);
+  }
+
+  @Post('approvals/:id/resend')
+  @ApiOperation({ summary: 'Reenvia notificação WhatsApp+in-app pros revisores' })
+  resend(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') approvalId: string,
+    @Body(new ZodValidationPipe(ResendApprovalSchema)) body: ResendApprovalRequest,
+  ) {
+    return this.service.resend(user.userId, org, approvalId, body);
+  }
+
+  @Delete('approvals/:id/reviewers/:reviewerId')
+  @ApiOperation({ summary: 'Remove revisor individual sem cancelar o pedido' })
+  removeReviewer(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') approvalId: string,
+    @Param('reviewerId') reviewerId: string,
+  ) {
+    return this.service.removeReviewer(user.userId, org, approvalId, reviewerId);
   }
 }

@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Ban,
   CheckCircle2,
   Clock,
   Loader2,
   RotateCcw,
+  Send,
   ShieldCheck,
   ThumbsDown,
   ThumbsUp,
@@ -16,10 +18,13 @@ import {
 
 import { UserAvatar } from '@/components/user-avatar';
 import { useAuthStore } from '@/stores/auth-store';
-import { ApiError } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
 import {
   approvalsQueries,
+  cancelApproval,
   decideApproval,
+  removeApprovalReviewer,
+  resendApproval,
   undoApproval,
   type CardApproval,
 } from '@/lib/queries/approvals';
@@ -27,13 +32,19 @@ import {
 import { RequestApprovalDialog } from './request-approval-dialog';
 
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
+const PRIVILEGED_ROLES = new Set(['OWNER', 'ADMIN', 'GESTOR']);
+
+interface CurrentOrgResponse {
+  id: string;
+  myRole: 'OWNER' | 'ADMIN' | 'GESTOR' | 'MEMBER' | 'GUEST';
+}
 
 /**
  * Render principal das aprovações dentro do card modal. Estados:
  *  - sem aprovação ativa: botão "Pedir aprovação"
- *  - PENDING: banner amarelo + lista de revisores + botões aprovar/reprovar (se for reviewer)
+ *  - PENDING: banner amarelo + lista de revisores + ações (aprovar/reprovar/cancelar/reenviar/remover revisor)
  *  - APPROVED/REJECTED: banner verde/vermelho + nota + botão undo (5min)
- *  - REVERTED: linha histórica explicando que foi desfeita
+ *  - REVERTED/CANCELED: linha histórica explicando o estado
  */
 export function ApprovalsBlock({
   cardId,
@@ -49,7 +60,7 @@ export function ApprovalsBlock({
 
   const approvals = approvalsQ.data ?? [];
   const pending = approvals.find((a) => a.status === 'PENDING');
-  // mais recente que NÃO está pending — pra mostrar histórico/undo
+  // Decisão mais recente que NÃO seja PENDING/CANCELED — pra mostrar histórico/undo.
   const lastDecided = approvals.find((a) => a.status === 'APPROVED' || a.status === 'REJECTED');
 
   return (
@@ -72,7 +83,7 @@ export function ApprovalsBlock({
           </button>
         )}
 
-        {/* Histórico (passadas: REVERTED ou múltiplas) */}
+        {/* Histórico (passadas: REVERTED, CANCELED ou múltiplas) */}
         {approvals.length > 1 && <ApprovalHistory approvals={approvals.slice(1)} />}
       </div>
 
@@ -89,22 +100,44 @@ export function ApprovalsBlock({
   );
 }
 
+function useCanManageApproval(approval: CardApproval): boolean {
+  const me = useAuthStore((s) => s.user);
+  const orgQuery = useQuery({
+    queryKey: ['org', 'current'],
+    queryFn: () => api.get<CurrentOrgResponse>('/api/v1/organizations/current'),
+    enabled: !!me,
+    staleTime: 5 * 60_000,
+  });
+  if (!me) return false;
+  if (approval.requestedById === me.id) return true;
+  return orgQuery.data ? PRIVILEGED_ROLES.has(orgQuery.data.myRole) : false;
+}
+
 function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: CardApproval }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [resendOpen, setResendOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const me = useAuthStore((s) => s.user);
   const isReviewer = !!me && approval.reviewers.some((r) => r.userId === me.id);
+  const canManage = useCanManageApproval(approval);
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
+    queryClient.invalidateQueries({ queryKey: ['cards', cardId, 'approvals'] });
+    queryClient.invalidateQueries({ queryKey: ['me', 'pending-approvals'] });
+  };
 
   const decideMut = useMutation({
     mutationFn: (input: { decision: 'APPROVE' | 'REJECT'; note?: string }) =>
       decideApproval(approval.id, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
-      queryClient.invalidateQueries({ queryKey: ['cards', cardId, 'approvals'] });
+      invalidateAll();
       setConfirmOpen(false);
       setRejectOpen(false);
       setRejectNote('');
@@ -113,6 +146,49 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
       setError(err instanceof ApiError ? err.message : 'Erro ao decidir.');
     },
   });
+
+  const cancelMut = useMutation({
+    mutationFn: () => cancelApproval(approval.id, cancelReason.trim() || undefined),
+    onSuccess: () => {
+      invalidateAll();
+      setCancelOpen(false);
+      setCancelReason('');
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Erro ao cancelar.');
+    },
+  });
+
+  const resendMut = useMutation({
+    mutationFn: (reviewerId: string | null) => resendApproval(approval.id, reviewerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards', cardId, 'approvals'] });
+      setResendOpen(false);
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Erro ao reenviar.');
+    },
+  });
+
+  const removeReviewerMut = useMutation({
+    mutationFn: (reviewerId: string) => removeApprovalReviewer(approval.id, reviewerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards', cardId, 'approvals'] });
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Erro ao remover revisor.');
+    },
+  });
+
+  const handleResendClick = () => {
+    setError(null);
+    // 1 reviewer: dispara direto, sem perguntar. 2+: abre modal de seleção.
+    if (approval.reviewers.length === 1) {
+      resendMut.mutate(null);
+    } else {
+      setResendOpen(true);
+    }
+  };
 
   return (
     <div className="border-warning bg-warning-subtle/40 flex flex-col gap-2 rounded-md border-l-2 px-3 py-2.5">
@@ -125,28 +201,67 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
         </span>
       </div>
 
-      <ReviewerList reviewers={approval.reviewers} />
+      <ReviewerList
+        reviewers={approval.reviewers}
+        onRemove={
+          canManage && approval.reviewers.length > 1
+            ? (id) => removeReviewerMut.mutate(id)
+            : undefined
+        }
+        removing={removeReviewerMut.isPending ? removeReviewerMut.variables : null}
+      />
 
-      {isReviewer && (
-        <div className="border-border/60 mt-1 flex items-center gap-2 border-t pt-2">
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            disabled={decideMut.isPending}
-            className="bg-success text-success-fg hover:bg-success/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-          >
-            <ThumbsUp size={12} />
-            Aprovar
-          </button>
-          <button
-            type="button"
-            onClick={() => setRejectOpen(true)}
-            disabled={decideMut.isPending}
-            className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-          >
-            <ThumbsDown size={12} />
-            Reprovar
-          </button>
+      {/* Ações: revisor decide; quem gerencia pode cancelar / reenviar. */}
+      {(isReviewer || canManage) && (
+        <div className="border-border/60 mt-1 flex flex-wrap items-center gap-2 border-t pt-2">
+          {isReviewer && (
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                disabled={decideMut.isPending}
+                className="bg-success text-success-fg hover:bg-success/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                <ThumbsUp size={12} />
+                Aprovar
+              </button>
+              <button
+                type="button"
+                onClick={() => setRejectOpen(true)}
+                disabled={decideMut.isPending}
+                className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                <ThumbsDown size={12} />
+                Reprovar
+              </button>
+            </>
+          )}
+          {canManage && (
+            <div className={`flex items-center gap-2 ${isReviewer ? 'ml-auto' : ''}`}>
+              <button
+                type="button"
+                onClick={handleResendClick}
+                disabled={resendMut.isPending}
+                className="border-border hover:bg-bg-muted text-fg-muted hover:text-fg inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                {resendMut.isPending ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Send size={12} />
+                )}
+                Reenviar
+              </button>
+              <button
+                type="button"
+                onClick={() => setCancelOpen(true)}
+                disabled={cancelMut.isPending}
+                className="border-border hover:bg-danger-subtle hover:text-danger hover:border-danger/40 text-fg-muted inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                <Ban size={12} />
+                Cancelar pedido
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -189,6 +304,41 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
           />
         </ConfirmModal>
       )}
+
+      {/* Modal pra Cancelar pedido */}
+      {cancelOpen && (
+        <ConfirmModal
+          title="Cancelar este pedido?"
+          description="Os revisores receberão uma mensagem avisando que o pedido foi cancelado. Esta ação não pode ser desfeita."
+          confirmLabel="Cancelar pedido"
+          confirmTone="danger"
+          onCancel={() => {
+            setCancelOpen(false);
+            setCancelReason('');
+          }}
+          onConfirm={() => cancelMut.mutate()}
+          loading={cancelMut.isPending}
+        >
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={2}
+            placeholder="Motivo (opcional) — aparece na mensagem aos revisores"
+            className="border-border bg-bg focus-visible:ring-primary mt-2 w-full resize-none rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2"
+            maxLength={500}
+          />
+        </ConfirmModal>
+      )}
+
+      {/* Modal pra Reenviar (só aparece se 2+ revisores) */}
+      {resendOpen && (
+        <ResendModal
+          reviewers={approval.reviewers}
+          loading={resendMut.isPending}
+          onCancel={() => setResendOpen(false)}
+          onConfirm={(reviewerId) => resendMut.mutate(reviewerId)}
+        />
+      )}
     </div>
   );
 }
@@ -199,7 +349,6 @@ function DecidedApprovalCard({ cardId, approval }: { cardId: string; approval: C
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  // Contador pra mostrar tempo restante de undo. Reduz re-render usando 1s tick.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -214,9 +363,6 @@ function DecidedApprovalCard({ cardId, approval }: { cardId: string; approval: C
   const inWindow = remaining > 0;
 
   const isDecider = me?.id === approval.decidedById;
-  // Quem pode desfazer: o decisor OU OWNER/ADMIN/GESTOR. O backend valida —
-  // aqui mostramos o botão só pro decisor pra evitar confusão. ADMIN+ pode
-  // chamar via console se precisar (raro em prática).
   const canUndo = isDecider && inWindow;
 
   const undoMut = useMutation({
@@ -294,34 +440,58 @@ function DecidedApprovalCard({ cardId, approval }: { cardId: string; approval: C
   );
 }
 
-function ReviewerList({ reviewers }: { reviewers: CardApproval['reviewers'] }) {
+function ReviewerList({
+  reviewers,
+  onRemove,
+  removing,
+}: {
+  reviewers: CardApproval['reviewers'];
+  onRemove?: (reviewerId: string) => void;
+  removing?: string | null | undefined;
+}) {
   return (
     <ul className="flex flex-wrap gap-1.5">
-      {reviewers.map((r) => (
-        <li
-          key={r.id}
-          className="bg-bg/70 border-border/50 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]"
-        >
-          {r.user ? (
-            <>
-              <UserAvatar
-                name={r.user.name}
-                userId={r.user.id}
-                avatarUrl={r.user.avatarUrl}
-                size="xs"
-              />
-              <span>{r.user.name}</span>
-            </>
-          ) : (
-            <>
-              <span className="bg-bg-muted text-fg-muted inline-flex size-4 items-center justify-center rounded-full">
-                <ThumbsUp size={9} />
-              </span>
-              <span>{r.externalName ?? r.phone}</span>
-            </>
-          )}
-        </li>
-      ))}
+      {reviewers.map((r) => {
+        const sentAt = r.notifiedAt ? formatRelativeTime(r.notifiedAt) : null;
+        const removingThis = removing === r.id;
+        return (
+          <li
+            key={r.id}
+            className="bg-bg/70 border-border/50 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]"
+            title={sentAt ? `Notificação enviada ${sentAt}` : 'Ainda não notificado'}
+          >
+            {r.user ? (
+              <>
+                <UserAvatar
+                  name={r.user.name}
+                  userId={r.user.id}
+                  avatarUrl={r.user.avatarUrl}
+                  size="xs"
+                />
+                <span>{r.user.name}</span>
+              </>
+            ) : (
+              <>
+                <span className="bg-bg-muted text-fg-muted inline-flex size-4 items-center justify-center rounded-full">
+                  <ThumbsUp size={9} />
+                </span>
+                <span>{r.externalName ?? r.phone}</span>
+              </>
+            )}
+            {onRemove && (
+              <button
+                type="button"
+                onClick={() => onRemove(r.id)}
+                disabled={removingThis}
+                aria-label={`Remover ${r.user?.name ?? r.externalName ?? 'revisor'} do pedido`}
+                className="text-fg-subtle hover:text-danger hover:bg-danger-subtle ml-0.5 inline-flex size-3.5 items-center justify-center rounded-full transition-colors disabled:opacity-50"
+              >
+                {removingThis ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -341,19 +511,123 @@ function ApprovalHistory({ approvals }: { approvals: CardApproval[] }) {
                 ? 'Reprovado'
                 : a.status === 'REVERTED'
                   ? 'Decisão desfeita'
-                  : 'Pendente';
+                  : a.status === 'CANCELED'
+                    ? 'Pedido cancelado'
+                    : 'Pendente';
+          const eventDate = a.canceledAt ?? a.decidedAt;
+          const actor =
+            a.status === 'CANCELED'
+              ? a.canceledBy?.name
+              : a.status === 'REVERTED'
+                ? a.revertedBy?.name
+                : (a.decidedBy?.name ?? a.decidedByExternalName);
+          const reason = a.status === 'CANCELED' ? a.cancelReason : a.note;
           return (
             <li key={a.id} className="text-fg-muted">
               <span className="font-medium">{label}</span>
-              {a.decidedAt && (
-                <span className="ml-1.5">{new Date(a.decidedAt).toLocaleDateString('pt-BR')}</span>
+              {actor && <span className="ml-1.5">por {actor}</span>}
+              {eventDate && (
+                <span className="ml-1.5">{new Date(eventDate).toLocaleDateString('pt-BR')}</span>
               )}
-              {a.note && <span className="ml-1.5 italic">— {a.note}</span>}
+              {reason && <span className="ml-1.5 italic">— {reason}</span>}
             </li>
           );
         })}
       </ul>
     </details>
+  );
+}
+
+function ResendModal({
+  reviewers,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  reviewers: CardApproval['reviewers'];
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: (reviewerId: string | null) => void;
+}) {
+  // null = todos. string = id específico.
+  const [target, setTarget] = useState<string | null>(null);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-bg border-border w-full max-w-sm rounded-md border p-4 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold">Reenviar mensagem</h3>
+            <p className="text-fg-muted mt-1 text-xs leading-relaxed">
+              Escolha pra quem reenviar o WhatsApp + notificação.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-fg-muted hover:bg-bg-muted rounded p-1"
+            aria-label="Fechar"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-1.5">
+          <label className="hover:bg-bg-subtle flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+            <input
+              type="radio"
+              name="resend-target"
+              checked={target === null}
+              onChange={() => setTarget(null)}
+              className="accent-primary"
+            />
+            <span className="font-medium">Para todos ({reviewers.length})</span>
+          </label>
+          {reviewers.map((r) => {
+            const label = r.user?.name ?? r.externalName ?? r.phone ?? '—';
+            return (
+              <label
+                key={r.id}
+                className="hover:bg-bg-subtle flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+              >
+                <input
+                  type="radio"
+                  name="resend-target"
+                  checked={target === r.id}
+                  onChange={() => setTarget(r.id)}
+                  className="accent-primary"
+                />
+                <span>{label}</span>
+                {r.notifiedAt && (
+                  <span className="text-fg-subtle ml-auto text-[10px]">
+                    Enviado {formatRelativeTime(r.notifiedAt)}
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-fg-muted hover:bg-bg-muted rounded-md px-3 py-1.5 text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(target)}
+            disabled={loading}
+            className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading && <Loader2 size={13} className="animate-spin" />}
+            Reenviar
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -428,4 +702,16 @@ function formatCountdown(ms: number): string {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return 'agora';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `há ${min}min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `há ${hr}h`;
+  const day = Math.floor(hr / 24);
+  return `há ${day}d`;
 }

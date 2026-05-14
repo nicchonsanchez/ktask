@@ -69,17 +69,39 @@ Depois de enviar, o card mostra uma seção de **Aprovações** com:
 
 Você também recebe notificação na hora em que alguém decide.
 
+## Reenviar mensagem aos revisores
+
+Se o cliente perdeu a mensagem do WhatsApp ou pediu pra ver de novo, dá pra reenviar sem precisar cancelar o pedido. Na seção de Aprovações do card, clique em **Reenviar**:
+
+- **Com 1 revisor só**: dispara o WhatsApp imediatamente.
+- **Com 2 ou mais revisores**: abre uma janela perguntando para qual revisor reenviar. Você pode escolher 1 específico ou "Para todos".
+
+Limites pra evitar disparos acidentais:
+
+- Cooldown de **30 segundos** entre reenvios.
+- Máximo de **10 envios totais por pedido** (1 inicial + 9 reenvios). Se o cliente não respondeu nem assim, vale tentar outro canal de contato.
+
+## Remover um revisor errado
+
+Se você adicionou um revisor por engano (telefone digitado errado, pessoa errada da equipe do cliente), passe o mouse sobre o nome dele na lista de revisores e clique no **×** que aparece. O pedido continua ativo para os demais revisores — o link daquele revisor específico fica inválido.
+
+Se houver **só um revisor** no pedido, o **×** não aparece (não dá pra "esvaziar" o pedido). Nesse caso, cancele o pedido inteiro e refaça com o revisor correto.
+
 ## Cancelar ou reverter
 
-Se o pedido foi enviado por engano:
+Se o pedido foi enviado por engano e ninguém decidiu ainda:
 
-- **Cancelar pedido inteiro**: na seção de Aprovações do card, há a opção **Cancelar aprovação** `[CONFIRMAR — texto exato]`. Isso invalida todos os links pendentes.
-- **Remover um revisor específico**: também pela seção de Aprovações.
+- **Cancelar pedido inteiro**: na seção de Aprovações do card, clique em **Cancelar pedido**. Aparece uma janela onde você pode informar um motivo (opcional). Após confirmar:
+  - Todos os links públicos dos revisores ficam inválidos — quem abrir vê uma tela explicando que o pedido foi cancelado, com o nome de quem cancelou e o motivo (se informado).
+  - Cada revisor recebe uma mensagem automática no WhatsApp avisando do cancelamento.
+  - O cancelamento fica registrado no histórico do card, mostrando quem cancelou e quando.
 
 Se um revisor já decidiu e a decisão foi errada (ex: clicou em "reprovar" sem querer):
 
 - **Pelo próprio revisor**: ele tem uma janela de 5 minutos para usar o botão **Desfazer** na própria tela. Se houver interação posterior no card (comentário, edição), a janela fecha antes.
-- **Por administradores**: Dono, Administrador ou Gestor da organização podem reverter a decisão a qualquer momento (com efeito colateral registrado na timeline).
+- **Por administradores**: Dono, Administrador ou Gestor da organização podem reverter a decisão dentro da janela de 5 minutos.
+
+> **Quem pode cancelar ou remover revisor**: quem pediu a aprovação OU papéis Dono, Administrador ou Gestor da organização.
 
 ## Próximos passos
 

@@ -23,6 +23,8 @@ import type {
   RequestApprovalRequest,
   DecideApprovalRequest,
   UndoApprovalRequest,
+  CancelApprovalRequest,
+  ResendApprovalRequest,
 } from './dto/approvals.schemas';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
@@ -152,6 +154,9 @@ export class ApprovalsService {
           cardId,
           organizationId: tenant.organizationId,
           requestedById: userId,
+          // Persiste mensagem original digitada pelo requester pra que o
+          // reenvio (resend) use o mesmo texto que o cliente ja recebeu.
+          message: body.message ?? null,
           defaultOnApproveListId: body.defaultOnApproveListId ?? null,
           defaultOnRejectListId: body.defaultOnRejectListId ?? null,
           onApproveActions: body.onApproveActions
@@ -269,6 +274,9 @@ export class ApprovalsService {
       },
     });
 
+    // Conta envios efetivos pra atualizar lastNotifiedAt/notifyCount no fim.
+    let dispatched = 0;
+
     for (const reviewer of approval.reviewers) {
       const link = `${env.APP_URL}/aprovar/${reviewer.accessToken}`;
 
@@ -322,6 +330,7 @@ export class ApprovalsService {
         const phone = await this.resolvePhoneForNotification(reviewer);
         if (phone) {
           const text = this.composeWhatsAppMessage({
+            variant: 'initial',
             customMessage: renderedMessage,
             vars,
           });
@@ -334,9 +343,19 @@ export class ApprovalsService {
               },
               data: { notifiedAt: new Date() },
             });
+            dispatched += 1;
           }
         }
       }
+    }
+
+    // Marca o envio agregado no approval (usado pra rate-limit do resend +
+    // exibicao "Enviado ha Xmin" na UI).
+    if (dispatched > 0) {
+      await this.prisma.cardApproval.update({
+        where: { id: approval.id },
+        data: { lastNotifiedAt: new Date(), notifyCount: { increment: 1 } },
+      });
     }
   }
 
@@ -360,45 +379,96 @@ export class ApprovalsService {
   }
 
   /**
-   * Compoe mensagem WhatsApp pro reviewer.
+   * Compoe mensagem WhatsApp pro reviewer. 3 variantes:
    *
-   * Sem `customMessage`: usa template padrao com saudacao personalizada
-   * pelo primeiro nome do reviewer (fallback "Olá!" se phone-only sem
-   * nome). Inclui quem pediu + titulo do card em destaque + link.
+   * - `initial`: pedido recem-criado. Se `customMessage` veio (user
+   *    digitou texto), usa ela como corpo principal; senao usa template
+   *    padrao "X pediu sua aprovacao".
+   * - `reminder`: lembrete (resend). Mostra titulo do card + fluxo em
+   *    destaque + link. Nao usa customMessage (evita repetir a mensagem
+   *    original do request).
+   * - `canceled`: aviso de cancelamento. Inclui motivo se houver. Nao
+   *    inclui link (nao tem o que clicar — pagina publica responde
+   *    "cancelado").
    *
-   * Com `customMessage`: a mensagem do user ja foi renderizada com Mustache
-   * pelo caller. Aqui so embrulhamos com saudacao + link no fim, evitando
-   * que o user precise lembrar de incluir o link manualmente.
+   * Asteriscos (`*texto*`) sao a marcacao de negrito do WhatsApp.
+   * Citacao (`> ...`) aparece com barra cinza na lateral no WhatsApp.
+   * Todas terminam com "Esta e uma mensagem automatica" pra deixar claro
+   * que nao e humano digitando.
    */
   private composeWhatsAppMessage(p: {
+    variant: 'initial' | 'reminder' | 'canceled';
     customMessage?: string;
+    cancelReason?: string | null;
     vars: Record<string, string>;
   }): string {
     const firstName = p.vars['reviewer.firstName'] ?? '';
     const requesterName = p.vars['requester.name'] ?? 'Alguém';
     const cardTitle = p.vars['card.title'] ?? '';
+    const boardName = p.vars['card.board.name'] ?? '';
     const link = p.vars['link'] ?? '';
 
     const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!';
+    const automatedFooter = '\n\n> Esta é uma mensagem automática.';
 
-    if (p.customMessage) {
-      // User escreveu mensagem custom — usamos como corpo principal,
-      // adicionando saudacao no topo e link no fim pra garantir o essencial
-      return [greeting, '', p.customMessage, '', link].join('\n');
+    if (p.variant === 'reminder') {
+      const lines = [
+        'LEMBRETE',
+        'Sua aprovação ainda está *pendente*:',
+        '',
+        `📋 Card: *${cardTitle}*`,
+        `📁 Fluxo: ${boardName}`,
+        '',
+        'Acesse e confira:',
+        link,
+      ];
+      return lines.join('\n') + automatedFooter;
     }
 
-    // Template padrao. Asteriscos sao a marcacao de negrito do WhatsApp
-    // (renderiza bold no app); idem `*${cardTitle}*` na linha abaixo.
-    return [
+    if (p.variant === 'canceled') {
+      const lines = [
+        greeting,
+        '',
+        'O pedido de aprovação foi *cancelado* pela equipe.',
+        '',
+        `📋 Card: *${cardTitle}*`,
+        `📁 Fluxo: ${boardName}`,
+      ];
+      if (p.cancelReason && p.cancelReason.trim()) {
+        lines.push('', `Motivo: ${p.cancelReason.trim()}`);
+      }
+      lines.push('', 'Se tiver dúvida, fale com seu contato na equipe.');
+      return lines.join('\n') + automatedFooter;
+    }
+
+    // variant === 'initial'
+    if (p.customMessage) {
+      const lines = [
+        greeting,
+        '',
+        p.customMessage,
+        '',
+        `📋 Card: *${cardTitle}*`,
+        `📁 Fluxo: ${boardName}`,
+        '',
+        'Acesse e decida:',
+        link,
+      ];
+      return lines.join('\n') + automatedFooter;
+    }
+
+    const lines = [
       greeting,
       '',
-      `*${requesterName}* pediu sua aprovação para o card:`,
+      `*${requesterName}* pediu sua aprovação:`,
       '',
-      `*${cardTitle}*`,
+      `📋 Card: *${cardTitle}*`,
+      `📁 Fluxo: ${boardName}`,
       '',
-      'Acesse o link para aprovar ou reprovar:',
+      'Acesse e decida:',
       link,
-    ].join('\n');
+    ];
+    return lines.join('\n') + automatedFooter;
   }
 
   // ============================================================
@@ -418,6 +488,9 @@ export class ApprovalsService {
       throw new NotFoundException('Aprovação não encontrada.');
     }
     if (approval.status !== 'PENDING') {
+      if (approval.status === 'CANCELED') {
+        throw new BadRequestException('Pedido cancelado pela equipe — não pode decidir.');
+      }
       throw new BadRequestException(
         `Aprovação já foi ${approval.status.toLowerCase()}. Não pode decidir novamente.`,
       );
@@ -447,6 +520,9 @@ export class ApprovalsService {
     }
     const approval = reviewer.approval;
     if (approval.status !== 'PENDING') {
+      if (approval.status === 'CANCELED') {
+        throw new BadRequestException('Pedido de aprovação cancelado pela equipe.');
+      }
       throw new BadRequestException(`Aprovação já foi ${approval.status.toLowerCase()}.`);
     }
 
@@ -805,6 +881,452 @@ export class ApprovalsService {
   }
 
   // ============================================================
+  // Cancel
+  // ============================================================
+  /**
+   * Cancela um pedido de aprovacao PENDING. Status vai pra CANCELED,
+   * tokens dos reviewers sao expirados (pagina publica passa a exibir
+   * "cancelado"), reviewers internos recebem notificacao in-app, e os
+   * que tem phone recebem WhatsApp de aviso.
+   *
+   * Permissao: requester OU OWNER/ADMIN/GESTOR da Org.
+   *
+   * Sem rate-limit: cancelar e operacao rara e definitiva.
+   */
+  async cancel(
+    userId: string,
+    tenant: TenantContext,
+    approvalId: string,
+    body: CancelApprovalRequest,
+  ) {
+    const approval = await this.prisma.cardApproval.findUnique({
+      where: { id: approvalId },
+      select: {
+        id: true,
+        cardId: true,
+        organizationId: true,
+        requestedById: true,
+        status: true,
+        message: true,
+        card: { select: { id: true, title: true, boardId: true, organizationId: true } },
+        reviewers: {
+          select: {
+            id: true,
+            userId: true,
+            phone: true,
+            externalName: true,
+            accessToken: true,
+          },
+        },
+      },
+    });
+    if (!approval || approval.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Aprovação não encontrada.');
+    }
+    if (approval.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Aprovação já foi ${approval.status.toLowerCase()} — não pode ser cancelada.`,
+      );
+    }
+    const isPrivileged =
+      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    if (approval.requestedById !== userId && !isPrivileged) {
+      throw new ForbiddenException('Sem permissão pra cancelar este pedido.');
+    }
+
+    const reason = body.reason?.trim() || null;
+
+    const canceled = await this.prisma.$transaction(async (tx) => {
+      // Marca CANCELED + auditoria.
+      const c = await tx.cardApproval.update({
+        where: { id: approvalId },
+        data: {
+          status: 'CANCELED',
+          canceledAt: new Date(),
+          canceledById: userId,
+          cancelReason: reason,
+        },
+      });
+      // Expira tokens dos reviewers — decideByToken e getPublicView passam
+      // a tratar como cancelado (ja barram com status !== PENDING).
+      await tx.cardApprovalReviewer.updateMany({
+        where: { approvalId },
+        data: { expiresAt: new Date() },
+      });
+      await tx.activity.create({
+        data: {
+          organizationId: approval.organizationId,
+          boardId: approval.card.boardId,
+          cardId: approval.cardId,
+          actorId: userId,
+          type: 'CARD_UPDATED',
+          payload: {
+            kind: 'approval.canceled',
+            approvalId,
+            reason,
+          },
+        },
+      });
+      return c;
+    });
+
+    // Notifica reviewers (fire-and-forget). Inclui WhatsApp de cancelamento
+    // pros que tem phone + notificacao in-app pros internos.
+    void this.notifyReviewersAboutCancellation(approval, reason);
+
+    // Realtime: card modal aberto em outras abas se atualiza.
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: approval.card.boardId,
+      organizationId: approval.organizationId,
+      actorId: userId,
+      cardId: approval.cardId,
+    });
+
+    return canceled;
+  }
+
+  private async notifyReviewersAboutCancellation(
+    approval: {
+      id: string;
+      cardId: string;
+      organizationId: string;
+      card: { title: string; boardId: string };
+      reviewers: Array<{
+        userId: string | null;
+        phone: string | null;
+        externalName: string | null;
+      }>;
+    },
+    cancelReason: string | null,
+  ) {
+    // Contexto board pro template
+    const board = await this.prisma.board.findUnique({
+      where: { id: approval.card.boardId },
+      select: { name: true },
+    });
+    const boardName = board?.name ?? '';
+
+    for (const reviewer of approval.reviewers) {
+      // Resolve nome
+      let reviewerName = reviewer.externalName ?? '';
+      if (reviewer.userId && !reviewerName) {
+        const u = await this.prisma.user.findUnique({
+          where: { id: reviewer.userId },
+          select: { name: true },
+        });
+        reviewerName = u?.name ?? '';
+      }
+      const reviewerFirstName = reviewerName.split(/\s+/)[0] ?? '';
+
+      const vars: Record<string, string> = {
+        'card.title': approval.card.title,
+        'card.board.name': boardName,
+        'reviewer.name': reviewerName,
+        'reviewer.firstName': reviewerFirstName,
+        link: '',
+      };
+
+      // In-app pros internos.
+      if (reviewer.userId) {
+        await this.notifications
+          .create({
+            userId: reviewer.userId,
+            organizationId: approval.organizationId,
+            type: 'CUSTOM',
+            title: 'Pedido de aprovação cancelado',
+            body: `O pedido de aprovação do card "${approval.card.title}" foi cancelado pela equipe.`,
+            entityType: 'CardApproval',
+            entityId: approval.id,
+            url: `/aprovacoes`,
+          })
+          .catch((err) => {
+            this.logger.warn(
+              `Falha notif cancelamento ${reviewer.userId}: ${err instanceof Error ? err.message : err}`,
+            );
+          });
+      }
+
+      // WhatsApp pros que tem phone (resolve user.phone se interno).
+      const phone = await this.resolvePhoneForNotification(reviewer);
+      if (phone) {
+        const text = this.composeWhatsAppMessage({
+          variant: 'canceled',
+          cancelReason,
+          vars,
+        });
+        await this.whatsapp.sendText(phone, text);
+      }
+    }
+  }
+
+  // ============================================================
+  // Resend (lembrete WhatsApp + in-app pros revisores)
+  // ============================================================
+  /**
+   * Reenvia notificacao pros revisores de um pedido PENDING.
+   *
+   * Opts:
+   *   - reviewerId omitido/null: reenvia pra TODOS os revisores
+   *     (default da UI quando o pedido tem 2+ revisores e o user
+   *     escolhe "Reenviar para todos").
+   *   - reviewerId setado: reenvia so pra aquele revisor especifico.
+   *
+   * Rate-limit:
+   *   - Cooldown de 30s entre reenvios (anti-burst acidental).
+   *   - Cap total de 10 envios por pedido (initial + 9 reenvios).
+   *     Cliente que nao responde apos 10 lembretes precisa de outra
+   *     abordagem, nao mais lembretes.
+   *
+   * Permissao: requester OU OWNER/ADMIN/GESTOR.
+   */
+  async resend(
+    userId: string,
+    tenant: TenantContext,
+    approvalId: string,
+    body: ResendApprovalRequest,
+  ) {
+    const approval = await this.prisma.cardApproval.findUnique({
+      where: { id: approvalId },
+      select: {
+        id: true,
+        cardId: true,
+        organizationId: true,
+        requestedById: true,
+        status: true,
+        lastNotifiedAt: true,
+        notifyCount: true,
+        card: { select: { id: true, title: true, boardId: true, organizationId: true } },
+        reviewers: {
+          select: {
+            id: true,
+            userId: true,
+            phone: true,
+            externalName: true,
+            accessToken: true,
+          },
+        },
+      },
+    });
+    if (!approval || approval.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Aprovação não encontrada.');
+    }
+    if (approval.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Aprovação já foi ${approval.status.toLowerCase()} — não pode ser reenviada.`,
+      );
+    }
+    const isPrivileged =
+      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    if (approval.requestedById !== userId && !isPrivileged) {
+      throw new ForbiddenException('Sem permissão pra reenviar este pedido.');
+    }
+
+    // Rate-limit: cooldown 30s
+    if (approval.lastNotifiedAt) {
+      const sinceMs = Date.now() - approval.lastNotifiedAt.getTime();
+      if (sinceMs < 30_000) {
+        const waitSec = Math.ceil((30_000 - sinceMs) / 1000);
+        throw new BadRequestException(`Aguarde ${waitSec}s antes de reenviar.`);
+      }
+    }
+    // Rate-limit: cap total
+    if (approval.notifyCount >= 10) {
+      throw new BadRequestException(
+        'Limite de 10 envios atingido para este pedido. Cancele e crie um novo se ainda for necessário.',
+      );
+    }
+
+    // Resolve reviewers alvo
+    const targetReviewers = body.reviewerId
+      ? approval.reviewers.filter((r) => r.id === body.reviewerId)
+      : approval.reviewers;
+    if (targetReviewers.length === 0) {
+      throw new BadRequestException('Revisor não encontrado neste pedido.');
+    }
+
+    // Contexto board pro template
+    const board = await this.prisma.board.findUnique({
+      where: { id: approval.card.boardId },
+      select: { name: true },
+    });
+    const boardName = board?.name ?? '';
+
+    let dispatched = 0;
+    for (const reviewer of targetReviewers) {
+      const link = `${env.APP_URL}/aprovar/${reviewer.accessToken}`;
+
+      let reviewerName = reviewer.externalName ?? '';
+      if (reviewer.userId && !reviewerName) {
+        const u = await this.prisma.user.findUnique({
+          where: { id: reviewer.userId },
+          select: { name: true },
+        });
+        reviewerName = u?.name ?? '';
+      }
+      const reviewerFirstName = reviewerName.split(/\s+/)[0] ?? '';
+      const vars: Record<string, string> = {
+        'card.title': approval.card.title,
+        'card.board.name': boardName,
+        'reviewer.name': reviewerName,
+        'reviewer.firstName': reviewerFirstName,
+        link,
+      };
+
+      // In-app pros internos (toast "pedido ainda pendente"-style)
+      if (reviewer.userId) {
+        await this.notifications
+          .create({
+            userId: reviewer.userId,
+            organizationId: approval.organizationId,
+            type: 'CUSTOM',
+            title: 'Lembrete: aprovação pendente',
+            body: `Você tem um pedido de aprovação pendente no card "${approval.card.title}".`,
+            entityType: 'CardApproval',
+            entityId: approval.id,
+            url: `/aprovacoes`,
+          })
+          .catch((err) => {
+            this.logger.warn(
+              `Falha lembrete in-app ${reviewer.userId}: ${err instanceof Error ? err.message : err}`,
+            );
+          });
+      }
+
+      // WhatsApp
+      const phone = await this.resolvePhoneForNotification(reviewer);
+      if (phone) {
+        const text = this.composeWhatsAppMessage({ variant: 'reminder', vars });
+        const ok = await this.whatsapp.sendText(phone, text);
+        if (ok) {
+          await this.prisma.cardApprovalReviewer.update({
+            where: { id: reviewer.id },
+            data: { notifiedAt: new Date() },
+          });
+          dispatched += 1;
+        }
+      }
+    }
+
+    // Atualiza contadores agregados do approval mesmo que so in-app tenha
+    // sido emitida (notifyCount conta "envios" no sentido amplo).
+    const updated = await this.prisma.cardApproval.update({
+      where: { id: approvalId },
+      data: {
+        lastNotifiedAt: new Date(),
+        notifyCount: { increment: 1 },
+      },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: approval.organizationId,
+        boardId: approval.card.boardId,
+        cardId: approval.cardId,
+        actorId: userId,
+        type: 'CARD_UPDATED',
+        payload: {
+          kind: 'approval.resent',
+          approvalId,
+          reviewerId: body.reviewerId ?? null,
+          targetCount: targetReviewers.length,
+          dispatchedWhatsapp: dispatched,
+        },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: approval.card.boardId,
+      organizationId: approval.organizationId,
+      actorId: userId,
+      cardId: approval.cardId,
+    });
+
+    return updated;
+  }
+
+  // ============================================================
+  // Remove reviewer individual
+  // ============================================================
+  /**
+   * Remove um revisor de um pedido PENDING sem cancelar o pedido inteiro.
+   * Util quando o operador adicionou alguem errado (telefone errado etc).
+   *
+   * Bloqueia se for o ultimo revisor — nesse caso o operador deve cancelar
+   * o pedido inteiro (usa cancel).
+   *
+   * Permissao: requester OU OWNER/ADMIN/GESTOR.
+   */
+  async removeReviewer(
+    userId: string,
+    tenant: TenantContext,
+    approvalId: string,
+    reviewerId: string,
+  ) {
+    const approval = await this.prisma.cardApproval.findUnique({
+      where: { id: approvalId },
+      select: {
+        id: true,
+        cardId: true,
+        organizationId: true,
+        requestedById: true,
+        status: true,
+        card: { select: { boardId: true } },
+        reviewers: { select: { id: true, userId: true, externalName: true } },
+      },
+    });
+    if (!approval || approval.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Aprovação não encontrada.');
+    }
+    if (approval.status !== 'PENDING') {
+      throw new BadRequestException('Só pedidos pendentes permitem remover revisor.');
+    }
+    const isPrivileged =
+      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    if (approval.requestedById !== userId && !isPrivileged) {
+      throw new ForbiddenException('Sem permissão pra remover revisor.');
+    }
+
+    const reviewer = approval.reviewers.find((r) => r.id === reviewerId);
+    if (!reviewer) {
+      throw new NotFoundException('Revisor não encontrado neste pedido.');
+    }
+    if (approval.reviewers.length <= 1) {
+      throw new BadRequestException(
+        'Não é possível remover o último revisor — cancele o pedido inteiro.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cardApprovalReviewer.delete({ where: { id: reviewerId } });
+      await tx.activity.create({
+        data: {
+          organizationId: approval.organizationId,
+          boardId: approval.card.boardId,
+          cardId: approval.cardId,
+          actorId: userId,
+          type: 'CARD_UPDATED',
+          payload: {
+            kind: 'approval.reviewer_removed',
+            approvalId,
+            reviewerId,
+            reviewerUserId: reviewer.userId,
+            reviewerExternalName: reviewer.externalName,
+          },
+        },
+      });
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: approval.card.boardId,
+      organizationId: approval.organizationId,
+      actorId: userId,
+      cardId: approval.cardId,
+    });
+
+    return { id: reviewerId, removed: true };
+  }
+
+  // ============================================================
   // Listing
   // ============================================================
   async listPendingForUser(userId: string, tenant: TenantContext) {
@@ -858,6 +1380,7 @@ export class ApprovalsService {
         requestedBy: { select: { id: true, name: true, avatarUrl: true } },
         decidedBy: { select: { id: true, name: true, avatarUrl: true } },
         revertedBy: { select: { id: true, name: true, avatarUrl: true } },
+        canceledBy: { select: { id: true, name: true, avatarUrl: true } },
         defaultApproveList: { select: { id: true, name: true } },
         defaultRejectList: { select: { id: true, name: true } },
         reviewers: {
@@ -979,6 +1502,7 @@ export class ApprovalsService {
             },
             requestedBy: { select: { id: true, name: true, avatarUrl: true } },
             decidedBy: { select: { id: true, name: true, avatarUrl: true } },
+            canceledBy: { select: { id: true, name: true, avatarUrl: true } },
           },
         },
       },

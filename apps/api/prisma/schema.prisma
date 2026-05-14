@@ -249,6 +249,7 @@ model User {
   approvalsRequested     CardApproval[]         @relation("ApprovalRequester")
   approvalsDecided       CardApproval[]         @relation("ApprovalDecider")
   approvalsReverted      CardApproval[]         @relation("ApprovalReverter")
+  approvalsCanceled      CardApproval[]         @relation("ApprovalCanceler")
   approvalReviews        CardApprovalReviewer[] @relation("CardApprovalReviewer")
   messageTemplates       MessageTemplate[]
   passwordResetTokens    PasswordResetToken[]
@@ -619,6 +620,7 @@ enum ApprovalStatus {
   APPROVED // decidida como aprovada
   REJECTED // decidida como reprovada (com nota obrigatória)
   REVERTED // foi decidida e depois desfeita pelo próprio reviewer (janela 5min)
+  CANCELED // pedido cancelado pelo requester/admin enquanto estava PENDING
 }
 
 /// Pedido de aprovação de um card por 1+ revisores.
@@ -660,6 +662,18 @@ model CardApproval {
   revertedAt             DateTime?
   revertedById           String? // user que desfez (decidedById ou ADMIN+)
   revertReason           String?
+  /// Mensagem original digitada pelo requester (campo `message` do request).
+  /// Persistida pra que o reenvio (resend) use o mesmo texto que o cliente
+  /// já viu da primeira vez. Null em pedidos pré-migration.
+  message                String?
+  canceledAt             DateTime?
+  canceledById           String? // user que cancelou (requester OU OWNER/ADMIN/GESTOR)
+  cancelReason           String?
+  /// Timestamp do envio de WhatsApp/notificacao mais recente pros reviewers.
+  /// Usado pra rate-limit do resend (cooldown 30s) e exibicao na UI.
+  lastNotifiedAt         DateTime?
+  /// Contador de envios (initial + N resends). Usado pra cap diario do resend.
+  notifyCount            Int            @default(0)
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
@@ -668,6 +682,7 @@ model CardApproval {
   requestedBy      User                   @relation("ApprovalRequester", fields: [requestedById], references: [id])
   decidedBy        User?                  @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
   revertedBy       User?                  @relation("ApprovalReverter", fields: [revertedById], references: [id], onDelete: SetNull)
+  canceledBy       User?                  @relation("ApprovalCanceler", fields: [canceledById], references: [id], onDelete: SetNull)
   defaultApproveList List?                @relation("ApprovalDefaultApproveList", fields: [defaultOnApproveListId], references: [id], onDelete: SetNull)
   defaultRejectList  List?                @relation("ApprovalDefaultRejectList", fields: [defaultOnRejectListId], references: [id], onDelete: SetNull)
   reviewers        CardApprovalReviewer[]
