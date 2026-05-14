@@ -19,9 +19,22 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { categoria: slug } = await params;
   const cat = await getCategoria(slug);
   if (!cat) return { title: 'Categoria não encontrada' };
+  const branded = `${cat.title} · Ajuda KTask`;
   return {
     title: cat.title,
     description: cat.description,
+    openGraph: {
+      title: branded,
+      description: cat.description,
+      type: 'website',
+      images: ['/opengraph-image'],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: branded,
+      description: cat.description,
+      images: ['/opengraph-image'],
+    },
   };
 }
 

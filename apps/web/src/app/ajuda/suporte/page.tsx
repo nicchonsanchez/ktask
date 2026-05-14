@@ -9,6 +9,18 @@ import { SupportForm } from '@/components/support/support-form';
 export const metadata: Metadata = {
   title: 'Suporte',
   description: 'Tire dúvidas, reporte problemas ou envie sugestões para o time do KTask.',
+  openGraph: {
+    title: 'Suporte · Ajuda KTask',
+    description: 'Tire dúvidas, reporte problemas ou envie sugestões para o time do KTask.',
+    type: 'website',
+    images: ['/opengraph-image'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Suporte · Ajuda KTask',
+    description: 'Tire dúvidas, reporte problemas ou envie sugestões para o time do KTask.',
+    images: ['/opengraph-image'],
+  },
 };
 
 export default function SuportePage() {

@@ -28,18 +28,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { categoria, slug } = await params;
   const tutorial = await getTutorial(categoria, slug);
   if (!tutorial) return { title: 'Tutorial não encontrado' };
+  const branded = `${tutorial.title} · Ajuda KTask`;
   return {
     title: tutorial.title,
     description: tutorial.description,
     openGraph: {
-      title: tutorial.title,
+      title: branded,
       description: tutorial.description,
       type: 'article',
       images: ['/opengraph-image'],
     },
     twitter: {
       card: 'summary_large_image',
-      title: tutorial.title,
+      title: branded,
       description: tutorial.description,
       images: ['/opengraph-image'],
     },

@@ -6,7 +6,7 @@ import { HelpCategoriaCard } from '@/components/ajuda/help-categoria-card';
 import { HelpSearchTrigger } from '@/components/ajuda/help-search-trigger';
 
 export const metadata: Metadata = {
-  title: 'Central de Ajuda',
+  title: { absolute: 'Central de Ajuda · KTask' },
   description:
     'Encontre tutoriais, guias e respostas para tirar o máximo do KTask — para operadores e clientes.',
 };
