@@ -18,10 +18,10 @@ import { logout } from '@/lib/auth';
 /**
  * Topbar — IA reorganizada (doc 41).
  *
- * Nav primário (operacional, uso diário): Início · Quadros · Aprovações · Indicadores
- * Nav secundário (CRM, uso semanal): dropdown "CRM" agrupando Clientes + Contatos
- *   - "Clientes" usa rota /empresas (label renomeado pra evitar ambiguidade
- *     com "Minha organização" — empresas-clientes vs a Kharis em si).
+ * Nav primário (operacional, uso diário): Início · Quadros · Aprovações ·
+ *   Indicadores · CRM. CRM aponta direto pra /contatos — a propria pagina
+ *   tem abas Todos/Pessoas/Empresas (antes era dropdown de 2 itens que
+ *   abriam a mesma pagina com filtros diferentes).
  * Avatar dropdown (admin, uso esporádico): Equipe (= /empresa) · Configurações ·
  *   Meu perfil · Sair.
  *
@@ -38,11 +38,7 @@ const NAV_PRIMARY: NavItem[] = [
   { href: '/quadros', label: 'Quadros' },
   { href: '/aprovacoes', label: 'Aprovações' },
   { href: '/indicadores', label: 'Indicadores' },
-];
-
-const NAV_CRM: NavItem[] = [
-  { href: '/empresas', label: 'Clientes' },
-  { href: '/contatos', label: 'Contatos' },
+  { href: '/contatos', label: 'CRM' },
 ];
 
 const NAV_ACCOUNT: NavItem[] = [
@@ -86,8 +82,6 @@ export function Topbar() {
       document.body.style.overflow = '';
     };
   }, [mobileOpen]);
-
-  const crmActive = NAV_CRM.some((it) => pathname.startsWith(it.href));
 
   return (
     <header className="bg-bg sticky top-0 z-30">
@@ -157,7 +151,6 @@ export function Topbar() {
                 </Link>
               );
             })}
-            <CrmDropdown items={NAV_CRM} active={crmActive} pathname={pathname} />
           </nav>
         </div>
 
@@ -202,10 +195,6 @@ export function Topbar() {
                   pathname={pathname}
                   badge={item.href === '/aprovacoes' && pendingCount > 0 ? pendingCount : undefined}
                 />
-              ))}
-              <DrawerSection label="CRM" />
-              {NAV_CRM.map((item) => (
-                <DrawerLink key={item.href} item={item} pathname={pathname} indent />
               ))}
               <DrawerSection label="Conta" />
               {NAV_ACCOUNT.map((item) => (
@@ -279,72 +268,6 @@ function DrawerLink({
         </span>
       )}
     </Link>
-  );
-}
-
-function CrmDropdown({
-  items,
-  active,
-  pathname,
-}: {
-  items: NavItem[];
-  active: boolean;
-  pathname: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative flex items-stretch">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`group relative flex items-center gap-1 px-3 text-sm transition-colors ${
-          active ? 'text-primary' : 'text-fg-muted hover:text-fg'
-        }`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        CRM
-        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        <span
-          aria-hidden
-          className={`absolute inset-x-3 bottom-0 h-[2px] rounded-t transition-colors ${
-            active ? 'bg-primary' : 'group-hover:bg-border-strong bg-transparent'
-          }`}
-        />
-      </button>
-      {open && (
-        <div className="border-border bg-bg absolute left-0 top-full z-40 mt-0 flex w-44 flex-col overflow-hidden rounded-md border p-1 text-sm shadow-lg">
-          {items.map((it) => {
-            const itActive = pathname.startsWith(it.href);
-            return (
-              <Link
-                key={it.href}
-                href={it.href}
-                onClick={() => setOpen(false)}
-                className={`rounded-sm px-3 py-1.5 transition-colors ${
-                  itActive
-                    ? 'bg-primary-subtle/40 text-primary font-medium'
-                    : 'text-fg hover:bg-bg-muted'
-                }`}
-              >
-                {it.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
