@@ -1,0 +1,60 @@
+{
+  "categorias": [
+    {
+      "slug": "comecar",
+      "title": "Começar",
+      "description": "Primeiros passos no KTask — criar conta, aceitar convite e entender a interface.",
+      "order": 1,
+      "icon": "Rocket"
+    },
+    {
+      "slug": "quadros",
+      "title": "Quadros",
+      "description": "Criar quadros, configurar colunas, arquivar e organizar fluxos de trabalho.",
+      "order": 2,
+      "icon": "LayoutGrid"
+    },
+    {
+      "slug": "cards",
+      "title": "Cards",
+      "description": "Criar, mover, anexar arquivos, comentar e usar sub-cards no dia a dia.",
+      "order": 3,
+      "icon": "SquareStack"
+    },
+    {
+      "slug": "aprovacoes",
+      "title": "Aprovações",
+      "description": "Pedir aprovação de clientes externos via link público, fluxo REVIEWER e reprovações.",
+      "order": 4,
+      "icon": "CheckCircle2"
+    },
+    {
+      "slug": "automacoes",
+      "title": "Automações",
+      "description": "Criar regras com triggers, condições e ações para automatizar o fluxo.",
+      "order": 5,
+      "icon": "Zap"
+    },
+    {
+      "slug": "crm",
+      "title": "CRM",
+      "description": "Contatos, empresas e vínculo com usuários para gestão de relacionamento.",
+      "order": 6,
+      "icon": "Users"
+    },
+    {
+      "slug": "importacao",
+      "title": "Importação",
+      "description": "Importar dados do Ummense e migrar fluxos existentes para o KTask.",
+      "order": 7,
+      "icon": "Download"
+    },
+    {
+      "slug": "configuracoes",
+      "title": "Configurações",
+      "description": "Perfil, equipe, integrações e ajustes gerais da conta.",
+      "order": 8,
+      "icon": "Settings"
+    }
+  ]
+}
