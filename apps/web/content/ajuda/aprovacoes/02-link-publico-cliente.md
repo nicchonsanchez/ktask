@@ -1,5 +1,4 @@
-## <!-- origem: tutorial-para-clientes/index.html seção 4 (Interação nos cards — aprovar / reprovar) -->
-
+---
 title: Aprovando pelo link público (para o cliente)
 description: Como o cliente externo aprova uma entrega clicando no link que recebeu por WhatsApp, sem precisar criar conta.
 category: aprovacoes
@@ -7,8 +6,9 @@ slug: link-publico-cliente
 order: 2
 tags: [aprovacao, link, publico, cliente, externo]
 updatedAt: 2026-05-14
-
 ---
+
+<!-- origem: tutorial-para-clientes/index.html seção 4 (Interação nos cards — aprovar / reprovar) -->
 
 # Aprovando pelo link público (para o cliente)
 

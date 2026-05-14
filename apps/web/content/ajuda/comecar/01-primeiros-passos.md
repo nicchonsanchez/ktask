@@ -1,5 +1,4 @@
-## <!-- origem: tutorial-para-clientes/index.html seções 1 e 3 -->
-
+---
 title: Primeiros passos no KTask
 description: Visão geral da plataforma e o que fazer no primeiro acesso.
 category: comecar
@@ -8,8 +7,9 @@ order: 1
 tags: [introducao, comecar, onboarding]
 faqLink: 'Posso usar o KTask no celular?'
 updatedAt: 2026-05-14
-
 ---
+
+<!-- origem: tutorial-para-clientes/index.html seções 1 e 3 -->
 
 # Primeiros passos no KTask
 

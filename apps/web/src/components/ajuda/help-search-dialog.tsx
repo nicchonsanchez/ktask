@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, FileText } from 'lucide-react';
-import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle } from '@ktask/ui';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { cn } from '@/lib/cn';
 import { createSearchIndex, runSearch, type SearchResult } from '@/lib/ajuda/search';
 import type { SearchEntry } from '@/lib/ajuda/types';
@@ -83,14 +83,16 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPortal>
-        <DialogOverlay className="data-[state=open]:animate-fade-in fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-        <DialogContent
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="data-[state=open]:animate-fade-in fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
+        <DialogPrimitive.Content
           aria-describedby={undefined}
           className="bg-bg border-border data-[state=open]:animate-fade-in fixed left-1/2 top-[18%] z-50 flex max-h-[calc(100vh-9rem)] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border shadow-xl focus:outline-none"
         >
-          <DialogTitle className="sr-only">Buscar na Central de Ajuda</DialogTitle>
+          <DialogPrimitive.Title className="sr-only">
+            Buscar na Central de Ajuda
+          </DialogPrimitive.Title>
           <div className="border-border flex items-center gap-2 border-b px-4">
             <Search size={16} className="text-fg-muted shrink-0" aria-hidden />
             <input
@@ -195,8 +197,8 @@ export function HelpSearchDialog({ open, onOpenChange }: HelpSearchDialogProps) 
               </ul>
             )}
           </div>
-        </DialogContent>
-      </DialogPortal>
-    </Dialog>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

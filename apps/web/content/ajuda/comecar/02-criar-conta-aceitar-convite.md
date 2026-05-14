@@ -1,5 +1,4 @@
-## <!-- origem: tutorial-para-clientes/index.html seção 2 -->
-
+---
 title: Criar conta e aceitar convite
 description: Como aceitar um convite enviado pela equipe, criar sua senha e recuperar acesso caso esqueça.
 category: comecar
@@ -8,8 +7,9 @@ order: 2
 tags: [conta, convite, senha, cadastro, reset]
 faqLink: 'Esqueci minha senha. O que faço?'
 updatedAt: 2026-05-14
-
 ---
+
+<!-- origem: tutorial-para-clientes/index.html seção 2 -->
 
 # Criar conta e aceitar convite
 

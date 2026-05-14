@@ -1,5 +1,4 @@
-## <!-- origem: tutorial-para-clientes/index.html seção 7 (Como criar um card novo) -->
-
+---
 title: Criar um card
 description: Como criar um card novo numa coluna do quadro e preencher os campos essenciais.
 category: cards
@@ -7,8 +6,9 @@ slug: criar-card
 order: 1
 tags: [card, criar, tarefa, primeiro-passo]
 updatedAt: 2026-05-14
-
 ---
+
+<!-- origem: tutorial-para-clientes/index.html seção 7 (Como criar um card novo) -->
 
 # Criar um card
 

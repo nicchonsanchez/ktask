@@ -1,5 +1,4 @@
-## <!-- origem: tutorial-para-clientes/index.html seção 5 -->
-
+---
 title: Anexos e comentários no card
 description: Como anexar arquivos, comentar, mencionar pessoas e acompanhar a timeline.
 category: cards
@@ -8,8 +7,9 @@ order: 3
 tags: [card, anexo, comentario, mencao, timeline, historico]
 faqLink: 'Onde vejo o histórico do que aconteceu num card?'
 updatedAt: 2026-05-14
-
 ---
+
+<!-- origem: tutorial-para-clientes/index.html seção 5 -->
 
 # Anexos e comentários no card
 

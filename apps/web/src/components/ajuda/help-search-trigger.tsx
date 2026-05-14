@@ -34,7 +34,7 @@ export function HelpSearchTrigger() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="border-border bg-bg-subtle text-fg-muted hover:bg-bg-muted hover:text-fg group flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm leading-none transition-colors sm:w-72"
+        className="border-border bg-bg-subtle text-fg-muted hover:bg-bg-muted hover:text-fg group mx-auto flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm leading-none transition-colors sm:w-72"
         aria-label="Buscar na ajuda"
       >
         <Search size={16} className="shrink-0" aria-hidden />
