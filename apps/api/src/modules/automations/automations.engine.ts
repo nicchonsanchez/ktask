@@ -10,7 +10,11 @@ import type {
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
-import { EVENT_NAMES, type CardMovedPayload } from '@/modules/realtime/events.types';
+import {
+  EVENT_NAMES,
+  type CardCreatedPayload,
+  type CardMovedPayload,
+} from '@/modules/realtime/events.types';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 import { evaluateConditions, type AutomationCondition } from './condition.types';
 
@@ -58,6 +62,24 @@ export class AutomationsEngine {
     private readonly events: EventEmitter2,
     private readonly whatsapp: WhatsAppHelper,
   ) {}
+
+  /**
+   * Card recem-nascido conta como "entrou na lista". Sem isso, automacoes
+   * com trigger CARD_ENTERED so rodavam quando o card chegava via MOVE —
+   * criar direto na coluna (manual, copy, child, automation handler) nao
+   * disparava nenhuma. Importer NAO emite CARD_CREATED de proposito (seria
+   * desastre disparar N×M automacoes em import massivo).
+   */
+  @OnEvent(EVENT_NAMES.CARD_CREATED, { async: true })
+  async onCardCreated(payload: CardCreatedPayload) {
+    await this.dispatchTrigger({
+      listId: payload.listId,
+      trigger: 'CARD_ENTERED',
+      cardId: payload.cardId,
+      organizationId: payload.organizationId,
+      chainDepth: 0,
+    });
+  }
 
   @OnEvent(EVENT_NAMES.CARD_MOVED, { async: true })
   async onCardMoved(payload: CardMovedPayload) {
@@ -1018,6 +1040,8 @@ export class AutomationsEngine {
       organizationId: targetList.organizationId,
       actorId: automation.createdById,
       cardId: child.id,
+      listId: targetListId,
+      title,
     });
 
     return { childId: child.id };
