@@ -71,6 +71,20 @@ const envSchema = z.object({
   EVOLUTION_DEFAULT_INSTANCE: optionalString(),
 
   /**
+   * Telefone do operador notificado quando alguém cria ticket via formulário
+   * de suporte (/ajuda/suporte → POST /v1/support-tickets). Formato E.164 sem
+   * '+' (ex: "5531993767301"). Vazio = kill switch (não notifica ninguém);
+   * default = número do Nicchon. Se Evolution estiver off, helper degrada
+   * silencioso e o ticket continua sendo criado normalmente.
+   */
+  SUPPORT_NOTIFY_WHATSAPP: z
+    .string()
+    .default('5531993767301')
+    .refine((v) => v === '' || /^\d{10,15}$/.test(v), {
+      message: 'Use vazio pra desabilitar ou número 10-15 dígitos (E.164 sem +).',
+    }),
+
+  /**
    * URL pública do frontend (sem trailing slash). Usada pra construir
    * links em mensagens externas (ex: link de aprovação tokenizado enviado
    * por WhatsApp). Em prod aponta pro domínio público da app.
