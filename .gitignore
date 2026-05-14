@@ -79,3 +79,8 @@ tmp-favicon/
 tarefas-md/*.json
 scripts/ops/_*-report.json
 scripts/ops/_*.sql
+
+# Service workers gerados pelo Serwist (build artifacts, regeneram a cada build)
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js
