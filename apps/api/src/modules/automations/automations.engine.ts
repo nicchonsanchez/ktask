@@ -10,6 +10,7 @@ import type {
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
+import { createCardWithPresence } from '@/modules/cards/helpers/create-card-with-presence';
 import {
   EVENT_NAMES,
   type CardCreatedPayload,
@@ -972,37 +973,16 @@ export class AutomationsEngine {
       select: { position: true },
     });
 
-    // Increment atomico do counter da Org pra gerar shortCode do filho
-    const orgUpdated = await this.prisma.organization.update({
-      where: { id: targetList.organizationId },
-      data: { cardSequence: { increment: 1 } },
-      select: { cardSequence: true },
-    });
-
-    const child = await this.prisma.card.create({
-      data: {
-        organizationId: targetList.organizationId,
-        shortCode: String(orgUpdated.cardSequence),
-        boardId: targetList.boardId,
-        listId: targetListId,
-        title,
-        position: (last?.position ?? 0) + 1,
-        parentCardId: parent.id,
-        createdById: automation.createdById,
-        leadId: config.copyLead ? parent.leadId : automation.createdById,
-        dueDate: config.copyDueDate ? parent.dueDate : null,
-      },
-    });
-
-    // Presença primária pra o card aparecer no kanban (modelo multi-fluxo
-    // CardPresence — sem essa row, GET /boards/:id não retorna o card).
-    await this.prisma.cardPresence.create({
-      data: {
-        cardId: child.id,
-        boardId: targetList.boardId,
-        listId: targetListId,
-        position: (last?.position ?? 0) + 1,
-      },
+    const child = await createCardWithPresence(this.prisma, {
+      organizationId: targetList.organizationId,
+      boardId: targetList.boardId,
+      listId: targetListId,
+      title,
+      position: (last?.position ?? 0) + 1,
+      parentCardId: parent.id,
+      createdById: automation.createdById,
+      leadId: config.copyLead ? (parent.leadId ?? automation.createdById) : automation.createdById,
+      dueDate: config.copyDueDate ? parent.dueDate : null,
     });
 
     if (config.copyTeam && parent.members.length > 0) {

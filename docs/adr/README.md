@@ -38,13 +38,14 @@ ADRs `Accepted` são imutáveis. Pequenas correções de typo / link quebrado s�
 
 ## Índice
 
-| Nº                                              | Título                                                 | Status                      | Tags                           |
-| ----------------------------------------------- | ------------------------------------------------------ | --------------------------- | ------------------------------ |
-| [0001](0001-monorepo-pnpm-turborepo.md)         | Monorepo pnpm + Turborepo                              | Accepted                    | monorepo, build, tooling       |
-| [0002](0002-multi-tenant-organizationid.md)     | Multi-tenant via `organizationId` (shared schema)      | Accepted                    | multi-tenant, banco, segurança |
-| [0003](0003-cards-multi-fluxo-cardpresence.md)  | Cards em múltiplos fluxos via tabela `CardPresence`    | Accepted (migração parcial) | domínio, banco, kanban         |
-| [0004](0004-deploy-hetzner-vs-aws.md)           | Deploy em Hetzner VM (supersedes plano AWS App Runner) | Accepted                    | infra, deploy, custo           |
-| [0005](0005-evolution-api-vs-meta-cloud-api.md) | WhatsApp via Evolution API self-hosted                 | Accepted                    | integração, whatsapp           |
+| Nº                                               | Título                                                 | Status                      | Tags                           |
+| ------------------------------------------------ | ------------------------------------------------------ | --------------------------- | ------------------------------ |
+| [0001](0001-monorepo-pnpm-turborepo.md)          | Monorepo pnpm + Turborepo                              | Accepted                    | monorepo, build, tooling       |
+| [0002](0002-multi-tenant-organizationid.md)      | Multi-tenant via `organizationId` (shared schema)      | Accepted                    | multi-tenant, banco, segurança |
+| [0003](0003-cards-multi-fluxo-cardpresence.md)   | Cards em múltiplos fluxos via tabela `CardPresence`    | Accepted (migração parcial) | domínio, banco, kanban         |
+| [0004](0004-deploy-hetzner-vs-aws.md)            | Deploy em Hetzner VM (supersedes plano AWS App Runner) | Accepted                    | infra, deploy, custo           |
+| [0005](0005-evolution-api-vs-meta-cloud-api.md)  | WhatsApp via Evolution API self-hosted                 | Accepted                    | integração, whatsapp           |
+| [0006](0006-helper-centralizado-criacao-card.md) | Helper centralizado pra criação de Card                | Accepted                    | card, refactor, invariante     |
 
 ## Template
 

@@ -16,6 +16,8 @@ import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { StorageService } from '@/modules/storage/storage.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
+import { createCardWithPresence } from './helpers/create-card-with-presence';
+
 interface CreateCardInput {
   listId: string;
   title: string;
@@ -75,31 +77,17 @@ export class CardsService {
     });
 
     const card = await this.prisma.$transaction(async (tx) => {
-      // Increment atomico do counter da Org pra gerar shortCode unico.
-      // UPDATE...RETURNING e atomico em Postgres, sem race entre criacoes
-      // concorrentes na mesma Org.
-      const orgUpdated = await tx.organization.update({
-        where: { id: tenant.organizationId },
-        data: { cardSequence: { increment: 1 } },
-        select: { cardSequence: true },
-      });
-      const shortCode = String(orgUpdated.cardSequence);
-
-      const created = await tx.card.create({
-        data: {
-          organizationId: tenant.organizationId,
-          shortCode,
-          boardId: list.boardId,
-          listId: input.listId,
-          title: input.title,
-          description: (input.description ?? undefined) as Prisma.InputJsonValue | undefined,
-          cardColor: input.cardColor ?? null,
-          dueDate: input.dueDate ? new Date(input.dueDate) : null,
-          startDate: input.startDate ? new Date(input.startDate) : null,
-          position,
-          createdById: userId,
-          leadId: userId, // Default: quem cria vira líder. Pode ser trocado no modal ou via automação.
-        },
+      const created = await createCardWithPresence(tx, {
+        organizationId: tenant.organizationId,
+        boardId: list.boardId,
+        listId: input.listId,
+        title: input.title,
+        description: (input.description ?? undefined) as Prisma.InputJsonValue | undefined,
+        cardColor: input.cardColor ?? null,
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        position,
+        createdById: userId,
       });
 
       const memberIds = new Set<string>([userId]);
@@ -109,16 +97,6 @@ export class CardsService {
       await tx.cardMember.createMany({
         data: Array.from(memberIds).map((uid) => ({ cardId: created.id, userId: uid })),
         skipDuplicates: true,
-      });
-
-      // Cria a presença "primária" do card (cards multi-fluxo, iteração 1).
-      await tx.cardPresence.create({
-        data: {
-          cardId: created.id,
-          boardId: list.boardId,
-          listId: input.listId,
-          position,
-        },
       });
 
       return created;
@@ -802,43 +780,25 @@ export class CardsService {
       prevPos = position;
 
       const copy = await this.prisma.$transaction(async (tx) => {
-        // Increment atomico do counter da Org pra gerar shortCode unico.
-        // Mesmo padrao do create() — sem isso, copia fica com shortCode null
-        // e some do kanban junto com a falta de CardPresence.
-        const orgUpdated = await tx.organization.update({
-          where: { id: source.organizationId },
-          data: { cardSequence: { increment: 1 } },
-          select: { cardSequence: true },
-        });
-        const shortCode = String(orgUpdated.cardSequence);
-
-        const newCard = await tx.card.create({
-          data: {
-            organizationId: source.organizationId,
-            shortCode,
-            boardId: destBoardId,
-            listId: destListId,
-            title: count > 1 ? `${source.title} (cópia ${i + 1})` : `${source.title} (cópia)`,
-            description:
-              options.copyDescription !== false
-                ? ((source.description ?? undefined) as Prisma.InputJsonValue | undefined)
-                : undefined,
-            cardColor: source.cardColor,
-            startDate: options.copyDueDate !== false ? source.startDate : null,
-            dueDate: options.copyDueDate !== false ? source.dueDate : null,
-            estimateMinutes: source.estimateMinutes,
-            // copyParent só faz sentido se permanecer no mesmo board (parent
-            // é card do mesmo board pelo schema)
-            parentCardId: options.copyParent && !crossBoard ? source.parentCardId : null,
-            position,
-            createdById: userId,
-            leadId: options.copyLead && source.leadId ? source.leadId : userId,
-          },
-        });
-
-        // Presença primária pra aparecer no kanban (modelo multi-fluxo).
-        await tx.cardPresence.create({
-          data: { cardId: newCard.id, boardId: destBoardId, listId: destListId, position },
+        const newCard = await createCardWithPresence(tx, {
+          organizationId: source.organizationId,
+          boardId: destBoardId,
+          listId: destListId,
+          title: count > 1 ? `${source.title} (cópia ${i + 1})` : `${source.title} (cópia)`,
+          description:
+            options.copyDescription !== false
+              ? ((source.description ?? undefined) as Prisma.InputJsonValue | undefined)
+              : undefined,
+          cardColor: source.cardColor,
+          startDate: options.copyDueDate !== false ? source.startDate : null,
+          dueDate: options.copyDueDate !== false ? source.dueDate : null,
+          estimateMinutes: source.estimateMinutes,
+          // copyParent só faz sentido se permanecer no mesmo board (parent
+          // é card do mesmo board pelo schema)
+          parentCardId: options.copyParent && !crossBoard ? source.parentCardId : null,
+          position,
+          createdById: userId,
+          leadId: options.copyLead && source.leadId ? source.leadId : userId,
         });
 
         if (labelsToCopy.length > 0) {
@@ -1097,44 +1057,19 @@ export class CardsService {
               undefined)
             : undefined;
 
-      // Increment atomico do counter da Org pra gerar shortCode unico.
-      // Mesmo padrao do create() principal — sem isso, card fica com
-      // shortCode null (bug que deixava 8 cards "invisiveis" no kanban).
-      const orgUpdated = await tx.organization.update({
-        where: { id: parent.organizationId },
-        data: { cardSequence: { increment: 1 } },
-        select: { cardSequence: true },
-      });
-      const shortCode = String(orgUpdated.cardSequence);
-
-      const newCard = await tx.card.create({
-        data: {
-          organizationId: parent.organizationId,
-          shortCode,
-          boardId: destBoardId,
-          listId: destListId,
-          title: input.title,
-          description: finalDescription,
-          cardColor: parent.cardColor,
-          startDate: input.copyDueDate ? parent.startDate : null,
-          dueDate: input.copyDueDate ? parent.dueDate : null,
-          parentCardId: parentId,
-          position,
-          createdById: userId,
-          leadId: input.copyLead && parent.leadId ? parent.leadId : userId,
-        },
-      });
-
-      // Cria a presenca "primaria" pra esse card aparecer no kanban do
-      // board destino. Sem isso, o GET /boards/:id (que le de CardPresence)
-      // nao mostra o card — ele fica "invisivel" mas acessivel via link.
-      await tx.cardPresence.create({
-        data: {
-          cardId: newCard.id,
-          boardId: destBoardId,
-          listId: destListId,
-          position,
-        },
+      const newCard = await createCardWithPresence(tx, {
+        organizationId: parent.organizationId,
+        boardId: destBoardId,
+        listId: destListId,
+        title: input.title,
+        description: finalDescription,
+        cardColor: parent.cardColor,
+        startDate: input.copyDueDate ? parent.startDate : null,
+        dueDate: input.copyDueDate ? parent.dueDate : null,
+        parentCardId: parentId,
+        position,
+        createdById: userId,
+        leadId: input.copyLead && parent.leadId ? parent.leadId : userId,
       });
 
       if (labelsToCopy.length > 0) {

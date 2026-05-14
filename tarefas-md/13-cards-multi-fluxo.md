@@ -158,3 +158,40 @@ Cuidado especial: **move entre fluxos** — precisa semântica nova ("desvincula
 - **Card filho / hierarquia**: ortogonal. Schema já tem `Card.parentCardId`. UX "Família" no Ummense.
 - **"Contatos"**: entidade própria deles (CRM-like). Mapeamos pra `CardMember` por enquanto.
 - **Campos personalizados**: parkados, entram na Fase 2.
+
+## Invariante crítica: como criar Card corretamente
+
+Adicionado em 2026-05-13 após postmortem [CARROSSEL CANNES](../docs/postmortems/2026-05-13-carrossel-cannes.md) — 9 cards ficaram "invisíveis no kanban" por 17 dias porque 3 métodos de criação esqueceram parte da sequência obrigatória.
+
+**Toda criação de Card precisa executar 3 passos juntos, em transação:**
+
+1. `Organization.cardSequence` increment atômico → gera `shortCode` único por Org.
+2. INSERT em `Card` com o `shortCode` gerado.
+3. INSERT em `CardPresence` com `(cardId, boardId, listId, position)`. **Sem essa row o card existe no banco mas não aparece no kanban** — o `GET /boards/:id` consulta `CardPresence`, não `Card.boardId`.
+
+**Como fazer certo:**
+
+Use o helper canônico em [apps/api/src/modules/cards/helpers/create-card-with-presence.ts](../apps/api/src/modules/cards/helpers/create-card-with-presence.ts):
+
+```typescript
+import { createCardWithPresence } from '@/modules/cards/helpers/create-card-with-presence';
+
+const card = await createCardWithPresence(tx, {
+  organizationId,
+  boardId,
+  listId,
+  title,
+  position,
+  createdById: userId,
+  // ... outros campos opcionais
+});
+```
+
+O helper executa os 3 passos em ordem. O JSDoc do arquivo aponta pra este doc e pro postmortem.
+
+**Quando NÃO usar o helper:**
+
+- Importer (`apps/api/src/modules/importer/`) usa criação manual porque aloca shortCodes em batch — exceção documentada.
+- Qualquer outro caso novo: usar o helper. Se algum requisito não encaixar, abrir nova ADR antes de duplicar a sequência.
+
+**Decisão arquitetural:** [docs/adr/0006-helper-centralizado-criacao-card.md](../docs/adr/0006-helper-centralizado-criacao-card.md).
