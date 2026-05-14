@@ -39,15 +39,25 @@
 		-Server
 	}
 
+	# Swagger / OpenAPI: bloqueado em prod (devolve 404).
+	# Documentação interativa só fica disponível em dev (localhost:4000/docs).
+	# KTask hoje é uso interno; sem necessidade de expor schema publicamente.
+	@docs path /docs /docs/* /docs-json
+	handle @docs {
+		respond "Not Found" 404
+	}
+
 	# Socket.IO path: deixa o reverse_proxy direcionar (same origin)
 	# Caddy detecta automaticamente WS upgrade via headers padrão
-	reverse_proxy api:4000 {
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-Proto {scheme}
-		# Timeouts maiores pra WebSocket
-		transport http {
-			read_timeout 0
-			write_timeout 0
+	handle {
+		reverse_proxy api:4000 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			# Timeouts maiores pra WebSocket
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
 		}
 	}
 }

@@ -106,6 +106,7 @@ export class CardsController {
   }
 
   @Post(':cardId/restore')
+  @ApiOperation({ summary: 'Restaurar card arquivado' })
   restore(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,
@@ -211,6 +212,7 @@ export class CardsController {
   }
 
   @Post(':cardId/labels')
+  @ApiOperation({ summary: 'Vincular label ao card' })
   addLabel(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,
@@ -221,6 +223,7 @@ export class CardsController {
   }
 
   @Delete(':cardId/labels/:labelId')
+  @ApiOperation({ summary: 'Desvincular label do card' })
   removeLabel(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,

@@ -51,25 +51,23 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  if (env.NODE_ENV !== 'production') {
-    const config = new DocumentBuilder()
-      .setTitle('KTask API')
-      .setDescription('REST API — gestão de tarefas e fluxos operacionais')
-      .setVersion('0.0.1')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('docs', app, document, {
-      swaggerOptions: { persistAuthorization: true },
-    });
-  }
+  // Em prod, /docs e /docs-json ficam protegidos por basic-auth no Caddy
+  // (vars KTASK_DOCS_USER / KTASK_DOCS_HASH). Ver docs/api/README.md.
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('KTask API')
+    .setDescription('REST API — gestão de tarefas e fluxos operacionais')
+    .setVersion('0.0.1')
+    .addBearerAuth()
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, swaggerDocument, {
+    swaggerOptions: { persistAuthorization: true },
+  });
 
   await app.listen(env.PORT, '0.0.0.0');
   const logger = app.get(PinoLogger);
   logger.log(`KTask API running on http://localhost:${env.PORT} (${env.NODE_ENV})`);
-  if (env.NODE_ENV !== 'production') {
-    logger.log(`Swagger docs: http://localhost:${env.PORT}/docs`);
-  }
+  logger.log(`Swagger docs: http://localhost:${env.PORT}/docs`);
 }
 
 bootstrap().catch((err) => {
