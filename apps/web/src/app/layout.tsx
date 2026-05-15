@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/query-provider';
 import { SessionBootstrap } from '@/components/session-bootstrap';
+import { UpdateToast } from '@/components/update-toast';
 import '@/styles/globals.css';
 
 const inter = Inter({
@@ -108,6 +109,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <QueryProvider>
             <SessionBootstrap />
+            <UpdateToast />
             {children}
           </QueryProvider>
         </ThemeProvider>

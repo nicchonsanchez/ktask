@@ -24,6 +24,14 @@
 	reverse_proxy web:3000 {
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-Proto {scheme}
+
+		# Zero-downtime durante deploy: segura a request por ate 30s tentando
+		# reconectar quando o container web esta sendo trocado. Sem isso,
+		# qualquer atualizacao causa 502 instantaneo por ~10s. Com isso, o
+		# user ve loading prolongado mas a request completa quando o
+		# container novo fica saudavel.
+		lb_try_duration 30s
+		lb_try_interval 250ms
 	}
 }
 
@@ -58,6 +66,12 @@
 				read_timeout 0
 				write_timeout 0
 			}
+
+			# Zero-downtime durante deploy (mesmo motivo do bloco web acima).
+			# Importante pra API pq deploy tipicamente reinicia ktask-api e
+			# qualquer chamada nesse intervalo viraria 502.
+			lb_try_duration 30s
+			lb_try_interval 250ms
 		}
 	}
 }

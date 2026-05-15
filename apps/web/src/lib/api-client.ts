@@ -10,6 +10,7 @@
 
 import { env } from './env';
 import { useAuthStore } from '@/stores/auth-store';
+import { SLOW_THRESHOLD_MS, useSlowRequestStore } from '@/stores/slow-request-store';
 
 export class ApiError extends Error {
   status: number;
@@ -113,6 +114,16 @@ export async function apiFetch<T = unknown>(
 
   const token = skipAuth ? null : useAuthStore.getState().accessToken;
 
+  // Tracking de request lenta: agenda incremento do contador apos
+  // SLOW_THRESHOLD_MS. Se a request completar antes, cancela o timer.
+  // Se ja virou "slow", precisa decrementar quando completar (success ou
+  // error). Padrao "register on slow, unregister on finish".
+  let markedSlow = false;
+  const slowTimer = setTimeout(() => {
+    markedSlow = true;
+    useSlowRequestStore.getState().inc();
+  }, SLOW_THRESHOLD_MS);
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -129,8 +140,13 @@ export async function apiFetch<T = unknown>(
   } catch (err) {
     // fetch() throws TypeError antes de qualquer response (offline, DNS, CORS,
     // cert). Convertemos pra NetworkError com mensagem em pt-BR.
+    clearTimeout(slowTimer);
+    if (markedSlow) useSlowRequestStore.getState().dec();
     throw new NetworkError(err);
   }
+
+  clearTimeout(slowTimer);
+  if (markedSlow) useSlowRequestStore.getState().dec();
 
   if (res.status === 401 && !skipAuthRefresh && !skipAuth) {
     const newToken = await refreshToken();
