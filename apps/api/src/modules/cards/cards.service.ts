@@ -1550,6 +1550,50 @@ export class CardsService {
   }
 
   /**
+   * Auditoria minimalista: quem ja abriu este card pelo menos 1 vez.
+   * Retorna 1 entry por user (CardVisit tem PK composta userId+cardId),
+   * com timestamp da ultima visita + flag se eh lead/membro/outro.
+   * Sem contagem de vezes — so "abriu ou nao abriu".
+   */
+  async listVisits(userId: string, tenant: TenantContext, cardId: string) {
+    const card = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: {
+        id: true,
+        boardId: true,
+        organizationId: true,
+        leadId: true,
+        privacy: true,
+        members: { select: { userId: true } },
+      },
+    });
+    if (!card || card.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Card não encontrado.');
+    }
+    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    if (!canViewCard(card, userId, tenant.role)) {
+      throw new NotFoundException('Card não encontrado.');
+    }
+
+    const visits = await this.prisma.cardVisit.findMany({
+      where: { cardId },
+      orderBy: { visitedAt: 'desc' },
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+      },
+    });
+
+    const memberIds = new Set(card.members.map((m) => m.userId));
+    return visits.map((v) => ({
+      userId: v.userId,
+      visitedAt: v.visitedAt.toISOString(),
+      user: v.user,
+      role: v.userId === card.leadId ? 'LEAD' : memberIds.has(v.userId) ? 'MEMBER' : 'OTHER',
+    }));
+  }
+
+  /**
    * Vincula o card a um novo fluxo (board). Se `listId` for omitido, usa a
    * primeira lista não-arquivada do board destino. Idempotente: se já existe
    * presença ativa, devolve ela; se existe mas está soft-deleted (`removedAt`),

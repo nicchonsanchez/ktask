@@ -55,6 +55,13 @@
       "description": "Perfil, equipe, integrações e ajustes gerais da conta.",
       "order": 8,
       "icon": "Settings"
+    },
+    {
+      "slug": "visao-gerencial",
+      "title": "Visão Gerencial",
+      "description": "Tela para gestores: cards de todos os quadros num só lugar, com filtros de cliente, responsável e prazo.",
+      "order": 9,
+      "icon": "LayoutDashboard"
     }
   ]
 }

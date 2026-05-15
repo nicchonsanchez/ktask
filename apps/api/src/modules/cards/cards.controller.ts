@@ -243,6 +243,20 @@ export class CardsController {
     return this.cards.listFlows(user.userId, org, cardId);
   }
 
+  @Get(':cardId/visits')
+  @ApiOperation({
+    summary: 'Lista quem já visualizou este card (auditoria minimalista)',
+    description:
+      'Retorna 1 entry por user que abriu o card pelo menos 1 vez. Não conta vezes — só "abriu ou não abriu" + timestamp da última visita.',
+  })
+  listVisits(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+  ) {
+    return this.cards.listVisits(user.userId, org, cardId);
+  }
+
   @Post(':cardId/flows')
   @ApiOperation({ summary: 'Vincula o card a outro fluxo (cria CardPresence)' })
   linkFlow(

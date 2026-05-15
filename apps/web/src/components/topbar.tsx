@@ -12,6 +12,7 @@ import { SearchTrigger } from '@/components/search-host';
 import { UserAvatar } from '@/components/user-avatar';
 import { TimerWidget } from '@/components/time-tracking/timer-widget';
 import { approvalsQueries } from '@/lib/queries/approvals';
+import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { logout } from '@/lib/auth';
 
@@ -33,13 +34,21 @@ interface NavItem {
   label: string;
 }
 
-const NAV_PRIMARY: NavItem[] = [
+const NAV_PRIMARY_BASE: NavItem[] = [
   { href: '/', label: 'Início' },
   { href: '/quadros', label: 'Quadros' },
   { href: '/aprovacoes', label: 'Aprovações' },
   { href: '/indicadores', label: 'Indicadores' },
   { href: '/contatos', label: 'CRM' },
 ];
+
+/** Item extra visível apenas pra OWNER/ADMIN/GESTOR. Posicionado após Quadros. */
+const NAV_MANAGEMENT_ITEM: NavItem = {
+  href: '/visao-gerencial',
+  label: 'Visão Gerencial',
+};
+
+const MANAGEMENT_ROLES = new Set(['OWNER', 'ADMIN', 'GESTOR']);
 
 const NAV_ACCOUNT: NavItem[] = [
   { href: '/empresa', label: 'Equipe' },
@@ -63,6 +72,25 @@ export function Topbar() {
     staleTime: 30_000,
   });
   const pendingCount = pendingApprovalsQ.data?.length ?? 0;
+
+  // Role do user na Org pra mostrar/esconder "Visao Gerencial" no nav.
+  // Reusa o mesmo endpoint que /empresa ja chama — fica em cache do RQ.
+  const orgRoleQ = useQuery({
+    queryKey: ['org', 'current'],
+    queryFn: () => api.get<{ myRole: string }>('/api/v1/organizations/current'),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const myRole = orgRoleQ.data?.myRole;
+  const isManagement = !!myRole && MANAGEMENT_ROLES.has(myRole);
+  const navPrimary: NavItem[] = isManagement
+    ? [
+        NAV_PRIMARY_BASE[0]!,
+        NAV_PRIMARY_BASE[1]!,
+        NAV_MANAGEMENT_ITEM,
+        ...NAV_PRIMARY_BASE.slice(2),
+      ]
+    : NAV_PRIMARY_BASE;
 
   async function handleLogout() {
     await logout();
@@ -122,7 +150,7 @@ export function Topbar() {
           </Link>
           <div className="bg-border/70 hidden h-5 w-px shrink-0 sm:block" aria-hidden />
           <nav className="hidden h-[52px] items-stretch sm:flex">
-            {NAV_PRIMARY.map((item) => {
+            {navPrimary.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
               const badge = item.href === '/aprovacoes' && pendingCount > 0 ? pendingCount : null;
               return (
@@ -196,7 +224,7 @@ export function Topbar() {
               </button>
             </div>
             <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-              {NAV_PRIMARY.map((item) => (
+              {navPrimary.map((item) => (
                 <DrawerLink
                   key={item.href}
                   item={item}

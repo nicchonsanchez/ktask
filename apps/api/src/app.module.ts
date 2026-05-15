@@ -40,6 +40,7 @@ import { MessageTemplatesModule } from './modules/message-templates/message-temp
 import { MailModule } from './modules/mail/mail.module';
 import { UsersViewModule } from './modules/users-view/users-view.module';
 import { SupportModule } from './modules/support/support.module';
+import { ManagementModule } from './modules/management/management.module';
 
 @Module({
   imports: [
@@ -118,6 +119,7 @@ import { SupportModule } from './modules/support/support.module';
     MessageTemplatesModule,
     UsersViewModule,
     SupportModule,
+    ManagementModule,
     HealthModule,
   ],
   providers: [

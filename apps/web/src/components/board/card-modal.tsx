@@ -9,6 +9,7 @@ import {
   ChevronsUp,
   Contact as ContactIcon,
   Copy,
+  Eye,
   ExternalLink,
   Flag,
   Hash,
@@ -40,6 +41,7 @@ import { LeadPicker } from './lead-picker';
 import { TeamPicker } from './team-picker';
 import { ChecklistBlock } from './checklist-block';
 import { AttachmentsBlock } from './attachments-block';
+import { VisitedByBlock } from './visited-by-block';
 import { DueDatePicker } from './due-date-picker';
 import { CardTimerButton } from './card-timer-button';
 import { DuplicateCardDialog } from './duplicate-card-dialog';
@@ -597,6 +599,12 @@ export function CardModalContent({
                     count={card.attachments.length || undefined}
                   >
                     <AttachmentsBlock card={card} boardId={boardId} />
+                  </Block>
+
+                  {/* Visualizado por — auditoria minimalista. Lista discreta
+                      no fim do modal pra nao competir com info mais util. */}
+                  <Block icon={<Eye size={14} />} label="Visualizado por">
+                    <VisitedByBlock cardId={card.id} />
                   </Block>
                 </div>
               </div>
