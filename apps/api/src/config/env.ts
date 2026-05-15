@@ -100,6 +100,19 @@ const envSchema = z.object({
   VAPID_SUBJECT: z.string().default('mailto:noreply@ktask.local'),
 
   SENTRY_DSN: optionalUrl(),
+
+  /**
+   * Emails autorizados a acessar rotas de administracao GLOBAL da plataforma
+   * (fora de qualquer Org). Comma-separated, case-insensitive. Usado pelo
+   * PlatformAdminGuard pra rotas tipo /v1/platform/service-providers.
+   *
+   * Caso de uso: cadastro de Service Providers da federacao OAuth2/OIDC
+   * (sistemas externos como Ogma que consomem KTask como Identity Provider).
+   *
+   * Vazio = ninguem entra (mais seguro do que liberar geral).
+   * Ver tarefas-md/51-federacao-idp-para-ogma.md.
+   */
+  PLATFORM_ADMIN_EMAILS: z.string().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

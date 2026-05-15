@@ -41,6 +41,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { UsersViewModule } from './modules/users-view/users-view.module';
 import { SupportModule } from './modules/support/support.module';
 import { ManagementModule } from './modules/management/management.module';
+import { ServiceProvidersModule } from './modules/service-providers/service-providers.module';
 
 @Module({
   imports: [
@@ -120,6 +121,7 @@ import { ManagementModule } from './modules/management/management.module';
     UsersViewModule,
     SupportModule,
     ManagementModule,
+    ServiceProvidersModule,
     HealthModule,
   ],
   providers: [

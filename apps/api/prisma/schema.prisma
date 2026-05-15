@@ -1224,3 +1224,33 @@ model OrgImportMapping {
   @@unique([organizationId, kind, sourceName])
   @@index([organizationId, kind])
 }
+
+// ==================== Federacao de Identidade (KTask como IdP) ====================
+
+/// Cliente externo da plataforma KTask atuando como Service Provider (SP) na
+/// federacao OAuth2/OIDC simplificada onde KTask eh o Identity Provider (IdP).
+/// Sistemas registrados aqui podem validar credenciais via POST /auth/validate
+/// e recebem webhooks assinados em mudancas de usuario/organizacao.
+/// Detalhes em tarefas-md/51-federacao-idp-para-ogma.md.
+model ServiceProvider {
+  id           String   @id @default(cuid())
+  /// Nome exibido no admin global, ex: "Ogma - Atendimento Creatyze"
+  nome         String
+  /// Slug unico, ex: "ogma". Usado em logs e como referencia externa.
+  slug         String   @unique
+  /// URL onde os webhooks sao entregues, ex:
+  /// "https://ogma.creatyze.com.br/api/webhooks/ktask"
+  webhookUrl   String
+  /// SHA-256 do secret HMAC. O secret em plaintext eh mostrado 1 vez ao
+  /// admin global na criacao; nao armazenamos plaintext.
+  secretHash   String
+  /// Eventos que esse SP recebe. Lista de strings, ex:
+  /// ["usuario.email_alterado", "usuario.senha_alterada", "usuario.desativado"]
+  escopo       String[]
+  /// Quando false, webhooks nao sao despachados.
+  ativo        Boolean  @default(true)
+  /// Observacoes livres do admin (contato responsavel, proposito, etc).
+  notas        String?
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
