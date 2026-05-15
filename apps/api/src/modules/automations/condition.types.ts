@@ -1,4 +1,8 @@
-export type AutomationCondition = TagsCondition | LeadCondition | DueDateCondition;
+export type AutomationCondition =
+  | TagsCondition
+  | LeadCondition
+  | DueDateCondition
+  | CompanyCondition;
 
 export interface TagsCondition {
   field: 'tags';
@@ -22,6 +26,21 @@ export interface DueDateCondition {
 }
 
 /**
+ * Empresa = Contact com type=COMPANY vinculado ao card via CardContact.
+ *
+ * - `is`: card tem exatamente esta empresa entre as suas (uma das suas)
+ * - `isAny`: card tem alguma das empresas listadas
+ * - `isNone`: card tem NENHUMA das empresas listadas (inclui caso "sem empresa")
+ * - `isNotSet`: card nao tem nenhuma empresa vinculada
+ */
+export interface CompanyCondition {
+  field: 'company';
+  operator: 'is' | 'isAny' | 'isNone' | 'isNotSet';
+  /** contactIds (sempre type=COMPANY); ausente em isNotSet */
+  value?: string[];
+}
+
+/**
  * Card carregado com os campos necessarios pra avaliacao das condicoes.
  * A engine inclui labels (relacao many-to-many via CardLabel) e os campos
  * leadId/dueDate diretos do model Card.
@@ -30,6 +49,8 @@ export interface CardForConditions {
   leadId: string | null;
   dueDate: Date | null;
   labels: Array<{ labelId: string }>;
+  /** Empresas vinculadas ao card. Pode vir vazio. */
+  contacts?: Array<{ contactId: string }>;
 }
 
 /**
@@ -55,6 +76,26 @@ function evaluateOne(card: CardForConditions, cond: AutomationCondition): boolea
       return evalLead(card, cond);
     case 'dueDate':
       return evalDueDate(card, cond);
+    case 'company':
+      return evalCompany(card, cond);
+  }
+}
+
+function evalCompany(card: CardForConditions, cond: CompanyCondition): boolean {
+  const cardCompanies = new Set((card.contacts ?? []).map((c) => c.contactId));
+  switch (cond.operator) {
+    case 'isNotSet':
+      return cardCompanies.size === 0;
+    case 'is': {
+      // Operador "e a empresa X" — card tem essa empresa (entre eventualmente outras)
+      const id = cond.value?.[0];
+      return Boolean(id && cond.value?.length === 1 && cardCompanies.has(id));
+    }
+    case 'isAny':
+      return Boolean(cond.value && cond.value.some((id) => cardCompanies.has(id)));
+    case 'isNone':
+      // "Nao e nenhuma destas" — true tambem quando card nao tem empresa
+      return Boolean(cond.value && !cond.value.some((id) => cardCompanies.has(id)));
   }
 }
 

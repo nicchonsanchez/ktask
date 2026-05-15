@@ -6,9 +6,14 @@ import { CheckCircle2, Loader2, MessageCircle, Phone, Trash2, User, X } from 'lu
 
 import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import { boardsQueries } from '@/lib/queries/boards';
+import { cardsQueries } from '@/lib/queries/cards';
 import { labelsQueries } from '@/lib/queries/labels';
 import { membersQueries } from '@/lib/queries/members';
-import { requestApproval, type ReviewerInputDTO } from '@/lib/queries/approvals';
+import {
+  requestApproval,
+  type ApprovalTargetDTO,
+  type ReviewerInputDTO,
+} from '@/lib/queries/approvals';
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
 import { TemplateVarsBar } from './template-vars-bar';
@@ -41,8 +46,10 @@ export function RequestApprovalDialog({
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [reviewers, setReviewers] = useState<ReviewerDraft[]>([]);
   const [message, setMessage] = useState('');
-  const [defaultOnApproveListId, setDefaultOnApproveListId] = useState<string>('');
-  const [defaultOnRejectListId, setDefaultOnRejectListId] = useState<string>('');
+  // Multi-fluxo: 1 entry por board onde o card tem presence ativa.
+  // Key = boardId, value = { approve: listId | '', reject: listId | '' }.
+  // '' significa "(nao mover)" pra aquele fluxo.
+  const [targets, setTargets] = useState<Record<string, { approve: string; reject: string }>>({});
   // Tags a adicionar/remover (CUIDs de labels do board) ao aprovar/reprovar.
   const [onApproveAddTagIds, setOnApproveAddTagIds] = useState<string[]>([]);
   const [onApproveRemoveTagIds, setOnApproveRemoveTagIds] = useState<string[]>([]);
@@ -52,14 +59,14 @@ export function RequestApprovalDialog({
   const [error, setError] = useState<string | null>(null);
 
   const boardQ = useQuery({ ...boardsQueries.detail(boardId) });
+  const flowsQ = useQuery({ ...cardsQueries.flows(cardId), enabled: open });
   const labelsQ = useQuery({ ...labelsQueries.byBoard(boardId), enabled: open });
 
   useEffect(() => {
     if (open) {
       setReviewers([]);
       setMessage('');
-      setDefaultOnApproveListId('');
-      setDefaultOnRejectListId('');
+      setTargets({});
       setOnApproveAddTagIds([]);
       setOnApproveRemoveTagIds([]);
       setOnRejectAddTagIds([]);
@@ -68,6 +75,19 @@ export function RequestApprovalDialog({
       setError(null);
     }
   }, [open]);
+
+  // Sincroniza shape do state quando flows chegam — cria entries '' (nao mover)
+  // pros boards ainda nao representados.
+  useEffect(() => {
+    if (!flowsQ.data) return;
+    setTargets((prev) => {
+      const next = { ...prev };
+      for (const f of flowsQ.data) {
+        if (!next[f.boardId]) next[f.boardId] = { approve: '', reject: '' };
+      }
+      return next;
+    });
+  }, [flowsQ.data]);
 
   function addReviewer(r: ReviewerDraft) {
     setReviewers((prev) => {
@@ -100,11 +120,20 @@ export function RequestApprovalDialog({
               ...(onRejectRemoveTagIds.length > 0 ? { removeTagIds: onRejectRemoveTagIds } : {}),
             }
           : undefined;
+      // Constroi arrays de targets por decisao, filtrando entries com ''
+      // (nao mover). Cards multi-fluxo enviam N targets; mono-fluxo envia
+      // 0 ou 1 — backend ja sabe que sem targets = nao move nada.
+      const approveTargets: ApprovalTargetDTO[] = [];
+      const rejectTargets: ApprovalTargetDTO[] = [];
+      for (const [bId, t] of Object.entries(targets)) {
+        if (t.approve) approveTargets.push({ boardId: bId, listId: t.approve });
+        if (t.reject) rejectTargets.push({ boardId: bId, listId: t.reject });
+      }
       return requestApproval(cardId, {
         reviewers: reviewers.map((r) => r.data),
         message: message.trim() || undefined,
-        defaultOnApproveListId: defaultOnApproveListId || undefined,
-        defaultOnRejectListId: defaultOnRejectListId || undefined,
+        defaultOnApproveTargets: approveTargets.length > 0 ? approveTargets : undefined,
+        defaultOnRejectTargets: rejectTargets.length > 0 ? rejectTargets : undefined,
         onApproveActions,
         onRejectActions,
         notifyOnWhatsApp,
@@ -127,6 +156,41 @@ export function RequestApprovalDialog({
   // sido movido manualmente — a regra "mover pra X ao aprovar" precisa
   // continuar funcionando independente de onde o card estiver no momento.
   const lists = useMemo(() => boardQ.data?.lists ?? [], [boardQ.data]);
+
+  // Flows ativos onde o card tem presence. Backend ja filtra removedAt.
+  // Sempre ordena com board "primary" primeiro pra UI ficar previsivel.
+  const flows = useMemo(() => {
+    const all = flowsQ.data ?? [];
+    return [...all].sort((a, b) => {
+      if (a.isPrimary && !b.isPrimary) return -1;
+      if (!a.isPrimary && b.isPrimary) return 1;
+      return a.board.name.localeCompare(b.board.name);
+    });
+  }, [flowsQ.data]);
+
+  // Fallback: se flows ainda nao carregou, pelo menos mostra o board "atual"
+  // com as listas que ja temos do boardQ. Evita "tela vazia" durante load.
+  const flowBlocks = useMemo(() => {
+    if (flows.length > 0) {
+      return flows.map((f) => ({
+        boardId: f.boardId,
+        boardName: f.board.name,
+        boardColor: f.board.color,
+        lists:
+          f.board.lists.filter((l) => !l.isFinalList && !l.isBacklog).length > 0
+            ? f.board.lists
+            : f.board.lists, // mostra todas inclusive final/backlog — operador decide
+      }));
+    }
+    return [{ boardId, boardName: boardQ.data?.name ?? '', boardColor: null, lists }];
+  }, [flows, boardId, boardQ.data, lists]);
+
+  function setTargetFor(bId: string, kind: 'approve' | 'reject', value: string) {
+    setTargets((prev) => ({
+      ...prev,
+      [bId]: { approve: prev[bId]?.approve ?? '', reject: prev[bId]?.reject ?? '', [kind]: value },
+    }));
+  }
 
   const canSubmit = reviewers.length > 0 && !mut.isPending;
 
@@ -241,18 +305,35 @@ export function RequestApprovalDialog({
               Ações automáticas conforme a decisão
             </summary>
             <div className="flex flex-col gap-4 px-3 pb-3 pt-1">
-              {/* Bloco APROVAR */}
+              {/* Bloco APROVAR — 1 select por fluxo onde o card esta */}
               <div className="flex flex-col gap-2">
                 <p className="text-fg text-[11px] font-semibold uppercase tracking-wide">
                   Quando aprovar
                 </p>
-                <ListSelect
-                  label="Mover pra"
-                  value={defaultOnApproveListId}
-                  onChange={setDefaultOnApproveListId}
-                  lists={lists}
-                  emptyLabel="(não mover)"
-                />
+                {flowBlocks.map((fb) => (
+                  <div key={`approve-${fb.boardId}`} className="flex flex-col gap-1">
+                    {flowBlocks.length > 1 && (
+                      <span
+                        className="text-fg-muted inline-flex items-center gap-1.5 text-[11px] font-medium"
+                        style={fb.boardColor ? { color: fb.boardColor } : undefined}
+                      >
+                        <span
+                          aria-hidden
+                          className="inline-block size-2 rounded-full"
+                          style={{ backgroundColor: fb.boardColor ?? 'var(--fg-muted)' }}
+                        />
+                        {fb.boardName}
+                      </span>
+                    )}
+                    <ListSelect
+                      label="Mover pra"
+                      value={targets[fb.boardId]?.approve ?? ''}
+                      onChange={(v) => setTargetFor(fb.boardId, 'approve', v)}
+                      lists={fb.lists}
+                      emptyLabel="(não mover)"
+                    />
+                  </div>
+                ))}
                 <LabelMultiSelect
                   label="Adicionar etiquetas"
                   labels={labelsQ.data ?? []}
@@ -267,18 +348,35 @@ export function RequestApprovalDialog({
                 />
               </div>
 
-              {/* Bloco REPROVAR */}
+              {/* Bloco REPROVAR — mesmo loop */}
               <div className="border-border/40 flex flex-col gap-2 border-t pt-3">
                 <p className="text-fg text-[11px] font-semibold uppercase tracking-wide">
                   Quando reprovar
                 </p>
-                <ListSelect
-                  label="Mover pra"
-                  value={defaultOnRejectListId}
-                  onChange={setDefaultOnRejectListId}
-                  lists={lists}
-                  emptyLabel="(não mover)"
-                />
+                {flowBlocks.map((fb) => (
+                  <div key={`reject-${fb.boardId}`} className="flex flex-col gap-1">
+                    {flowBlocks.length > 1 && (
+                      <span
+                        className="text-fg-muted inline-flex items-center gap-1.5 text-[11px] font-medium"
+                        style={fb.boardColor ? { color: fb.boardColor } : undefined}
+                      >
+                        <span
+                          aria-hidden
+                          className="inline-block size-2 rounded-full"
+                          style={{ backgroundColor: fb.boardColor ?? 'var(--fg-muted)' }}
+                        />
+                        {fb.boardName}
+                      </span>
+                    )}
+                    <ListSelect
+                      label="Mover pra"
+                      value={targets[fb.boardId]?.reject ?? ''}
+                      onChange={(v) => setTargetFor(fb.boardId, 'reject', v)}
+                      lists={fb.lists}
+                      emptyLabel="(não mover)"
+                    />
+                  </div>
+                ))}
                 <LabelMultiSelect
                   label="Adicionar etiquetas"
                   labels={labelsQ.data ?? []}
@@ -294,8 +392,9 @@ export function RequestApprovalDialog({
               </div>
 
               <p className="text-fg-subtle text-[11px] leading-relaxed">
-                Além disso, automações com gatilho CARD_APPROVED / CARD_REJECTED na coluna também
-                rodam em cadeia.
+                {flowBlocks.length > 1
+                  ? 'Este card está em múltiplos fluxos — configure o destino em cada um. Fluxos não selecionados ficam onde estavam.'
+                  : 'Além disso, automações com gatilho CARD_APPROVED / CARD_REJECTED na coluna também rodam em cadeia.'}
               </p>
             </div>
           </details>

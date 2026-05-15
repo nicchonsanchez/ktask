@@ -647,8 +647,17 @@ model CardApproval {
   decidedById            String? // qual user decidiu (um dos reviewers internos OU null se decidido por token externo)
   decidedByExternalName  String? // nome do reviewer externo que decidiu (quando phone-only)
   note                   String? // nota da decisão; obrigatória pra REJECTED
-  defaultOnApproveListId String? // fallback: move card pra esta lista ao APROVAR
-  defaultOnRejectListId  String? // fallback: move card pra esta lista ao REPROVAR
+  defaultOnApproveListId String? /// @deprecated — use defaultOnApproveTargets. Mantido pra compat com pedidos criados antes do suporte multi-fluxo.
+  defaultOnRejectListId  String? /// @deprecated — use defaultOnRejectTargets. Mesmo motivo.
+  /// Lista de destinos por board pra cards multi-fluxo. Shape:
+  ///   `[{ boardId: string, listId: string }, ...]`
+  /// Cada entry significa "ao APROVAR, mover este card pra esta lista
+  /// neste board". Boards onde o card está presente mas não estão na
+  /// lista permanecem inalterados. Suporta o caso típico do KTask:
+  /// card em N fluxos, operador escolhe destino por fluxo (ou "não mover").
+  defaultOnApproveTargets Json?
+  /// Idem pra REPROVAR.
+  defaultOnRejectTargets  Json?
   /// Acoes alem do move ao APROVAR. Shape:
   /// { addTagIds: string[], removeTagIds: string[] }
   onApproveActions       Json?

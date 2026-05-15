@@ -292,6 +292,14 @@ export class AutomationsEngine {
           leadId: true,
           dueDate: true,
           labels: { select: { labelId: true } },
+          // Empresas vinculadas ao card: contatos do tipo COMPANY ligados via
+          // CardContact (auto-link da empresa-pai ja garante presenca quando
+          // uma pessoa daquela empresa e adicionada). Avaliado pela condicao
+          // CompanyCondition em condition.types.
+          contacts: {
+            where: { contact: { type: 'COMPANY' } },
+            select: { contactId: true },
+          },
         },
       });
       const passes = cardForEval ? evaluateConditions(cardForEval, conditions) : false;
@@ -1161,7 +1169,22 @@ export class AutomationsEngine {
     });
     if (!card) throw new Error('Card nao encontrado.');
 
-    if (card.listId === config.targetListId) {
+    // Multi-fluxo: o "board" do move e o board da AUTOMATION, nao o board
+    // primary do card. Se automation.boardId e null (automation global),
+    // fallback pro primary. Sem isso, move em card multi-presenca acabava
+    // sincronizando o board errado.
+    const scopeBoardId = automation.boardId ?? card.boardId;
+
+    // CardPresence atual no board target. Sem isso ja podemos skip.
+    const presence = await this.prisma.cardPresence.findUnique({
+      where: { cardId_boardId: { cardId, boardId: scopeBoardId } },
+      select: { listId: true, removedAt: true },
+    });
+    if (!presence || presence.removedAt) {
+      return { movedToListId: null, skipped: true, reason: 'sem-presenca' };
+    }
+
+    if (presence.listId === config.targetListId) {
       return { movedToListId: null, skipped: true, reason: 'ja-na-lista' };
     }
 
@@ -1169,47 +1192,62 @@ export class AutomationsEngine {
       where: { id: config.targetListId },
       select: { id: true, boardId: true, isArchived: true },
     });
-    if (!target || target.boardId !== card.boardId || target.isArchived) {
+    if (!target || target.boardId !== scopeBoardId || target.isArchived) {
       return { movedToListId: null, skipped: true, reason: 'lista-invalida' };
     }
 
     let newPos: number;
     if (pos === 'TOP') {
-      const first = await this.prisma.card.findFirst({
-        where: { listId: target.id, isArchived: false },
+      const first = await this.prisma.cardPresence.findFirst({
+        where: { listId: target.id, removedAt: null },
         orderBy: { position: 'asc' },
         select: { position: true },
       });
       newPos = computeInsertPosition(null, first?.position ?? null);
     } else {
-      const last = await this.prisma.card.findFirst({
-        where: { listId: target.id, isArchived: false },
+      const last = await this.prisma.cardPresence.findFirst({
+        where: { listId: target.id, removedAt: null },
         orderBy: { position: 'desc' },
         select: { position: true },
       });
       newPos = computeInsertPosition(last?.position ?? null, null);
     }
 
-    const fromListId = card.listId;
-    await this.prisma.card.update({
-      where: { id: cardId },
+    const fromListId = presence.listId;
+
+    // Update da presence (fonte de verdade do kanban multi-fluxo).
+    await this.prisma.cardPresence.update({
+      where: { cardId_boardId: { cardId, boardId: scopeBoardId } },
       data: {
         listId: target.id,
         position: newPos,
-        enteredListAt: new Date(),
       },
     });
+
+    // Sync com Card.listId legacy SE o move e no board primary do card.
+    // Pra moves em board nao-primary, Card.listId nao deve mudar.
+    if (scopeBoardId === card.boardId) {
+      await this.prisma.card.update({
+        where: { id: cardId },
+        data: {
+          listId: target.id,
+          position: newPos,
+          enteredListAt: new Date(),
+        },
+      });
+    }
 
     await this.prisma.activity.create({
       data: {
         organizationId: card.organizationId,
-        boardId: card.boardId,
+        boardId: scopeBoardId,
         cardId,
         actorId: automation.createdById,
         type: 'CARD_MOVED',
         payload: {
           fromListId,
           toListId: target.id,
+          boardId: scopeBoardId,
           via: 'automation',
           automationId: automation.id,
         } as unknown as Prisma.InputJsonValue,

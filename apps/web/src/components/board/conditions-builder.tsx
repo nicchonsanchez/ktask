@@ -1,18 +1,26 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Filter, Plus, Trash2 } from 'lucide-react';
 import type { AutomationCondition } from '@/lib/queries/automations';
 import type { Label } from '@/lib/queries/labels';
+import { contactsQueries } from '@/lib/queries/contacts';
 
 interface OrgMember {
   userId: string;
   user: { id: string; name: string };
 }
 
+interface CompanyOption {
+  id: string;
+  name: string;
+}
+
 const FIELDS: Array<{ value: AutomationCondition['field']; label: string }> = [
   { value: 'tags', label: 'Tags' },
   { value: 'lead', label: 'Líder do card' },
   { value: 'dueDate', label: 'Prazo' },
+  { value: 'company', label: 'Empresa' },
 ];
 
 const TAG_OPS: Array<{ value: string; label: string }> = [
@@ -37,6 +45,13 @@ const DUEDATE_OPS: Array<{ value: string; label: string; needsValue?: boolean }>
   { value: 'dueAfterDays', label: 'Vence depois de N dias', needsValue: true },
   { value: 'hasDueDate', label: 'Tem prazo definido' },
   { value: 'noDueDate', label: 'Não tem prazo' },
+];
+
+const COMPANY_OPS: Array<{ value: string; label: string }> = [
+  { value: 'is', label: 'É a empresa' },
+  { value: 'isAny', label: 'É alguma destas' },
+  { value: 'isNone', label: 'Não é nenhuma destas' },
+  { value: 'isNotSet', label: 'Não possui empresa' },
 ];
 
 /**
@@ -95,6 +110,11 @@ export function ConditionsBuilder({
         />
       ))}
 
+      {/* Pre-carrega companies de uma vez quando ha pelo menos uma condicao
+          company — evita N queries paralelas dentro do map. Resultado fica
+          em cache do React Query. */}
+      <CompaniesPreload conditions={conditions} />
+
       <button
         type="button"
         onClick={addCondition}
@@ -122,10 +142,22 @@ function ConditionRow({
   onChange: (next: AutomationCondition) => void;
   onRemove: () => void;
 }) {
+  // Lazy-fetch das empresas so quando o usuario seleciona field=company.
+  // Reutiliza o cache do contactsQueries.list pra nao recarregar.
+  const companiesQ = useQuery({
+    ...contactsQueries.list({ type: 'COMPANY' }),
+    enabled: condition.field === 'company',
+  });
+  const companyOptions: CompanyOption[] = (companiesQ.data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+  }));
+
   function changeField(field: AutomationCondition['field']) {
     if (field === 'tags') onChange({ field, operator: 'containsAny', value: [] });
     if (field === 'lead') onChange({ field, operator: 'isAny', value: [] });
     if (field === 'dueDate') onChange({ field, operator: 'overdue' });
+    if (field === 'company') onChange({ field, operator: 'isAny', value: [] });
   }
 
   return (
@@ -205,13 +237,38 @@ function ConditionRow({
             />
           </div>
         )}
+
+      {condition.field === 'company' && condition.operator !== 'isNotSet' && (
+        <MultiCheckList
+          items={companyOptions.map((c) => ({ value: c.id, label: c.name }))}
+          selected={condition.value ?? []}
+          onChange={(value) => onChange({ ...condition, value })}
+          placeholder={condition.operator === 'is' ? 'Selecione a empresa…' : 'Selecione empresas…'}
+          emptyHint={
+            companiesQ.isLoading
+              ? 'Carregando empresas…'
+              : 'Nenhuma empresa cadastrada. Cadastre uma na agenda primeiro.'
+          }
+        />
+      )}
     </div>
   );
+}
+
+/** Pre-carrega companies pro cache do React Query quando ha condicao company. */
+function CompaniesPreload({ conditions }: { conditions: AutomationCondition[] }) {
+  const hasCompanyCond = conditions.some((c) => c.field === 'company');
+  useQuery({
+    ...contactsQueries.list({ type: 'COMPANY' }),
+    enabled: hasCompanyCond,
+  });
+  return null;
 }
 
 function opsFor(field: AutomationCondition['field']) {
   if (field === 'tags') return TAG_OPS;
   if (field === 'lead') return LEAD_OPS;
+  if (field === 'company') return COMPANY_OPS;
   return DUEDATE_OPS;
 }
 

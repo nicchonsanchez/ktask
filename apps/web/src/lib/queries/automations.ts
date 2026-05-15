@@ -57,6 +57,12 @@ export type AutomationCondition =
         | 'hasDueDate'
         | 'noDueDate';
       value?: number;
+    }
+  | {
+      field: 'company';
+      operator: 'is' | 'isAny' | 'isNone' | 'isNotSet';
+      /** contactIds (sempre type=COMPANY); ausente em isNotSet */
+      value?: string[];
     };
 
 export interface Automation {

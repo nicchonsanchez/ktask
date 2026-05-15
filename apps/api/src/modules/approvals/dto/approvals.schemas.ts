@@ -36,13 +36,29 @@ const DefaultActionsSchema = z
   .strict();
 export type DefaultApprovalActions = z.infer<typeof DefaultActionsSchema>;
 
+/** Destino "mover pra X no board Y" — usado em cards multi-fluxo. */
+export const ApprovalTargetSchema = z.object({
+  boardId: z.string().cuid(),
+  listId: z.string().cuid(),
+});
+export type ApprovalTarget = z.infer<typeof ApprovalTargetSchema>;
+
 export const RequestApprovalSchema = z.object({
   reviewers: z.array(ReviewerInputSchema).min(1).max(10),
   /** Mensagem opcional pro reviewer (vai junto no WhatsApp/inbox). */
   message: z.string().max(2000).optional(),
-  /** Lista pra mover o card automaticamente ao aprovar (fallback). */
+  /**
+   * Destinos por board pra mover o card ao APROVAR. Cada entry
+   * `{boardId, listId}` significa "ao aprovar, mover o card pra esta
+   * lista neste board". Boards não listados não recebem movimentação.
+   * Substitui `defaultOnApproveListId` (mantido como fallback abaixo).
+   */
+  defaultOnApproveTargets: z.array(ApprovalTargetSchema).max(20).optional(),
+  /** Idem pra REPROVAR. */
+  defaultOnRejectTargets: z.array(ApprovalTargetSchema).max(20).optional(),
+  /** @deprecated — use defaultOnApproveTargets. Aceito pra compat. */
   defaultOnApproveListId: z.string().min(1).optional(),
-  /** Lista pra mover o card automaticamente ao reprovar (fallback). */
+  /** @deprecated — use defaultOnRejectTargets. */
   defaultOnRejectListId: z.string().min(1).optional(),
   /** Tags a adicionar/remover ao aprovar. */
   onApproveActions: DefaultActionsSchema.optional(),

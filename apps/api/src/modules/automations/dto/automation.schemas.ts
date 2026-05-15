@@ -25,10 +25,17 @@ const DueDateConditionSchema = z.object({
   value: z.number().int().min(0).max(365).optional(),
 });
 
+const CompanyConditionSchema = z.object({
+  field: z.literal('company'),
+  operator: z.enum(['is', 'isAny', 'isNone', 'isNotSet']),
+  value: z.array(z.string().cuid()).max(50).optional(),
+});
+
 export const AutomationConditionSchema = z.discriminatedUnion('field', [
   TagsConditionSchema,
   LeadConditionSchema,
   DueDateConditionSchema,
+  CompanyConditionSchema,
 ]);
 
 export const AutomationConditionsSchema = z.array(AutomationConditionSchema).max(10);

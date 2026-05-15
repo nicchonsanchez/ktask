@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { computeInsertPosition } from '@/common/util/position';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -45,8 +46,16 @@ const UNDO_WINDOW_MS = 5 * 60 * 1000;
 const REVIEWER_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 interface SideEffectsShape {
+  /** @deprecated — pedidos pre-multi-fluxo. Use `moves`. */
   movedFromListId?: string;
+  /** @deprecated — pedidos pre-multi-fluxo. Use `moves`. */
   movedToListId?: string;
+  /**
+   * Movimentos por board (multi-fluxo). Cada entry registra de qual lista
+   * pra qual o card foi movido naquele board, pra que undo() reverta cada
+   * presence individualmente.
+   */
+  moves?: Array<{ boardId: string; fromListId: string; toListId: string }>;
   automationRunIds?: string[];
   addedLabelIds?: string[];
   removedLabelIds?: string[];
@@ -138,13 +147,19 @@ export class ApprovalsService {
       }
     }
 
-    // Valida listas default — precisam ser do mesmo board do card
+    // Valida listas legacy — precisam ser do mesmo board do card
     if (body.defaultOnApproveListId) {
       await this.assertListInBoard(body.defaultOnApproveListId, card.boardId);
     }
     if (body.defaultOnRejectListId) {
       await this.assertListInBoard(body.defaultOnRejectListId, card.boardId);
     }
+
+    // Valida targets multi-fluxo: cada destino precisa ser uma lista valida
+    // do board target, e o card precisa ter presence ativa nesse board
+    // (caso contrario nao faz sentido configurar "mover" la).
+    await this.assertApprovalTargets(cardId, body.defaultOnApproveTargets);
+    await this.assertApprovalTargets(cardId, body.defaultOnRejectTargets);
 
     const expiresAt = new Date(Date.now() + REVIEWER_TOKEN_TTL_MS);
 
@@ -159,6 +174,12 @@ export class ApprovalsService {
           message: body.message ?? null,
           defaultOnApproveListId: body.defaultOnApproveListId ?? null,
           defaultOnRejectListId: body.defaultOnRejectListId ?? null,
+          defaultOnApproveTargets: body.defaultOnApproveTargets
+            ? (body.defaultOnApproveTargets as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          defaultOnRejectTargets: body.defaultOnRejectTargets
+            ? (body.defaultOnRejectTargets as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
           onApproveActions: body.onApproveActions
             ? (body.onApproveActions as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
@@ -238,6 +259,38 @@ export class ApprovalsService {
       throw new BadRequestException(
         `Lista ${listId} inválida (não existe, é de outro board ou está arquivada).`,
       );
+    }
+  }
+
+  /**
+   * Valida targets multi-fluxo: cada {boardId, listId} precisa apontar pra
+   * uma lista valida do board target, e o card precisa ter CardPresence
+   * ativa nesse board (sem isso, configurar "mover" la nao faz sentido).
+   */
+  private async assertApprovalTargets(
+    cardId: string,
+    targets: Array<{ boardId: string; listId: string }> | undefined,
+  ) {
+    if (!targets || targets.length === 0) return;
+    for (const t of targets) {
+      const list = await this.prisma.list.findUnique({
+        where: { id: t.listId },
+        select: { boardId: true, isArchived: true },
+      });
+      if (!list || list.boardId !== t.boardId || list.isArchived) {
+        throw new BadRequestException(
+          `Lista ${t.listId} inválida pra board ${t.boardId} (não existe, é de outro board ou está arquivada).`,
+        );
+      }
+      const presence = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId, boardId: t.boardId } },
+        select: { removedAt: true },
+      });
+      if (!presence || presence.removedAt) {
+        throw new BadRequestException(
+          `Card não está presente no board ${t.boardId} — não pode configurar destino lá.`,
+        );
+      }
     }
   }
 
@@ -563,33 +616,80 @@ export class ApprovalsService {
 
       const sideEffects: SideEffectsShape = {};
 
-      // Move o card pra lista default (se configurada).
-      const targetListId =
+      // Resolve targets multi-fluxo. Se o pedido tem `defaultOnApproveTargets`
+      // (criado na era multi-fluxo), usa direto. Senão, faz fallback pro
+      // legacy `defaultOnApproveListId` convertendo em 1 target no board
+      // principal do card. Mantém compat 100% com pedidos antigos.
+      const rawTargets =
+        newStatus === 'APPROVED' ? a.defaultOnApproveTargets : a.defaultOnRejectTargets;
+      const legacyListId =
         newStatus === 'APPROVED' ? a.defaultOnApproveListId : a.defaultOnRejectListId;
-      if (targetListId && targetListId !== card.listId) {
-        const targetList = await tx.list.findUnique({
-          where: { id: targetListId },
-          select: { id: true, boardId: true, isArchived: true },
+      let targets: Array<{ boardId: string; listId: string }> = [];
+      if (Array.isArray(rawTargets)) {
+        targets = rawTargets as Array<{ boardId: string; listId: string }>;
+      } else if (legacyListId) {
+        targets = [{ boardId: card.boardId, listId: legacyListId }];
+      }
+
+      // Itera nos targets aplicando o move por board via CardPresence.
+      const moves: NonNullable<SideEffectsShape['moves']> = [];
+      for (const target of targets) {
+        const presence = await tx.cardPresence.findUnique({
+          where: { cardId_boardId: { cardId: card.id, boardId: target.boardId } },
+          select: { listId: true, removedAt: true },
         });
-        if (targetList && targetList.boardId === card.boardId && !targetList.isArchived) {
-          // posição: final da lista alvo
-          const last = await tx.card.findFirst({
-            where: { listId: targetListId, isArchived: false },
-            orderBy: { position: 'desc' },
-            select: { position: true },
-          });
+        if (!presence || presence.removedAt) continue; // card saiu desse fluxo
+        if (presence.listId === target.listId) continue; // já está lá
+
+        const targetList = await tx.list.findUnique({
+          where: { id: target.listId },
+          select: { boardId: true, isArchived: true },
+        });
+        if (!targetList || targetList.boardId !== target.boardId || targetList.isArchived) continue;
+
+        // Posição final da lista alvo (dentro do board). Exclui a propria
+        // presence do card quando ja estiver na lista — evita colisao caso
+        // tabela tenha so 1 entry (defesa em profundidade, ja filtramos
+        // "presence.listId === target.listId" acima).
+        const last = await tx.cardPresence.findFirst({
+          where: {
+            listId: target.listId,
+            removedAt: null,
+            NOT: { cardId: card.id },
+          },
+          orderBy: { position: 'desc' },
+          select: { position: true },
+        });
+        const newPosition = computeInsertPosition(last?.position ?? null, null);
+        await tx.cardPresence.update({
+          where: { cardId_boardId: { cardId: card.id, boardId: target.boardId } },
+          data: {
+            listId: target.listId,
+            position: newPosition,
+          },
+        });
+
+        // Sync com Card.listId legacy quando o move é no board "primary"
+        // do card (mantém invariantes de partes do código que ainda leem
+        // Card.listId direto).
+        if (target.boardId === card.boardId) {
           await tx.card.update({
             where: { id: card.id },
             data: {
-              listId: targetListId,
-              position: (last?.position ?? 0) + 1,
+              listId: target.listId,
+              position: newPosition,
               enteredListAt: new Date(),
             },
           });
-          sideEffects.movedFromListId = card.listId;
-          sideEffects.movedToListId = targetListId;
         }
+
+        moves.push({
+          boardId: target.boardId,
+          fromListId: presence.listId,
+          toListId: target.listId,
+        });
       }
+      if (moves.length > 0) sideEffects.moves = moves;
 
       // Aplica acoes default: add/remove tags configurados no pedido.
       // Valida que os labels pertencem ao mesmo board do card e estao na Org.
@@ -659,15 +759,16 @@ export class ApprovalsService {
     });
 
     // Emite event pra engine + realtime fora da tx (evita lock prolongado).
+    const sideEff = updated.approval.sideEffects as SideEffectsShape | null;
+    // Determina listId "primary" pos-decisao: se houve move no board primary
+    // do card, usa esse target; senao mantem o listId atual.
+    const primaryMove = sideEff?.moves?.find((m) => m.boardId === updated.card.boardId);
     const payload: ApprovalEventPayload = {
       approvalId,
       cardId: updated.approval.cardId,
       organizationId: updated.approval.organizationId,
       boardId: updated.card.boardId,
-      // listId pode ter mudado se houve move
-      listId:
-        (updated.approval.sideEffects as SideEffectsShape | null)?.movedToListId ??
-        updated.card.listId,
+      listId: primaryMove?.toListId ?? sideEff?.movedToListId ?? updated.card.listId,
       decidedById: updated.approval.decidedById,
     };
     this.events.emit(APPROVAL_DECIDED_EVENT, {
@@ -682,24 +783,31 @@ export class ApprovalsService {
       cardId: updated.approval.cardId,
     });
 
-    // Quando a aprovacao moveu o card pra outra lista, emite CARD_MOVED
-    // pra UI Kanban animar a transicao em tempo real. CARD_UPDATED sozinho
-    // nao desloca o card visualmente.
-    const sideEff = updated.approval.sideEffects as SideEffectsShape | null;
-    if (sideEff?.movedToListId && sideEff?.movedFromListId) {
-      // Pega posicao final no destino (foi setada na update da tx acima).
-      const movedCard = await this.prisma.card.findUnique({
-        where: { id: updated.approval.cardId },
+    // Emite CARD_MOVED por board afetado pra UI Kanban animar a transicao
+    // em tempo real. CARD_UPDATED sozinho nao desloca o card visualmente.
+    // Suporta tanto formato novo (sideEff.moves) quanto legacy.
+    const movesForEmit: Array<{ boardId: string; fromListId: string; toListId: string }> = [];
+    if (sideEff?.moves) movesForEmit.push(...sideEff.moves);
+    else if (sideEff?.movedFromListId && sideEff?.movedToListId) {
+      movesForEmit.push({
+        boardId: updated.card.boardId,
+        fromListId: sideEff.movedFromListId,
+        toListId: sideEff.movedToListId,
+      });
+    }
+    for (const move of movesForEmit) {
+      const presence = await this.prisma.cardPresence.findUnique({
+        where: { cardId_boardId: { cardId: updated.approval.cardId, boardId: move.boardId } },
         select: { position: true },
       });
       this.events.emit(EVENT_NAMES.CARD_MOVED, {
-        boardId: updated.card.boardId,
+        boardId: move.boardId,
         organizationId: updated.approval.organizationId,
         actorId: decider.decidedById ?? undefined,
         cardId: updated.approval.cardId,
-        fromListId: sideEff.movedFromListId,
-        toListId: sideEff.movedToListId,
-        position: movedCard?.position ?? 0,
+        fromListId: move.fromListId,
+        toListId: move.toListId,
+        position: presence?.position ?? 0,
       });
     }
 
@@ -782,7 +890,7 @@ export class ApprovalsService {
     // Verifica se houve ação humana sobre os side-effects pós-decisão.
     // Se sim, bloqueia undo (intervenção humana é "consentimento" ao estado).
     const sideEffects = (approval.sideEffects ?? {}) as SideEffectsShape;
-    const movedToListId = sideEffects.movedToListId;
+    const movedToListId = sideEffects.movedToListId ?? sideEffects.moves?.[0]?.toListId; // legacy ou multi
     if (movedToListId) {
       // Olha activities humanas no card APÓS decidedAt que envolvam mover/editar.
       // automationRunId NULL = ação humana; comments na whitelist (não bloqueiam).
@@ -808,32 +916,64 @@ export class ApprovalsService {
 
     // Desfaz: reverte movimentação se houve, marca como REVERTED.
     const reverted = await this.prisma.$transaction(async (tx) => {
-      if (sideEffects.movedFromListId && movedToListId) {
-        const card = await tx.card.findUniqueOrThrow({
+      // Constroi lista unificada de moves: novo formato `sideEffects.moves`
+      // OU legacy `{movedFromListId, movedToListId}` no board principal.
+      const movesToRevert: Array<{ boardId: string; fromListId: string; toListId: string }> = [];
+      if (Array.isArray(sideEffects.moves)) {
+        movesToRevert.push(...sideEffects.moves);
+      } else if (sideEffects.movedFromListId && sideEffects.movedToListId) {
+        const cardForLegacy = await tx.card.findUniqueOrThrow({
           where: { id: approval.cardId },
-          select: { boardId: true, listId: true },
+          select: { boardId: true },
         });
+        movesToRevert.push({
+          boardId: cardForLegacy.boardId,
+          fromListId: sideEffects.movedFromListId,
+          toListId: sideEffects.movedToListId,
+        });
+      }
+
+      for (const m of movesToRevert) {
+        const presence = await tx.cardPresence.findUnique({
+          where: { cardId_boardId: { cardId: approval.cardId, boardId: m.boardId } },
+          select: { listId: true, removedAt: true },
+        });
+        if (!presence || presence.removedAt) continue;
         // Só reverte se ainda está na lista alvo (defesa em profundidade)
-        if (card.listId === movedToListId) {
-          const fromList = await tx.list.findUnique({
-            where: { id: sideEffects.movedFromListId },
-            select: { id: true, isArchived: true },
+        if (presence.listId !== m.toListId) continue;
+        const fromList = await tx.list.findUnique({
+          where: { id: m.fromListId },
+          select: { id: true, isArchived: true, boardId: true },
+        });
+        if (!fromList || fromList.isArchived || fromList.boardId !== m.boardId) continue;
+        const last = await tx.cardPresence.findFirst({
+          where: {
+            listId: m.fromListId,
+            removedAt: null,
+            NOT: { cardId: approval.cardId },
+          },
+          orderBy: { position: 'desc' },
+          select: { position: true },
+        });
+        const revertPos = computeInsertPosition(last?.position ?? null, null);
+        await tx.cardPresence.update({
+          where: { cardId_boardId: { cardId: approval.cardId, boardId: m.boardId } },
+          data: { listId: m.fromListId, position: revertPos },
+        });
+        // Sync Card.listId legacy se for board primary
+        const cardLegacy = await tx.card.findUnique({
+          where: { id: approval.cardId },
+          select: { boardId: true },
+        });
+        if (cardLegacy?.boardId === m.boardId) {
+          await tx.card.update({
+            where: { id: approval.cardId },
+            data: {
+              listId: m.fromListId,
+              position: revertPos,
+              enteredListAt: new Date(),
+            },
           });
-          if (fromList && !fromList.isArchived) {
-            const last = await tx.card.findFirst({
-              where: { listId: fromList.id, isArchived: false },
-              orderBy: { position: 'desc' },
-              select: { position: true },
-            });
-            await tx.card.update({
-              where: { id: approval.cardId },
-              data: {
-                listId: fromList.id,
-                position: (last?.position ?? 0) + 1,
-                enteredListAt: new Date(),
-              },
-            });
-          }
         }
       }
 

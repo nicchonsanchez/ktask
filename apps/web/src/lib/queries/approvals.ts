@@ -69,10 +69,21 @@ export interface ApprovalActionsDTO {
   removeTagIds?: string[];
 }
 
+export interface ApprovalTargetDTO {
+  boardId: string;
+  listId: string;
+}
+
 export interface RequestApprovalInput {
   reviewers: ReviewerInputDTO[];
   message?: string;
+  /** Multi-fluxo: destinos por board pra mover ao APROVAR. */
+  defaultOnApproveTargets?: ApprovalTargetDTO[];
+  /** Multi-fluxo: destinos por board pra mover ao REPROVAR. */
+  defaultOnRejectTargets?: ApprovalTargetDTO[];
+  /** @deprecated — use defaultOnApproveTargets. Aceito pra compat. */
   defaultOnApproveListId?: string;
+  /** @deprecated — use defaultOnRejectTargets. Aceito pra compat. */
   defaultOnRejectListId?: string;
   onApproveActions?: ApprovalActionsDTO;
   onRejectActions?: ApprovalActionsDTO;
