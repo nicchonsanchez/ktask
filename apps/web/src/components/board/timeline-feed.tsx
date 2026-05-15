@@ -3,6 +3,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CornerDownRight,
   Download,
   FileText,
   Image as ImageIcon,
@@ -10,6 +11,7 @@ import {
   Paperclip,
   Pencil,
   Send,
+  SmilePlus,
   Trash2,
   X,
 } from 'lucide-react';
@@ -20,11 +22,15 @@ import {
   createComment,
   deleteComment,
   removeAttachment,
+  toggleCommentReaction,
   updateComment,
   uploadAttachmentForComment,
+  ALLOWED_REACTION_EMOJIS,
   type ActivityNode,
   type Attachment,
   type CommentNode,
+  type CommentReactionNode,
+  type ReactionEmoji,
 } from '@/lib/queries/cards';
 import { ApiError, NetworkError } from '@/lib/api-client';
 import { formatRelativeTime, proseToPlainText } from '@/lib/prose';
@@ -180,9 +186,28 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
     if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
   }
 
+  // Indexa replies por parentCommentId. Cada root comment recebe seus filhos
+  // via `repliesByParent[c.id]`. Replies em si NAO entram no feed (sao
+  // renderizadas nested dentro do CommentItem da raiz).
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, CommentNode[]>();
+    for (const c of comments) {
+      if (c.parentCommentId && !c.deletedAt) {
+        const arr = map.get(c.parentCommentId) ?? [];
+        arr.push(c);
+        map.set(c.parentCommentId, arr);
+      }
+    }
+    // Ordena replies por createdAt asc (cronologico)
+    for (const arr of map.values()) {
+      arr.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    }
+    return map;
+  }, [comments]);
+
   const items = useMemo<FeedItem[]>(() => {
     const commentItems = comments
-      .filter((c) => !c.deletedAt)
+      .filter((c) => !c.deletedAt && !c.parentCommentId) // so raizes no feed
       .map<FeedItem>((c) => ({ kind: 'comment', at: c.createdAt, comment: c }));
 
     const activityItems = activities
@@ -343,7 +368,8 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
               <CommentItem
                 key={`c-${item.comment.id}`}
                 comment={item.comment}
-                isAuthor={user?.id === item.comment.authorId}
+                replies={repliesByParent.get(item.comment.id) ?? []}
+                currentUserId={user?.id ?? null}
                 cardId={cardId}
                 boardId={boardId}
               />
@@ -359,25 +385,56 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
 
 function CommentItem({
   comment,
-  isAuthor,
+  replies = [],
+  currentUserId,
   cardId,
   boardId,
+  /** Quando true, comment eh uma reply renderizada nested — esconde botoes redundantes (Responder). */
+  nested = false,
 }: {
   comment: CommentNode;
-  isAuthor: boolean;
+  replies?: CommentNode[];
+  currentUserId: string | null;
   cardId: string;
   boardId: string;
+  nested?: boolean;
 }) {
+  const isAuthor = currentUserId === comment.authorId;
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const orgMembers = useQuery(orgMembersQuery);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: cardsQueries.detail(cardId).queryKey });
     queryClient.invalidateQueries({ queryKey: ['boards', boardId] });
   }
+
+  const replyMut = useMutation({
+    mutationFn: () =>
+      createComment({
+        cardId,
+        plainText: replyDraft.trim(),
+        parentCommentId: comment.id,
+      }),
+    onSuccess: () => {
+      setReplyDraft('');
+      setReplyOpen(false);
+      invalidate();
+    },
+  });
+
+  const reactionMut = useMutation({
+    mutationFn: (emoji: ReactionEmoji) => toggleCommentReaction(comment.id, emoji),
+    onSuccess: () => {
+      setEmojiPickerOpen(false);
+      invalidate();
+    },
+  });
 
   const updateMut = useMutation({
     mutationFn: () => updateComment(comment.id, { plainText: draft.trim() }),
@@ -520,40 +577,208 @@ function CommentItem({
               </ul>
             )}
 
-            {isAuthor && (
-              <div className="mt-1 flex items-center gap-3 text-[11px]">
+            {/* Reactions: chips agrupados por emoji + botao "+" pra picker */}
+            <ReactionsRow
+              reactions={comment.reactions ?? []}
+              currentUserId={currentUserId}
+              onToggle={(emoji) => reactionMut.mutate(emoji)}
+              pending={reactionMut.isPending}
+              pickerOpen={emojiPickerOpen}
+              setPickerOpen={setEmojiPickerOpen}
+            />
+
+            <div className="mt-1 flex items-center gap-3 text-[11px]">
+              {!nested && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setDraft(showPlaceholder ? '' : plain);
-                    setEditing(true);
-                  }}
+                  onClick={() => setReplyOpen((v) => !v)}
                   className="text-fg-muted hover:text-fg inline-flex items-center gap-1"
                 >
-                  <Pencil size={11} /> Editar
+                  <CornerDownRight size={11} /> Responder
                 </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await confirm({
-                      title: 'Excluir anotação?',
-                      description: 'A anotação e seus anexos serão removidos.',
-                      confirmLabel: 'Excluir',
-                      danger: true,
-                    });
-                    if (ok) deleteMut.mutate();
-                  }}
-                  disabled={deleteMut.isPending}
-                  className="text-fg-muted hover:text-danger inline-flex items-center gap-1"
-                >
-                  <Trash2 size={11} /> Excluir
-                </button>
-              </div>
-            )}
+              )}
+              {isAuthor && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraft(showPlaceholder ? '' : plain);
+                      setEditing(true);
+                    }}
+                    className="text-fg-muted hover:text-fg inline-flex items-center gap-1"
+                  >
+                    <Pencil size={11} /> Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Excluir anotação?',
+                        description: 'A anotação e seus anexos serão removidos.',
+                        confirmLabel: 'Excluir',
+                        danger: true,
+                      });
+                      if (ok) deleteMut.mutate();
+                    }}
+                    disabled={deleteMut.isPending}
+                    className="text-fg-muted hover:text-danger inline-flex items-center gap-1"
+                  >
+                    <Trash2 size={11} /> Excluir
+                  </button>
+                </>
+              )}
+            </div>
           </>
+        )}
+
+        {/* Composer de reply (so na raiz) */}
+        {!nested && replyOpen && (
+          <div className="border-border/60 mt-3 flex flex-col gap-2 border-l-2 pl-3">
+            <MentionTextarea
+              autoFocus
+              rows={2}
+              value={replyDraft}
+              onChange={setReplyDraft}
+              onSubmit={() => {
+                if (replyDraft.trim().length > 0) replyMut.mutate();
+              }}
+              placeholder={`Responder a ${comment.author.name}…`}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={replyMut.isPending || replyDraft.trim().length === 0}
+                onClick={() => replyMut.mutate()}
+              >
+                {replyMut.isPending && <Loader2 size={12} className="animate-spin" />}
+                Responder
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setReplyOpen(false);
+                  setReplyDraft('');
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Replies aninhadas — renderizadas com mesma estrutura mas indentadas */}
+        {!nested && replies.length > 0 && (
+          <ul className="border-border/40 mt-3 flex flex-col gap-3 border-l-2 pl-3">
+            {replies.map((r) => (
+              <CommentItem
+                key={r.id}
+                comment={r}
+                currentUserId={currentUserId}
+                cardId={cardId}
+                boardId={boardId}
+                nested
+              />
+            ))}
+          </ul>
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * Agrupa reactions por emoji e renderiza um chip por grupo com contador.
+ * Chip mostra-se ativo (highlight) quando o user atual reagiu com aquele
+ * emoji. Click toggle.
+ */
+function ReactionsRow({
+  reactions,
+  currentUserId,
+  onToggle,
+  pending,
+  pickerOpen,
+  setPickerOpen,
+}: {
+  reactions: CommentReactionNode[];
+  currentUserId: string | null;
+  onToggle: (emoji: ReactionEmoji) => void;
+  pending: boolean;
+  pickerOpen: boolean;
+  setPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const groups = useMemo(() => {
+    const map = new Map<string, { emoji: string; count: number; mine: boolean; users: string[] }>();
+    for (const r of reactions) {
+      const g = map.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false, users: [] };
+      g.count += 1;
+      if (r.userId === currentUserId) g.mine = true;
+      g.users.push(r.user.name);
+      map.set(r.emoji, g);
+    }
+    return [...map.values()];
+  }, [reactions, currentUserId]);
+
+  if (groups.length === 0 && !pickerOpen) {
+    return (
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="text-fg-subtle hover:text-fg-muted inline-flex items-center gap-1 rounded p-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+          aria-label="Reagir"
+          title="Reagir"
+        >
+          <SmilePlus size={12} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {groups.map((g) => (
+        <button
+          key={g.emoji}
+          type="button"
+          onClick={() => onToggle(g.emoji as ReactionEmoji)}
+          disabled={pending}
+          title={g.users.join(', ')}
+          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors ${
+            g.mine
+              ? 'border-primary bg-primary-subtle/50 text-fg'
+              : 'border-border/70 bg-bg-muted/40 text-fg-muted hover:border-border-strong'
+          }`}
+        >
+          <span>{g.emoji}</span>
+          <span className="tabular-nums">{g.count}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => setPickerOpen((v: boolean) => !v)}
+        className="text-fg-subtle hover:text-fg-muted bg-bg-muted/40 hover:bg-bg-muted inline-flex items-center rounded-full border border-transparent p-1"
+        aria-label="Adicionar reação"
+        title="Adicionar reação"
+      >
+        <SmilePlus size={11} />
+      </button>
+      {pickerOpen && (
+        <div className="border-border bg-bg flex items-center gap-1 rounded-full border px-1.5 py-1 shadow-sm">
+          {ALLOWED_REACTION_EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => onToggle(e)}
+              disabled={pending}
+              className="hover:bg-bg-muted rounded-full px-1.5 py-0.5 text-base leading-none transition-transform hover:scale-110"
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

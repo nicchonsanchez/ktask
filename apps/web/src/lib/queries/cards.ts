@@ -43,6 +43,15 @@ export interface CardDetail {
   _count: { children: number };
 }
 
+export interface CommentReactionNode {
+  id: string;
+  commentId: string;
+  userId: string;
+  emoji: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl: string | null };
+}
+
 export interface CommentNode {
   id: string;
   cardId: string;
@@ -52,9 +61,16 @@ export interface CommentNode {
   editedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+  /** Setado quando este comment eh reply de outro. Flatten 1 nivel. */
+  parentCommentId: string | null;
   author: { id: string; name: string; email: string; avatarUrl: string | null };
   attachments?: Attachment[];
+  reactions?: CommentReactionNode[];
 }
+
+/** Set fechado de emojis aceitos. Compartilhado com o backend. */
+export const ALLOWED_REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀'] as const;
+export type ReactionEmoji = (typeof ALLOWED_REACTION_EMOJIS)[number];
 
 export interface ActivityNode {
   id: string;
@@ -513,7 +529,12 @@ export async function uploadAttachmentForComment(
 
 /* ----------------- Comments ----------------- */
 
-export function createComment(input: { cardId: string; plainText: string }) {
+export function createComment(input: {
+  cardId: string;
+  plainText: string;
+  /** Marca este comment como reply de outro. Backend faz flatten p/ 1 nivel. */
+  parentCommentId?: string;
+}) {
   return api.post<CommentNode>('/api/v1/comments', input);
 }
 
@@ -523,4 +544,15 @@ export function updateComment(commentId: string, input: { plainText: string }) {
 
 export function deleteComment(commentId: string) {
   return api.delete(`/api/v1/comments/${commentId}`);
+}
+
+/**
+ * Toggle de reacao emoji num comment. Backend cria se nao existe, deleta
+ * se ja existe — UI faz optimistic update e bate com o `active` retornado.
+ */
+export function toggleCommentReaction(commentId: string, emoji: ReactionEmoji) {
+  return api.post<{ commentId: string; emoji: string; userId: string; active: boolean }>(
+    `/api/v1/comments/${commentId}/reactions`,
+    { emoji },
+  );
 }

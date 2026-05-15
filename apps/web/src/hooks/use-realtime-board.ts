@@ -89,6 +89,9 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
       'comment.added': (payload: { cardId: string }) => {
         queryClient.invalidateQueries({ queryKey: ['cards', payload.cardId] });
       },
+      'comment.reaction.updated': (payload: { cardId: string }) => {
+        queryClient.invalidateQueries({ queryKey: ['cards', payload.cardId] });
+      },
       'presence.update': (payload: { boardId: string; userIds: string[] }) => {
         if (payload.boardId !== boardId) return;
         setOnlineUserIds(payload.userIds);

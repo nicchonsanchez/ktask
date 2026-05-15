@@ -26,6 +26,7 @@ import type {
   ListCreatedPayload,
   ListUpdatedPayload,
   CommentAddedPayload,
+  CommentReactionUpdatedPayload,
   NotificationCreatedPayload,
   TimeEntryStartedPayload,
   TimeEntryStoppedPayload,
@@ -261,6 +262,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @OnEvent(EVENT_NAMES.COMMENT_ADDED)
   onCommentAdded(payload: CommentAddedPayload) {
     this.broadcastBoard(payload, 'comment.added', payload);
+  }
+
+  @OnEvent(EVENT_NAMES.COMMENT_REACTION_UPDATED)
+  onCommentReactionUpdated(payload: CommentReactionUpdatedPayload) {
+    this.broadcastBoard(payload, 'comment.reaction.updated', payload);
   }
 
   @OnEvent(EVENT_NAMES.NOTIFICATION_CREATED)

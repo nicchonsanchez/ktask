@@ -232,6 +232,7 @@ model User {
   cardsLeading           Card[]          @relation("CardLead")
   cardAssignments        CardMember[]
   commentsAuthored       Comment[]
+  commentReactions       CommentReaction[]
   attachmentsUploaded    Attachment[]
   activities             Activity[]      @relation("ActivityActor")
   notifications          Notification[]
@@ -915,15 +916,41 @@ model Comment {
   authorId  String
   body      Json // Tiptap JSON (ou texto simples no MVP)
   mentions  String[] // userIds mencionados (denormalizado pra notificação)
+  /// Self-ref pra replies. Threads sao planos: reply-de-reply vira filho
+  /// do root (flatten no service). UI renderiza 1 nivel de indentacao.
+  /// onDelete: SetNull pra preservar replies quando parent vira soft-delete.
+  parentCommentId String?
   editedAt  DateTime?
   createdAt DateTime  @default(now())
   deletedAt DateTime?
 
-  card        Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  author      User         @relation(fields: [authorId], references: [id])
+  card        Card              @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author      User              @relation(fields: [authorId], references: [id])
   attachments Attachment[]
+  parent      Comment?          @relation("CommentReply", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies     Comment[]         @relation("CommentReply")
+  reactions   CommentReaction[]
 
   @@index([cardId, createdAt])
+  @@index([parentCommentId])
+}
+
+/// Reacao emoji a um Comment. Set fechado de emojis (validado no service):
+/// 👍 ❤️ 😂 🎉 👀. Unique por (commentId, userId, emoji) garante que cada
+/// usuario reage no maximo 1x com o mesmo emoji em cada comment — toggle
+/// no client deleta a entry.
+model CommentReaction {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
 }
 
 // ==================== Activity (audit log) ====================

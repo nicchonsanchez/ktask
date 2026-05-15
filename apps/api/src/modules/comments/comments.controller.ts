@@ -12,8 +12,10 @@ import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 import { CommentsService } from './comments.service';
 import {
   CreateCommentSchema,
+  ToggleReactionSchema,
   UpdateCommentSchema,
   type CreateCommentRequest,
+  type ToggleReactionRequest,
   type UpdateCommentRequest,
 } from './dto/comment.schemas';
 
@@ -47,7 +49,19 @@ export class CommentsController {
       cardId: body.cardId,
       plainText: body.plainText,
       body: (body.body as Prisma.InputJsonValue) ?? plainTextToDoc(body.plainText),
+      parentCommentId: body.parentCommentId,
     });
+  }
+
+  @Post(':commentId/reactions')
+  @ApiOperation({ summary: 'Toggle reação emoji num comentário' })
+  toggleReaction(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('commentId') commentId: string,
+    @Body(new ZodValidationPipe(ToggleReactionSchema)) body: ToggleReactionRequest,
+  ) {
+    return this.comments.toggleReaction(user.userId, org, commentId, body.emoji);
   }
 
   @Patch(':commentId')

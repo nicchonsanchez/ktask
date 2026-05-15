@@ -56,6 +56,11 @@ export interface CommentAddedPayload extends BoardEventPayload {
   commentId: string;
 }
 
+export interface CommentReactionUpdatedPayload extends BoardEventPayload {
+  cardId: string;
+  commentId: string;
+}
+
 /**
  * Eventos pessoais direcionados a usuário específico.
  * Room Socket.IO: `user:{userId}`.
@@ -103,6 +108,7 @@ export const EVENT_NAMES = {
   LIST_CREATED: 'board.list.created',
   LIST_UPDATED: 'board.list.updated',
   COMMENT_ADDED: 'board.comment.added',
+  COMMENT_REACTION_UPDATED: 'board.comment.reaction.updated',
   NOTIFICATION_CREATED: 'user.notification.created',
   TIME_ENTRY_STARTED: 'board.time.entry.started',
   TIME_ENTRY_STOPPED: 'board.time.entry.stopped',

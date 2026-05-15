@@ -184,6 +184,15 @@ export class CardsService {
               orderBy: { createdAt: 'asc' },
               include: { uploader: { select: { id: true, name: true, avatarUrl: true } } },
             },
+            // Reacoes do comment: emoji + quem reagiu. Frontend agrupa por
+            // emoji pra mostrar contadores. Ordem por createdAt asc deixa
+            // o avatar do primeiro a reagir mais visivel.
+            reactions: {
+              orderBy: { createdAt: 'asc' },
+              include: {
+                user: { select: { id: true, name: true, avatarUrl: true } },
+              },
+            },
           },
         },
         activities: {
