@@ -79,20 +79,21 @@ export default function BoardsPage() {
 
   return (
     <div className="container py-10">
-      <div className="mb-6 flex items-center justify-between gap-3">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Seus quadros</h1>
           <p className="text-fg-muted mt-1 text-sm">
             Kanban para organizar fluxos, tarefas e responsáveis.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {canManageArchived && (
             <Button
               type="button"
               variant={showArchived ? 'secondary' : 'ghost'}
               onClick={() => setShowArchived((v) => !v)}
               title={showArchived ? 'Ocultar quadros arquivados' : 'Mostrar quadros arquivados'}
+              className="w-full justify-center sm:w-auto"
             >
               <Archive size={16} />
               {showArchived ? 'Ocultar arquivados' : 'Arquivados'}
@@ -100,7 +101,7 @@ export default function BoardsPage() {
           )}
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full justify-center sm:w-auto">
                 <Plus size={16} />
                 Novo quadro
               </Button>
