@@ -122,6 +122,9 @@ services:
       APP_URL: ${APP_URL:-https://${KTASK_WEB_DOMAIN}}
       INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Emails autorizados a acessar rotas /v1/platform/* (admin global da plataforma).
+      # Ver tarefas-md/51-federacao-idp-para-ogma.md.
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
       # Storage (MinIO S3-compat). Endpoint interno via rede docker; endpoint publico via Caddy.
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: https://${KTASK_CDN_DOMAIN}
