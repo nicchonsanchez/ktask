@@ -490,6 +490,17 @@ export function CardModalContent({
                     />
                   </Block>
 
+                  {/* Aprovações — logo após descrição pra que ações urgentes
+                      (Aprovar/Reprovar/Cancelar) fiquem visíveis sem muito
+                      scroll, especialmente no mobile. */}
+                  <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
+                    <ApprovalsBlock
+                      cardId={card.id}
+                      boardId={card.boardId}
+                      currentListId={card.listId}
+                    />
+                  </Block>
+
                   {/* Cor decorativa do card. Substituiu o sistema de Priority. */}
                   <Block icon={<ChevronsUp size={14} />} label="Cor do card">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -569,15 +580,6 @@ export function CardModalContent({
                       <ContactsBlock cardId={card.id} filterType="PERSON" />
                     </Block>
                   </div>
-
-                  {/* Aprovações por cliente */}
-                  <Block icon={<ChevronsUp size={14} className="rotate-180" />} label="Aprovações">
-                    <ApprovalsBlock
-                      cardId={card.id}
-                      boardId={card.boardId}
-                      currentListId={card.listId}
-                    />
-                  </Block>
 
                   {/* Tarefas do card */}
                   <Block
