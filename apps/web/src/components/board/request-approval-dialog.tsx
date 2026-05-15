@@ -27,13 +27,13 @@ interface ReviewerDraft {
 export function RequestApprovalDialog({
   cardId,
   boardId,
-  currentListId,
   open,
   onOpenChange,
 }: {
   cardId: string;
   boardId: string;
-  currentListId: string;
+  /** Aceita por compatibilidade com callers; não é mais usado internamente. */
+  currentListId?: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -120,9 +120,13 @@ export function RequestApprovalDialog({
     },
   });
 
-  const lists = useMemo(() => {
-    return (boardQ.data?.lists ?? []).filter((l) => l.id !== currentListId);
-  }, [boardQ.data, currentListId]);
+  // Lista todas as colunas do board (inclusive a atual). Antes filtrava a
+  // currentListId pra "não oferecer mover pra mesma coluna", mas isso
+  // (a) confunde o operador que espera ver todas, (b) deixa o caso real
+  // descoberto: entre pedir aprovação e o cliente decidir, o card pode ter
+  // sido movido manualmente — a regra "mover pra X ao aprovar" precisa
+  // continuar funcionando independente de onde o card estiver no momento.
+  const lists = useMemo(() => boardQ.data?.lists ?? [], [boardQ.data]);
 
   const canSubmit = reviewers.length > 0 && !mut.isPending;
 
