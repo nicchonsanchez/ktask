@@ -577,17 +577,24 @@ function CommentItem({
               </ul>
             )}
 
-            {/* Reactions: chips agrupados por emoji + botao "+" pra picker */}
-            <ReactionsRow
+            {/* Chips de reactions agrupados por emoji — so renderiza quando
+                ha pelo menos 1 reacao. Picker continua acessivel sempre via
+                botao "Reagir" na barra de acoes abaixo. */}
+            <ReactionsChips
               reactions={comment.reactions ?? []}
               currentUserId={currentUserId}
               onToggle={(emoji) => reactionMut.mutate(emoji)}
               pending={reactionMut.isPending}
-              pickerOpen={emojiPickerOpen}
-              setPickerOpen={setEmojiPickerOpen}
             />
 
-            <div className="mt-1 flex items-center gap-3 text-[11px]">
+            {/* Barra de acoes — sempre visivel, sem espacamento extra. */}
+            <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+              <ReactButton
+                onToggle={(emoji) => reactionMut.mutate(emoji)}
+                pending={reactionMut.isPending}
+                open={emojiPickerOpen}
+                setOpen={setEmojiPickerOpen}
+              />
               {!nested && (
                 <button
                   type="button"
@@ -688,24 +695,20 @@ function CommentItem({
 }
 
 /**
- * Agrupa reactions por emoji e renderiza um chip por grupo com contador.
- * Chip mostra-se ativo (highlight) quando o user atual reagiu com aquele
- * emoji. Click toggle.
+ * Renderiza os chips de reactions agrupados por emoji + contador. So
+ * aparece quando ha pelo menos 1 reacao no comment — caso contrario o
+ * componente nao monta nada (sem espacamento vazio).
  */
-function ReactionsRow({
+function ReactionsChips({
   reactions,
   currentUserId,
   onToggle,
   pending,
-  pickerOpen,
-  setPickerOpen,
 }: {
   reactions: CommentReactionNode[];
   currentUserId: string | null;
   onToggle: (emoji: ReactionEmoji) => void;
   pending: boolean;
-  pickerOpen: boolean;
-  setPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const groups = useMemo(() => {
     const map = new Map<string, { emoji: string; count: number; mine: boolean; users: string[] }>();
@@ -719,24 +722,10 @@ function ReactionsRow({
     return [...map.values()];
   }, [reactions, currentUserId]);
 
-  if (groups.length === 0 && !pickerOpen) {
-    return (
-      <div className="mt-1.5">
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="text-fg-subtle hover:text-fg-muted inline-flex items-center gap-1 rounded p-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
-          aria-label="Reagir"
-          title="Reagir"
-        >
-          <SmilePlus size={12} />
-        </button>
-      </div>
-    );
-  }
+  if (groups.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+    <div className="mt-2 flex flex-wrap items-center gap-1">
       {groups.map((g) => (
         <button
           key={g.emoji}
@@ -754,29 +743,57 @@ function ReactionsRow({
           <span className="tabular-nums">{g.count}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Botao "Reagir" + picker inline com os 5 emojis. Vive na barra de
+ * acoes (sempre visivel, igual ao "Responder" e "Editar"), evita o
+ * problema de hover invisivel no mobile.
+ */
+function ReactButton({
+  onToggle,
+  pending,
+  open,
+  setOpen,
+}: {
+  onToggle: (emoji: ReactionEmoji) => void;
+  pending: boolean;
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  return (
+    <div className="relative inline-flex items-center">
       <button
         type="button"
-        onClick={() => setPickerOpen((v: boolean) => !v)}
-        className="text-fg-subtle hover:text-fg-muted bg-bg-muted/40 hover:bg-bg-muted inline-flex items-center rounded-full border border-transparent p-1"
-        aria-label="Adicionar reação"
-        title="Adicionar reação"
+        onClick={() => setOpen((v) => !v)}
+        className="text-fg-muted hover:text-fg inline-flex items-center gap-1"
+        aria-label="Reagir"
+        aria-expanded={open}
       >
-        <SmilePlus size={11} />
+        <SmilePlus size={11} /> Reagir
       </button>
-      {pickerOpen && (
-        <div className="border-border bg-bg flex items-center gap-1 rounded-full border px-1.5 py-1 shadow-sm">
-          {ALLOWED_REACTION_EMOJIS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              onClick={() => onToggle(e)}
-              disabled={pending}
-              className="hover:bg-bg-muted rounded-full px-1.5 py-0.5 text-base leading-none transition-transform hover:scale-110"
-            >
-              {e}
-            </button>
-          ))}
-        </div>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
+          <div className="border-border bg-bg absolute bottom-full left-0 z-20 mb-1 flex items-center gap-0.5 rounded-full border px-1.5 py-1 shadow-md">
+            {ALLOWED_REACTION_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => {
+                  onToggle(e);
+                  setOpen(false);
+                }}
+                disabled={pending}
+                className="hover:bg-bg-muted rounded-full px-1.5 py-0.5 text-base leading-none transition-transform hover:scale-125"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
