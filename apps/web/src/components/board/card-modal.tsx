@@ -327,7 +327,7 @@ export function CardModalContent({
             ocupando 100% da largura — pode quebrar em N linhas se for grande.
           Desktop (sm+): título à esquerda, botões à direita, na mesma linha
             (título com flex-1 — ainda pode quebrar mas geralmente fica em 1 linha). */}
-      <header className="flex flex-col gap-2 px-5 pb-3 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-7 sm:pt-6">
+      <header className="bg-bg z-20 flex shrink-0 flex-col gap-2 px-5 pb-3 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-7 sm:pt-6">
         {/* Botões — primeiro no mobile (sm:order-2 manda pra direita no desktop) */}
         <div className="-mr-1 flex shrink-0 items-center justify-end gap-1 sm:order-2 sm:mr-0 sm:gap-1.5">
           <StatusPicker

@@ -134,7 +134,7 @@ export function ListColumn({
         opacity: isDragging ? 0.4 : 1,
       }}
       {...attributes}
-      className={`bg-bg dark:border-border/40 flex h-full w-[85vw] max-w-[300px] shrink-0 flex-col rounded-lg shadow-sm sm:w-[280px] dark:border ${
+      className={`bg-bg dark:border-border/40 flex h-full w-[72vw] max-w-[260px] shrink-0 flex-col rounded-lg shadow-sm sm:w-[280px] sm:max-w-none dark:border ${
         isOver ? 'ring-primary/40 ring-2' : ''
       }`}
     >
