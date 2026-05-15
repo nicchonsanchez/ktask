@@ -148,7 +148,7 @@ function ApprovalRow({ approval }: { approval: PendingApprovalForUser }) {
           type="button"
           onClick={() => decideMut.mutate({ decision: 'APPROVE' })}
           disabled={decideMut.isPending}
-          className="bg-success text-success-fg hover:bg-success/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+          className="bg-success text-success-fg hover:bg-success/90 inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50 sm:flex-none sm:py-1.5"
         >
           {decideMut.isPending ? (
             <Loader2 size={12} className="animate-spin" />
@@ -161,14 +161,14 @@ function ApprovalRow({ approval }: { approval: PendingApprovalForUser }) {
           type="button"
           onClick={() => setRejectOpen(true)}
           disabled={decideMut.isPending}
-          className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+          className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50 sm:flex-none sm:py-1.5"
         >
           <ThumbsDown size={12} />
           Reprovar
         </button>
         <a
           href={`/b/${approval.card.boardId}?card=${approval.cardId}`}
-          className="border-border hover:bg-bg-muted text-fg-muted ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
+          className="border-border hover:bg-bg-muted text-fg-muted inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium sm:ml-auto sm:w-auto"
         >
           Ver card completo
           <ExternalLink size={11} />

@@ -88,8 +88,9 @@ export default function HomePage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
-        {/* Coluna principal */}
-        <div className="flex min-w-0 flex-col gap-4">
+        {/* Coluna principal. No mobile vai pra ordem 2 (depois do calendario)
+            pra que MiniCalendar fique visivel sem precisar scrollar. */}
+        <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
           <TarefasPanel
             selectedDay={selectedDay}
             onClearFilter={() => setSelectedDay(null)}
@@ -100,8 +101,8 @@ export default function HomePage() {
           {viewAsUserId && <UserRecentActivity userId={viewAsUserId} />}
         </div>
 
-        {/* Sidebar */}
-        <aside className="flex flex-col gap-4">
+        {/* Sidebar — calendario + eventos. No mobile vai pra ordem 1 (topo). */}
+        <aside className="order-1 flex flex-col gap-4 lg:order-2">
           <MiniCalendar
             selectedDay={selectedDay}
             onSelectDay={toggleDay}

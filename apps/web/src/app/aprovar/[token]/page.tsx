@@ -139,12 +139,12 @@ export default function PublicApprovalPage() {
       <CardSummary approval={approval} />
 
       {!isDecided && (
-        <div className="border-border mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+        <div className="border-border mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap sm:items-center">
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
             disabled={decideMut.isPending}
-            className="bg-success text-success-fg hover:bg-success/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="bg-success text-success-fg hover:bg-success/90 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-medium disabled:opacity-50 sm:w-auto sm:py-2"
           >
             <ThumbsUp size={14} />
             Aprovar
@@ -153,7 +153,7 @@ export default function PublicApprovalPage() {
             type="button"
             onClick={() => setRejectOpen(true)}
             disabled={decideMut.isPending}
-            className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="bg-danger text-danger-fg hover:bg-danger/90 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-medium disabled:opacity-50 sm:w-auto sm:py-2"
           >
             <ThumbsDown size={14} />
             Reprovar
@@ -445,7 +445,7 @@ function AttachmentsView({ attachments }: { attachments: PublicApprovalAttachmen
             <img
               src={a.publicUrl}
               alt={a.fileName}
-              className="border-border/60 size-12 shrink-0 rounded border object-cover"
+              className="border-border/60 size-10 shrink-0 rounded border object-cover sm:size-12"
             />
           )}
           <div className="min-w-0 flex-1">
@@ -659,9 +659,9 @@ function DecidedBanner({ approval }: { approval: PublicApprovalView['approval'] 
 
 function CenteredCard({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="bg-bg-muted/40 flex min-h-screen justify-center px-4 py-10">
+    <div className="bg-bg-muted/40 flex min-h-screen justify-center px-3 py-6 sm:px-4 sm:py-10">
       <div
-        className={`bg-bg border-border h-fit w-full rounded-lg border p-6 shadow-md ${
+        className={`bg-bg border-border h-fit w-full rounded-lg border p-4 shadow-md sm:p-6 ${
           wide ? 'max-w-2xl' : 'max-w-md'
         }`}
       >

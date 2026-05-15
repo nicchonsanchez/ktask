@@ -100,8 +100,8 @@ export function BoardHeader({
 
   return (
     <>
-      <div className="border-border bg-bg flex items-center gap-3 border-b px-6 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="border-border bg-bg flex flex-col gap-2 border-b px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <span
             aria-hidden
             className="text-fg-muted inline-flex size-7 shrink-0 items-center justify-center"
@@ -112,7 +112,7 @@ export function BoardHeader({
           <BoardViewTabs view={view} onChange={onViewChange} />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
               <button

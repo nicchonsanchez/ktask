@@ -158,7 +158,11 @@ export function Topbar() {
           <SearchTrigger />
           {user && <TimerWidget />}
           <NotificationsBell />
-          <ThemeToggle />
+          {/* ThemeToggle so em tablet+ pra liberar espaco no mobile.
+              No mobile, esta dentro do drawer junto com infos do user. */}
+          <span className="hidden sm:inline-flex">
+            <ThemeToggle />
+          </span>
           <div className="bg-border/70 mx-0.5 hidden h-5 w-px sm:mx-1 sm:block" aria-hidden />
           {user && <UserMenu onLogout={handleLogout} />}
         </div>
@@ -174,8 +178,12 @@ export function Topbar() {
             aria-label="Fechar menu"
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
-          {/* Painel deslizante da esquerda */}
-          <div className="bg-bg border-border absolute inset-y-0 left-0 flex w-[78%] max-w-[300px] flex-col border-r shadow-xl">
+          {/* Painel deslizante da esquerda. max-h prevent que o painel
+              cubra teclado virtual ou conteudo do rodape em telas pequenas. */}
+          <div
+            className="bg-bg border-border absolute inset-y-0 left-0 flex w-[78%] max-w-[300px] flex-col overflow-y-auto border-r shadow-xl"
+            style={{ maxHeight: '100dvh' }}
+          >
             <div className="border-border/60 flex items-center justify-between border-b px-4 py-3">
               <span className="text-fg text-sm font-semibold">Menu</span>
               <button
@@ -213,6 +221,7 @@ export function Topbar() {
                   <p className="text-fg truncate text-sm font-medium">{user.name}</p>
                   <p className="text-fg-muted truncate text-[11px]">{user.email}</p>
                 </div>
+                <ThemeToggle />
                 <button
                   type="button"
                   onClick={handleLogout}

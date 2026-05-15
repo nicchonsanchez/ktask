@@ -10,32 +10,42 @@ import { useConfirm, useNotify } from '@/components/ui/dialogs';
 
 export function TimesheetTable({ items }: { items: TimesheetItem[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead className="border-border/60 text-fg-muted border-b text-left text-[10px] font-semibold uppercase tracking-wider">
-          <tr>
-            <Th>Usuário</Th>
-            <Th>Card</Th>
-            <Th>Etiquetas</Th>
-            <Th>Equipe</Th>
-            <Th>Fluxo</Th>
-            <Th>Início</Th>
-            <Th>Fim</Th>
-            <Th align="right">Duração</Th>
-            <Th align="right">{''}</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-border/40 divide-y">
-          {items.map((item) => (
-            <Row key={item.id} item={item} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {/* Mobile: lista de cards verticais (<sm). */}
+      <ul className="flex flex-col gap-2 sm:hidden">
+        {items.map((item) => (
+          <MobileCard key={item.id} item={item} />
+        ))}
+      </ul>
+
+      {/* Tablet+: tabela densa (sm+). */}
+      <div className="hidden overflow-x-auto sm:block">
+        <table className="w-full text-[12px]">
+          <thead className="border-border/60 text-fg-muted border-b text-left text-[10px] font-semibold uppercase tracking-wider">
+            <tr>
+              <Th>Usuário</Th>
+              <Th>Card</Th>
+              <Th>Etiquetas</Th>
+              <Th>Equipe</Th>
+              <Th>Fluxo</Th>
+              <Th>Início</Th>
+              <Th>Fim</Th>
+              <Th align="right">Duração</Th>
+              <Th align="right">{''}</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-border/40 divide-y">
+            {items.map((item) => (
+              <Row key={item.id} item={item} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
-function Row({ item }: { item: TimesheetItem }) {
+function useDeleteEntry(item: TimesheetItem) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const notify = useNotify();
@@ -59,6 +69,109 @@ function Row({ item }: { item: TimesheetItem }) {
     if (ok) deleteMut.mutate();
   }
 
+  return { deleteMut, handleDelete };
+}
+
+function MobileCard({ item }: { item: TimesheetItem }) {
+  const { deleteMut, handleDelete } = useDeleteEntry(item);
+  const isRunning = item.endedAt === null;
+
+  return (
+    <li className="border-border bg-bg flex flex-col gap-2.5 rounded-lg border p-3 shadow-sm">
+      {/* Linha 1: card + duração */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          {item.card ? (
+            <Link
+              href={`/b/${item.card.boardId}?card=${item.cardId}`}
+              className="text-fg hover:text-primary block truncate text-sm font-medium"
+              title={item.card.title}
+            >
+              {item.card.title}
+            </Link>
+          ) : (
+            <span className="text-fg-subtle text-sm italic">Timer livre</span>
+          )}
+          {item.card && (
+            <p className="text-fg-muted mt-0.5 truncate text-[11px]">{item.card.board.name}</p>
+          )}
+        </div>
+        <span
+          className={`shrink-0 font-mono text-sm font-semibold tabular-nums ${
+            isRunning ? 'text-emerald-600 dark:text-emerald-400' : 'text-fg'
+          }`}
+        >
+          {formatDuration(item.durationSec ?? 0)}
+        </span>
+      </div>
+
+      {/* Linha 2: user + status */}
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <UserAvatar
+            name={item.user.name}
+            userId={item.user.id}
+            avatarUrl={item.user.avatarUrl}
+            size="xs"
+          />
+          <span className="text-fg-muted truncate">{item.user.name}</span>
+        </div>
+        {isRunning ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            rodando
+          </span>
+        ) : null}
+      </div>
+
+      {/* Linha 3: período */}
+      <div className="text-fg-muted flex items-center justify-between gap-2 font-mono text-[11px] tabular-nums">
+        <span>{formatDateTime(item.startedAt)}</span>
+        <span>→</span>
+        <span>{item.endedAt ? formatDateTime(item.endedAt) : '—'}</span>
+      </div>
+
+      {/* Linha 4: etiquetas + ação (se houver) */}
+      {(item.card?.labels?.length || !isRunning) && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap gap-1">
+            {item.card?.labels?.slice(0, 3).map((l) => (
+              <span
+                key={l.label.id}
+                className="inline-flex max-w-[120px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ backgroundColor: l.label.color, color: '#fff' }}
+              >
+                {l.label.name}
+              </span>
+            ))}
+            {item.card && item.card.labels.length > 3 && (
+              <span className="text-fg-muted text-[10px]">+{item.card.labels.length - 3}</span>
+            )}
+          </div>
+          {!isRunning && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteMut.isPending}
+              className="text-fg-muted hover:text-danger hover:bg-danger-subtle shrink-0 rounded p-1.5"
+              aria-label="Remover entrada"
+              title="Remover"
+            >
+              {deleteMut.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Row({ item }: { item: TimesheetItem }) {
+  const { deleteMut, handleDelete } = useDeleteEntry(item);
   const isRunning = item.endedAt === null;
 
   return (
