@@ -188,6 +188,8 @@ export class InvitationsService {
       inviteUrl,
       '',
       `Este convite expira em ${expiresStr}.`,
+      '',
+      '> Esta é uma mensagem automática.',
     ].join('\n');
     await this.whatsapp.sendText(phone, text).catch(() => undefined);
   }

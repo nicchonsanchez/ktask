@@ -159,13 +159,15 @@ export class SupportService {
     const snippet = dto.mensagem.length > 200 ? `${dto.mensagem.slice(0, 200)}…` : dto.mensagem;
     const contactLine = `${dto.nome} <${dto.email}>${dto.telefone ? ` · ${dto.telefone}` : ''}`;
     const text = [
-      `Novo ticket de suporte #${shortCode}`,
-      `Categoria: ${categoriaLabel}`,
+      `*Novo ticket de suporte* #${shortCode}`,
+      `Categoria: *${categoriaLabel}*`,
       `De: ${contactLine}`,
       ``,
       snippet,
       ``,
       `Abrir: ${env.APP_URL}/c/${shortCode}`,
+      '',
+      '> Esta é uma mensagem automática.',
     ].join('\n');
 
     await this.whatsapp.sendText(phone, text);

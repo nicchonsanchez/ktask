@@ -1543,11 +1543,14 @@ export class AutomationsEngine {
 
     const firstName = recipientName ? (recipientName.split(' ')[0] ?? '') : '';
 
-    const text = renderTemplate(template, {
+    const rendered = renderTemplate(template, {
       ...baseVars,
       'recipient.name': recipientName ?? '',
       'recipient.firstName': firstName,
     });
+    // Append rodape padrao "mensagem automatica" — destinatario precisa
+    // saber que veio de uma automation, nao de humano digitando.
+    const text = appendAutomatedFooter(rendered);
 
     const ok = await this.whatsapp.sendText(phone, text);
     return {
@@ -1577,13 +1580,14 @@ export class AutomationsEngine {
     }
 
     const firstName = contact.name.split(' ')[0] ?? '';
-    const text = renderTemplate(template, {
+    const rendered = renderTemplate(template, {
       ...baseVars,
       'contact.name': contact.name,
       'contact.firstName': firstName,
       'contact.email': contact.email ?? '',
       'contact.phone': sanitized,
     });
+    const text = appendAutomatedFooter(rendered);
 
     const ok = await this.whatsapp.sendText(sanitized, text);
     return {
@@ -1630,6 +1634,20 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
     return vars[key] ?? '';
   });
+}
+
+/**
+ * Adiciona rodape padrao "Esta e uma mensagem automatica" no fim de toda
+ * mensagem disparada por automation. Destinatario precisa saber que veio
+ * de uma regra automatica do sistema, nao de humano digitando.
+ *
+ * Idempotente: se a mensagem ja termina com o rodape (raro mas possivel),
+ * nao duplica.
+ */
+function appendAutomatedFooter(text: string): string {
+  const footer = '> Esta é uma mensagem automática.';
+  if (text.trimEnd().endsWith(footer)) return text;
+  return text.trimEnd() + '\n\n' + footer;
 }
 
 // ---------------- Checklist items config (parsing) ----------------

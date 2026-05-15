@@ -72,7 +72,7 @@ Em [apps/api/src/modules/approvals/dto/approvals.schemas.ts](apps/api/src/module
 - Activity `kind: 'approval.canceled'` no payload.
 - Emite `CARD_UPDATED` socket.
 
-3.4. **`resend(userId, tenant, approvalId, body)`**:
+  3.4. **`resend(userId, tenant, approvalId, body)`**:
 
 - Valida org, status = PENDING.
 - RBAC igual cancel.
@@ -82,7 +82,7 @@ Em [apps/api/src/modules/approvals/dto/approvals.schemas.ts](apps/api/src/module
 - Activity `kind: 'approval.resent'`.
 - Emite `CARD_UPDATED`.
 
-3.5. **`removeReviewer(userId, tenant, approvalId, reviewerId)`**:
+  3.5. **`removeReviewer(userId, tenant, approvalId, reviewerId)`**:
 
 - Valida org, status = PENDING, reviewer existe.
 - RBAC igual cancel.
@@ -91,9 +91,9 @@ Em [apps/api/src/modules/approvals/dto/approvals.schemas.ts](apps/api/src/module
 - Activity `kind: 'approval.reviewer_removed'`.
 - Emite `CARD_UPDATED`.
 
-3.6. **`getPublicView`** (linha 988+): tratar `status === 'CANCELED'` retornando shape específico com `canceledAt`, `canceledBy.name`, `cancelReason`.
+  3.6. **`getPublicView`** (linha 988+): tratar `status === 'CANCELED'` retornando shape específico com `canceledAt`, `canceledBy.name`, `cancelReason`.
 
-3.7. **`decideByToken`**: rejeitar com 400 "Pedido cancelado" se status = CANCELED.
+  3.7. **`decideByToken`**: rejeitar com 400 "Pedido cancelado" se status = CANCELED.
 
 ### 4. Backend — Controller
 

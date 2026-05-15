@@ -379,9 +379,10 @@ export class AuthService {
     if (user.phone) {
       const firstName = user.name.split(' ')[0] || user.name;
       const msg =
-        `Olá ${firstName}, recebemos um pedido de redefinição da sua senha no KTask.\n\n` +
+        `Olá *${firstName}*, recebemos um pedido de *redefinição da sua senha* no KTask.\n\n` +
         `Clique pra criar uma nova senha (válido por 1h):\n${resetUrl}\n\n` +
-        `Se não foi você, pode ignorar esta mensagem — sua senha atual continua valendo.`;
+        `Se não foi você, pode ignorar esta mensagem — sua senha atual continua valendo.\n\n` +
+        `> Esta é uma mensagem automática.`;
       this.whatsapp.sendText(user.phone, msg).catch((err) => {
         this.logger.error(`${logPrefix} whatsapp failed pra ${user.phone}: ${err.message ?? err}`);
       });
