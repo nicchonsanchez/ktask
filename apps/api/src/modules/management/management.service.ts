@@ -168,14 +168,34 @@ export class ManagementService {
       and.push(this.dueStatusWhere(query.dueStatus));
     }
 
-    // Filtro final-list: so vale pra visao ativa (nao arquivados). Padrao
-    // esconde cards em colunas marcadas como `isFinalList = true` (ex:
-    // "Finalizado"); gestor ve a tela /finalizados separadamente.
+    // Filtro final-list multi-fluxo: a regra olha pra `CardPresence`, nao
+    // pra `Card.listId` (primary). Card pode estar em N boards, em
+    // colunas diferentes em cada — basta UM fluxo nao-final pra ser
+    // considerado "em aberto" (visao principal). So entra em "finalizado"
+    // quando TODOS os fluxos ativos estao em colunas isFinalList=true.
     if (!archived) {
       if (query.onlyFinalLists) {
-        and.push({ list: { isFinalList: true } });
+        // Tem ao menos 1 presence ativa E nenhuma presence ativa em
+        // coluna nao-final. (Cards sem presence sao "fantasmas" — fora.)
+        and.push({ presences: { some: { removedAt: null } } });
+        and.push({
+          presences: {
+            none: {
+              removedAt: null,
+              list: { isFinalList: false },
+            },
+          },
+        });
       } else {
-        and.push({ list: { isFinalList: false } });
+        // Tem ao menos 1 presence ativa em coluna nao-final, em qualquer fluxo.
+        and.push({
+          presences: {
+            some: {
+              removedAt: null,
+              list: { isFinalList: false },
+            },
+          },
+        });
       }
     }
 
