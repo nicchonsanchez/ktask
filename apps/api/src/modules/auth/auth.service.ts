@@ -479,4 +479,96 @@ export class AuthService {
       user,
     };
   }
+
+  /**
+   * Validacao de credenciais pra federacao OAuth2/OIDC com Service Provider
+   * externo (ex: Ogma). Diferente do login normal:
+   *   - NAO persiste Session (sem refresh token)
+   *   - NAO usa rate limit por conta (apenas por IP via Throttler)
+   *   - Retorna access token + memberships pra que o SP possa autorizar
+   *     acoes na org correta
+   *
+   * Aplica as mesmas regras de bloqueio por conta (FAIL_LIMIT/LOCK) e
+   * verificacao de timing (hash dummy quando user nao existe) pra nao
+   * vazar existencia de email.
+   *
+   * Etapa 1 do plano em tarefas-md/51-federacao-idp-para-ogma.md.
+   */
+  async validateForSp({ email, password }: { email: string; password: string }): Promise<{
+    valido: true;
+    accessToken: string;
+    user: PublicUser;
+    memberships: Array<{ organizationId: string; slug: string; role: string }>;
+  }> {
+    const user = await this.users.findByEmail(email);
+
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      const minutes = Math.max(1, Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000));
+      throw new UnauthorizedException(
+        `Conta temporariamente bloqueada. Tente novamente em ${minutes} minuto(s).`,
+      );
+    }
+
+    const hash = user?.passwordHash ?? '$argon2id$v=19$m=65536,t=3,p=4$dummydummydummy$dummy';
+    const verified = await this.password.verify(hash, password);
+
+    if (!verified || !user) {
+      if (user) {
+        const now = new Date();
+        const inWindow =
+          user.lastFailedAt && now.getTime() - user.lastFailedAt.getTime() < ATTEMPT_WINDOW_MS;
+        const newCount = inWindow ? user.failedLoginCount + 1 : 1;
+        const shouldLock = newCount >= FAIL_LIMIT;
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginCount: shouldLock ? 0 : newCount,
+            lastFailedAt: now,
+            lockedUntil: shouldLock ? new Date(now.getTime() + LOCK_DURATION_MS) : null,
+          },
+        });
+      }
+      throw new UnauthorizedException('Credenciais invalidas.');
+    }
+
+    if (user.deletedAt) {
+      throw new ForbiddenException('Conta desativada.');
+    }
+    if (user.suspendedAt) {
+      throw new ForbiddenException('Conta suspensa.');
+    }
+
+    // Limpa contadores em sucesso
+    if (user.failedLoginCount > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null, lastFailedAt: null },
+      });
+    }
+
+    const memberships = await this.prisma.membership.findMany({
+      where: { userId: user.id, organization: { deletedAt: null } },
+      select: {
+        organizationId: true,
+        role: true,
+        organization: { select: { slug: true } },
+      },
+    });
+
+    const payload: JwtAccessPayload = { sub: user.id, email: user.email };
+    const accessToken = await this.jwt.signAsync(payload);
+
+    const publicUser = await this.users.findPublicById(user.id);
+
+    return {
+      valido: true,
+      accessToken,
+      user: publicUser,
+      memberships: memberships.map((m) => ({
+        organizationId: m.organizationId,
+        slug: m.organization.slug,
+        role: m.role,
+      })),
+    };
+  }
 }

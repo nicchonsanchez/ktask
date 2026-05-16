@@ -199,4 +199,42 @@ export class AuthController {
       createdAt: me.createdAt.toISOString(),
     };
   }
+
+  /**
+   * Endpoint de validacao de credenciais pra federacao OAuth2/OIDC
+   * (Etapa 1 do plano em tarefas-md/51-federacao-idp-para-ogma.md).
+   *
+   * SP externo (ex: Ogma) chama com email+senha; KTask valida e retorna
+   * JWT assinado + memberships. NAO persiste Session (sem refresh token);
+   * SP eh responsavel por renovar (futuro).
+   *
+   * Rate limit apertado: 5 tentativas / 5min por IP. Bloqueio por conta
+   * tambem aplica (mesmo do /login).
+   */
+  @Public()
+  @Post('validate')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 300_000, limit: 5 } })
+  @ApiOperation({
+    summary:
+      'Valida credenciais pra Service Provider externo (federacao OAuth2/OIDC). Retorna JWT + memberships, sem persistir sessao.',
+  })
+  async validate(
+    @Body(
+      new ZodValidationPipe(
+        z.object({
+          email: z.string().email().toLowerCase(),
+          password: z.string().min(1),
+          serviceProviderId: z.string().optional(),
+        }),
+      ),
+    )
+    body: {
+      email: string;
+      password: string;
+      serviceProviderId?: string;
+    },
+  ) {
+    return this.auth.validateForSp({ email: body.email, password: body.password });
+  }
 }
