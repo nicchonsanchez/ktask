@@ -42,4 +42,18 @@ export class ManagementController {
   ) {
     return this.mgmt.listArchivedCards(user.userId, org, query);
   }
+
+  @Get('cards/finalized')
+  @ApiOperation({
+    summary: 'Visão Gerencial: cards em colunas finais (isFinalList=true)',
+    description:
+      'Atalho que força onlyFinalLists=true. Aceita os mesmos filtros do endpoint principal.',
+  })
+  listFinalized(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query(new ZodValidationPipe(ManagementListQuerySchema)) query: ManagementListQuery,
+  ) {
+    return this.mgmt.listCards(user.userId, org, { ...query, onlyFinalLists: true });
+  }
 }

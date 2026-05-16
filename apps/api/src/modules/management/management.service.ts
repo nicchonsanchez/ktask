@@ -168,6 +168,17 @@ export class ManagementService {
       and.push(this.dueStatusWhere(query.dueStatus));
     }
 
+    // Filtro final-list: so vale pra visao ativa (nao arquivados). Padrao
+    // esconde cards em colunas marcadas como `isFinalList = true` (ex:
+    // "Finalizado"); gestor ve a tela /finalizados separadamente.
+    if (!archived) {
+      if (query.onlyFinalLists) {
+        and.push({ list: { isFinalList: true } });
+      } else {
+        and.push({ list: { isFinalList: false } });
+      }
+    }
+
     return { AND: and };
   }
 

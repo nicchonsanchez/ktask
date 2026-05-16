@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ChevronLeft, Loader2, Search } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Loader2, Search } from 'lucide-react';
 import type { OrgRole } from '@ktask/contracts';
 
 import { api } from '@/lib/api-client';
-import { managementQueries, type ManagementArchivedFilters } from '@/lib/queries/management';
+import { managementQueries, type ManagementFilters } from '@/lib/queries/management';
 import { useAuthStore } from '@/stores/auth-store';
 
-import { CardsTable, PaginationBar, formatDate } from '../page';
+import { CardsTable, PaginationBar } from '../page';
 
 interface CurrentOrg {
   myRole: OrgRole;
@@ -18,19 +18,13 @@ interface CurrentOrg {
 
 const PRIVILEGED_ROLES: OrgRole[] = ['OWNER', 'ADMIN', 'GESTOR'];
 
-const PERIOD_OPTIONS: Array<{ value: ManagementArchivedFilters['archivedSince']; label: string }> =
-  [
-    { value: 'all', label: 'Qualquer período' },
-    { value: '7d', label: 'Últimos 7 dias' },
-    { value: '30d', label: 'Últimos 30 dias' },
-    { value: '90d', label: 'Últimos 90 dias' },
-  ];
-
 /**
- * Tela secundária da Visão Gerencial — lista apenas cards arquivados,
- * com filtro de período por data de arquivamento (proxy: updatedAt).
+ * Tela secundaria — lista apenas cards em colunas marcadas como
+ * `isFinalList = true` (ex: "Finalizado"). Mesmo padrao da
+ * `/arquivados`. Util pra revisar entregas recentes sem poluir a
+ * visao principal de "em aberto".
  */
-export default function VisaoGerencialArquivadosPage() {
+export default function VisaoGerencialFinalizadosPage() {
   const { user } = useAuthStore();
   const orgQuery = useQuery({
     queryKey: ['org', 'current'],
@@ -41,22 +35,20 @@ export default function VisaoGerencialArquivadosPage() {
   const isPrivileged = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
 
   const [q, setQ] = useState('');
-  const [archivedSince, setArchivedSince] =
-    useState<ManagementArchivedFilters['archivedSince']>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     setPage(1);
-  }, [q, archivedSince, pageSize]);
+  }, [q, pageSize]);
 
-  const filters: ManagementArchivedFilters = useMemo(
-    () => ({ q: q.trim() || undefined, archivedSince, page, pageSize }),
-    [q, archivedSince, page, pageSize],
+  const filters: ManagementFilters = useMemo(
+    () => ({ q: q.trim() || undefined, page, pageSize }),
+    [q, page, pageSize],
   );
 
   const cardsQ = useQuery({
-    ...managementQueries.archived(filters),
+    ...managementQueries.finalized(filters),
     enabled: isPrivileged,
   });
 
@@ -72,8 +64,8 @@ export default function VisaoGerencialArquivadosPage() {
   if (!isPrivileged) {
     return (
       <div className="container mx-auto max-w-md py-12 text-center">
-        <Archive size={32} className="text-fg-muted mx-auto mb-3" />
-        <h1 className="text-lg font-semibold">Cards arquivados</h1>
+        <CheckCircle2 size={32} className="text-fg-muted mx-auto mb-3" />
+        <h1 className="text-lg font-semibold">Cards finalizados</h1>
         <p className="text-fg-muted mt-2 text-sm">Acesso restrito a gestores.</p>
       </div>
     );
@@ -94,8 +86,8 @@ export default function VisaoGerencialArquivadosPage() {
           </Link>
           <span className="text-fg-subtle">/</span>
           <div className="flex items-center gap-2">
-            <Archive size={18} className="text-fg-muted" />
-            <h1 className="text-lg font-semibold">Cards arquivados</h1>
+            <CheckCircle2 size={18} className="text-fg-muted" />
+            <h1 className="text-lg font-semibold">Cards finalizados</h1>
           </div>
         </div>
       </header>
@@ -114,19 +106,6 @@ export default function VisaoGerencialArquivadosPage() {
             className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-1.5 pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2"
           />
         </div>
-        <select
-          value={archivedSince}
-          onChange={(e) =>
-            setArchivedSince(e.target.value as ManagementArchivedFilters['archivedSince'])
-          }
-          className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2"
-        >
-          {PERIOD_OPTIONS.map((o) => (
-            <option key={o.label} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
         <span className="text-fg-muted text-[11px]">
           {cardsQ.data?.total ?? 0} card{(cardsQ.data?.total ?? 0) === 1 ? '' : 's'}
         </span>
@@ -139,16 +118,11 @@ export default function VisaoGerencialArquivadosPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="text-fg-muted py-12 text-center text-sm">
-          Nenhum card arquivado no período selecionado.
+          Nenhum card finalizado encontrado.
         </div>
       ) : (
         <>
           <CardsTable items={items} />
-          {/* Coluna extra "Arquivado em" via lista auxiliar (a CardsTable
-              padrão não mostra essa coluna pra manter o componente reusável). */}
-          <div className="text-fg-muted mt-2 text-[10px]">
-            Mais recente arquivado: {items[0]?.archivedAt ? formatDate(items[0].archivedAt) : '—'}
-          </div>
           <PaginationBar
             total={cardsQ.data?.total ?? 0}
             page={page}

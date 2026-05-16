@@ -24,6 +24,14 @@ export const ManagementListQuerySchema = z.object({
    * - `noDate` = sem dueDate
    */
   dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate']).optional(),
+  /**
+   * Quando `true`, mostra apenas cards em colunas marcadas como
+   * `isFinalList = true` (ex: "Finalizado"). Usado pela tela
+   * `/visao-gerencial/finalizados`. Quando ausente ou `false`,
+   * EXCLUI cards de colunas finais — gestor foca no que ainda demanda
+   * atencao. Default `false`.
+   */
+  onlyFinalLists: z.coerce.boolean().optional().default(false),
   /** Pagina (offset-based). Default 1. */
   page: z.coerce.number().int().min(1).max(1000).default(1),
   /** Itens por pagina. Default 50, max 200. */

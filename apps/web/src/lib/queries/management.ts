@@ -67,6 +67,8 @@ export interface ManagementFilters {
   labelIds?: string[];
   boardIds?: string[];
   dueStatus?: 'overdue' | 'today' | 'next7' | 'noDate';
+  /** Quando true, mostra apenas cards em colunas finais (Finalizado etc). */
+  onlyFinalLists?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -83,6 +85,7 @@ function buildQuery(filters: ManagementFilters | ManagementArchivedFilters): str
   if (filters.labelIds?.length) sp.set('labelIds', filters.labelIds.join(','));
   if (filters.boardIds?.length) sp.set('boardIds', filters.boardIds.join(','));
   if (filters.dueStatus) sp.set('dueStatus', filters.dueStatus);
+  if ('onlyFinalLists' in filters && filters.onlyFinalLists) sp.set('onlyFinalLists', 'true');
   if (filters.page) sp.set('page', String(filters.page));
   if (filters.pageSize) sp.set('pageSize', String(filters.pageSize));
   if ('archivedSince' in filters && filters.archivedSince)
@@ -104,6 +107,15 @@ export const managementQueries = {
       const qs = buildQuery(filters);
       return api.get<ManagementArchivedResponse>(
         `/api/v1/management/cards/archived${qs ? `?${qs}` : ''}`,
+      );
+    },
+  }),
+  finalized: (filters: ManagementFilters = {}) => ({
+    queryKey: ['management', 'cards', 'finalized', filters] as const,
+    queryFn: () => {
+      const qs = buildQuery(filters);
+      return api.get<ManagementListResponse>(
+        `/api/v1/management/cards/finalized${qs ? `?${qs}` : ''}`,
       );
     },
   }),

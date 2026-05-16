@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Archive,
   Building2,
   CalendarClock,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   LayoutDashboard,
   Loader2,
@@ -73,6 +76,14 @@ export default function VisaoGerencialPage() {
   const [userIds, setUserIds] = useState<string[]>([]);
   const [boardIds, setBoardIds] = useState<string[]>([]);
   const [dueStatus, setDueStatus] = useState<ManagementFilters['dueStatus']>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  // Reset pra pagina 1 sempre que o conjunto de filtros mudar — evita
+  // "tela vazia" quando o filtro novo tem menos resultados que a pagina atual.
+  useEffect(() => {
+    setPage(1);
+  }, [q, companyIds, userIds, boardIds, dueStatus, pageSize]);
 
   const filters: ManagementFilters = useMemo(
     () => ({
@@ -81,10 +92,10 @@ export default function VisaoGerencialPage() {
       userIds: userIds.length > 0 ? userIds : undefined,
       boardIds: boardIds.length > 0 ? boardIds : undefined,
       dueStatus,
-      page: 1,
-      pageSize: 200,
+      page,
+      pageSize,
     }),
-    [q, companyIds, userIds, boardIds, dueStatus],
+    [q, companyIds, userIds, boardIds, dueStatus, page, pageSize],
   );
 
   const cardsQ = useQuery({
@@ -150,20 +161,29 @@ export default function VisaoGerencialPage() {
             </p>
           </div>
         </div>
-        <Link
-          href="/visao-gerencial/arquivados"
-          className="border-border hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
-        >
-          <Archive size={13} />
-          Arquivados
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/visao-gerencial/finalizados"
+            className="border-border hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
+          >
+            <CheckCircle2 size={13} />
+            Finalizados
+          </Link>
+          <Link
+            href="/visao-gerencial/arquivados"
+            className="border-border hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
+          >
+            <Archive size={13} />
+            Arquivados
+          </Link>
+        </div>
       </header>
 
       {/* Métricas */}
       <section className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <MetricCard
           icon={<LayoutDashboard size={14} />}
-          label="Cards visíveis"
+          label="Cards em aberto"
           value={metrics?.total ?? 0}
           loading={cardsQ.isLoading}
         />
@@ -267,8 +287,87 @@ export default function VisaoGerencialPage() {
           Nenhum card encontrado com esses filtros.
         </div>
       ) : (
-        <CardsTable items={items} />
+        <>
+          <CardsTable items={items} />
+          <PaginationBar
+            total={cardsQ.data?.total ?? 0}
+            page={page}
+            pageSize={pageSize}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
+        </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Barra de paginacao reutilizavel. Mostra "X-Y de Z", selector de
+ * pageSize (50/100/200) e botoes anterior/proximo. Otimizada pra
+ * teclado: anterior/proximo respeitam disabled quando nao ha mais
+ * pagina nesse sentido.
+ */
+export function PaginationBar({
+  total,
+  page,
+  pageSize,
+  onPage,
+  onPageSize,
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  onPage: (n: number) => void;
+  onPageSize: (n: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return (
+    <div className="border-border mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
+      <div className="text-fg-muted">
+        Mostrando <span className="text-fg font-medium">{start}</span>–
+        <span className="text-fg font-medium">{end}</span> de{' '}
+        <span className="text-fg font-medium">{total}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="text-fg-muted inline-flex items-center gap-1">
+          <span>por página:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSize(Number(e.target.value))}
+            className="border-border bg-bg rounded-md border px-1 py-0.5 text-[11px]"
+          >
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+          </select>
+        </label>
+        <div className="border-border bg-bg flex items-center gap-0.5 rounded-md border">
+          <button
+            type="button"
+            onClick={() => onPage(Math.max(1, page - 1))}
+            disabled={page <= 1}
+            className="text-fg-muted hover:text-fg p-1 disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="Página anterior"
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-fg-muted px-1 tabular-nums">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPage(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
+            className="text-fg-muted hover:text-fg p-1 disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="Próxima página"
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
