@@ -4,11 +4,15 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
+
+import { PlatformAdminGuard } from '@/common/auth/platform-admin.guard';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -236,5 +240,28 @@ export class AuthController {
     },
   ) {
     return this.auth.validateForSp({ email: body.email, password: body.password });
+  }
+
+  /**
+   * Revoga sessoes ativas de um usuario (etapa 4 do plano de federacao).
+   * Restrito a admin de plataforma (PLATFORM_ADMIN_EMAILS no env).
+   *
+   * Efeitos:
+   *  - Todas Sessions ativas do user sao revogadas (refresh tokens invalidos)
+   *  - Emite evento usuario.desativado -> WebhookDispatcher manda pros SPs
+   *
+   * NOTA: access tokens em uso (15min TTL) continuam validos ate expirar.
+   * Pra invalidacao instantanea seria preciso blacklist em Redis — fica
+   * pra v2.
+   */
+  @Post('revoke/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(PlatformAdminGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Revoga sessoes do usuario e emite evento pra SPs externos (admin de plataforma).',
+  })
+  async revoke(@Param('userId') userId: string) {
+    await this.auth.revokeForSp(userId);
   }
 }

@@ -42,6 +42,7 @@ import { UsersViewModule } from './modules/users-view/users-view.module';
 import { SupportModule } from './modules/support/support.module';
 import { ManagementModule } from './modules/management/management.module';
 import { ServiceProvidersModule } from './modules/service-providers/service-providers.module';
+import { WebhooksOutboundModule } from './modules/webhooks-outbound/webhooks-outbound.module';
 
 @Module({
   imports: [
@@ -122,6 +123,7 @@ import { ServiceProvidersModule } from './modules/service-providers/service-prov
     SupportModule,
     ManagementModule,
     ServiceProvidersModule,
+    WebhooksOutboundModule,
     HealthModule,
   ],
   providers: [

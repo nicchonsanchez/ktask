@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 
 import { env } from '@/config/env';
@@ -15,6 +16,7 @@ import { TokenService } from '@/common/crypto/token.service';
 import { UsersService, type PublicUser } from '@/modules/users/users.service';
 import { InvitationsService } from '@/modules/organizations/invitations.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { SP_EVENT_NAMES } from '@/modules/webhooks-outbound/webhooks-outbound.module';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
 import type { JwtAccessPayload, LoginResult } from './auth.types';
@@ -78,6 +80,7 @@ export class AuthService {
     private readonly invitations: InvitationsService,
     private readonly mail: MailService,
     private readonly whatsapp: WhatsAppHelper,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -570,5 +573,26 @@ export class AuthService {
         role: m.role,
       })),
     };
+  }
+
+  /**
+   * Revoga sessoes ativas do usuario e emite evento pra SPs externos.
+   * Chamado por POST /auth/revoke/:userId (admin de plataforma).
+   *
+   * Etapa 4 do plano em tarefas-md/51-federacao-idp-para-ogma.md.
+   */
+  async revokeForSp(userId: string, motivo?: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) return; // idempotente
+
+    await this.logoutAll(userId);
+    this.events.emit(SP_EVENT_NAMES.USUARIO_DESATIVADO, {
+      userId,
+      motivo: motivo ?? null,
+    });
+    this.logger.warn(`Sessoes do user ${userId} revogadas por admin de plataforma.`);
   }
 }
