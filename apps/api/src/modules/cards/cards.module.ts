@@ -8,11 +8,12 @@ import { NotificationsModule } from '@/modules/notifications/notifications.modul
 
 import { CardsService } from './cards.service';
 import { CardsController } from './cards.controller';
+import { CardStatusSyncService } from './card-status-sync';
 
 @Module({
   imports: [BoardsModule, StorageModule, MeModule, NotificationsModule],
   controllers: [CardsController],
-  providers: [CardsService, TenantGuard],
-  exports: [CardsService],
+  providers: [CardsService, CardStatusSyncService, TenantGuard],
+  exports: [CardsService, CardStatusSyncService],
 })
 export class CardsModule {}

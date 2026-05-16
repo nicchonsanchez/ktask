@@ -294,6 +294,14 @@ model Organization {
   /// criacao do card (evita race). Importadores (ex: CSV Ummense) podem
   /// gravar shortCodes literais (ex: "20250409000751") sem mexer aqui.
   cardSequence Int    @default(0)
+  /// Quando true, qualquer move/link/unlink de CardPresence dispara
+  /// avaliacao do status do Card:
+  ///   - Se TODAS as presences ativas estao em coluna isFinalList=true
+  ///     E status nao eh CANCELED → marca COMPLETED.
+  ///   - Caso reverso (alguma presence saiu de final e status era
+  ///     COMPLETED) → volta pra ACTIVE.
+  /// Mantem CANCELED imutavel. Default false (opt-in por Org).
+  autoCompleteCardWhenAllFinal Boolean @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

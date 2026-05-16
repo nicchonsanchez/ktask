@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
 import { computeInsertPosition } from '@/common/util/position';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
@@ -88,6 +89,7 @@ export class ApprovalsService {
     private readonly whatsapp: WhatsAppHelper,
     private readonly events: EventEmitter2,
     private readonly storage: StorageService,
+    private readonly statusSync: CardStatusSyncService,
   ) {}
 
   // ============================================================
@@ -758,6 +760,11 @@ export class ApprovalsService {
       return { approval: result, card };
     });
 
+    // Auto-status sync: aprovacao pode ter movido presences pra colunas
+    // finais (ou retirado). Re-avalia 1 vez por card (todos os moves dessa
+    // decisao sao do mesmo card).
+    await this.statusSync.evaluate(updated.approval.cardId);
+
     // Emite event pra engine + realtime fora da tx (evita lock prolongado).
     const sideEff = updated.approval.sideEffects as SideEffectsShape | null;
     // Determina listId "primary" pos-decisao: se houve move no board primary
@@ -1004,6 +1011,10 @@ export class ApprovalsService {
 
       return r;
     });
+
+    // Auto-status sync: undo reverte presences pras listas originais. Card
+    // que tinha virado COMPLETED por aprovacao agora deve voltar pra ACTIVE.
+    await this.statusSync.evaluate(approval.cardId);
 
     // Realtime
     const card = await this.prisma.card.findUniqueOrThrow({

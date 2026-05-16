@@ -31,6 +31,12 @@ export type CreateOrganizationRequest = z.infer<typeof CreateOrganizationRequest
 
 export const UpdateOrganizationRequestSchema = CreateOrganizationRequestSchema.partial().extend({
   logoUrl: z.string().url().nullable().optional(),
+  /**
+   * Quando true, qualquer move/link/unlink de CardPresence dispara
+   * avaliação automática do Card.status. Todas as presences em coluna
+   * final → COMPLETED; alguma fora de final → ACTIVE. CANCELED imutável.
+   */
+  autoCompleteCardWhenAllFinal: z.boolean().optional(),
 });
 export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>;
 

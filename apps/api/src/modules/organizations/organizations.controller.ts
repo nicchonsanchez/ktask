@@ -47,13 +47,14 @@ export class OrganizationsController {
       timezone: data.timezone,
       locale: data.locale,
       plan: data.plan,
+      autoCompleteCardWhenAllFinal: data.autoCompleteCardWhenAllFinal,
       myRole: org.role,
     };
   }
 
   @Patch('current')
   @RequireOrgRole('ADMIN')
-  @ApiOperation({ summary: 'Atualizar organização atual (nome, logo, timezone, locale)' })
+  @ApiOperation({ summary: 'Atualizar organização atual (nome, logo, timezone, locale, flags)' })
   async update(
     @CurrentOrg() org: TenantContext,
     @Body(new ZodValidationPipe(UpdateOrganizationRequestSchema)) body: UpdateOrganizationRequest,
@@ -63,6 +64,7 @@ export class OrganizationsController {
       logoUrl: body.logoUrl ?? null,
       timezone: body.timezone,
       locale: body.locale,
+      autoCompleteCardWhenAllFinal: body.autoCompleteCardWhenAllFinal,
     });
   }
 

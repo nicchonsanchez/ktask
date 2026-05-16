@@ -42,7 +42,12 @@ export class OrganizationsService {
 
   update(
     id: string,
-    data: Partial<Pick<Organization, 'name' | 'logoUrl' | 'timezone' | 'locale'>>,
+    data: Partial<
+      Pick<
+        Organization,
+        'name' | 'logoUrl' | 'timezone' | 'locale' | 'autoCompleteCardWhenAllFinal'
+      >
+    >,
   ) {
     return this.prisma.organization.update({
       where: { id },

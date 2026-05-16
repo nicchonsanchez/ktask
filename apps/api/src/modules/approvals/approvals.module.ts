@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { TenantGuard } from '@/common/tenant/tenant.guard';
 import { BoardsModule } from '@/modules/boards/boards.module';
+import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { StorageModule } from '@/modules/storage/storage.module';
 
@@ -12,7 +13,7 @@ import { ApprovalsPublicController } from './approvals-public.controller';
 @Module({
   imports: [BoardsModule, NotificationsModule, StorageModule],
   controllers: [ApprovalsController, ApprovalsPublicController],
-  providers: [ApprovalsService, TenantGuard],
+  providers: [ApprovalsService, CardStatusSyncService, TenantGuard],
   exports: [ApprovalsService],
 })
 export class ApprovalsModule {}

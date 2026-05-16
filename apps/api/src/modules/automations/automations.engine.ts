@@ -11,6 +11,7 @@ import type {
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
 import { createCardWithPresence } from '@/modules/cards/helpers/create-card-with-presence';
+import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
 import {
   EVENT_NAMES,
   type CardCreatedPayload,
@@ -62,6 +63,7 @@ export class AutomationsEngine {
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
     private readonly whatsapp: WhatsAppHelper,
+    private readonly statusSync: CardStatusSyncService,
   ) {}
 
   /**
@@ -1263,6 +1265,10 @@ export class AutomationsEngine {
       toListId: target.id,
       position: newPos,
     });
+
+    // Auto-status sync: move via automacao tambem pode levar o card pra
+    // uma coluna final (ou retira-lo de uma) → re-avalia.
+    await this.statusSync.evaluate(cardId);
 
     return { movedToListId: target.id };
   }

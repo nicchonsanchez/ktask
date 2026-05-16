@@ -17,6 +17,7 @@ import { StorageService } from '@/modules/storage/storage.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import { createCardWithPresence } from './helpers/create-card-with-presence';
+import { CardStatusSyncService } from './card-status-sync';
 
 interface CreateCardInput {
   listId: string;
@@ -57,6 +58,7 @@ export class CardsService {
     private readonly events: EventEmitter2,
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
+    private readonly statusSync: CardStatusSyncService,
   ) {}
 
   async create(userId: string, tenant: TenantContext, input: CreateCardInput) {
@@ -1675,6 +1677,10 @@ export class CardsService {
       },
     });
 
+    // Vincular a novo fluxo pode reabrir card "COMPLETED" se o destino
+    // for coluna nao-final. Auto-sync trata.
+    await this.statusSync.evaluate(cardId);
+
     return presence;
   }
 
@@ -1823,6 +1829,11 @@ export class CardsService {
       });
     }
 
+    // Auto-status sync: avalia se card deve virar COMPLETED (todas as
+    // presences em final list) ou voltar pra ACTIVE (saiu de final).
+    // No-op quando a Org nao habilitou o flag.
+    await this.statusSync.evaluate(cardId);
+
     return updated;
   }
 
@@ -1863,6 +1874,12 @@ export class CardsService {
         payload: { cardId, unlinkedFromBoardId: boardId },
       },
     });
+
+    // Desvincular um fluxo pode mudar o conjunto de presences ativas →
+    // re-avalia auto-status. Ex: card era "Em andamento" no fluxo
+    // desvinculado e "Finalizado" no resto → agora todas estao finais →
+    // COMPLETED.
+    await this.statusSync.evaluate(cardId);
 
     return { ok: true };
   }

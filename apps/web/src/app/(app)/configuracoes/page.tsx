@@ -1,7 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, FileUp, MessageSquareText, User as UserIcon, Users } from 'lucide-react';
+import {
+  Building2,
+  ChevronRight,
+  FileUp,
+  MessageSquareText,
+  User as UserIcon,
+  Users,
+} from 'lucide-react';
 
 /**
  * Hub de configurações — lista todas as sub-páginas em cards.
@@ -32,6 +39,14 @@ const SECTIONS: Array<{
     label: 'Modelos de mensagem',
     description: 'Templates reutilizáveis pra comentários e disparos de WhatsApp.',
     icon: MessageSquareText,
+  },
+  {
+    href: '/configuracoes/organizacao',
+    label: 'Organização',
+    description:
+      'Sincronização automática de status de cards e outras preferências da organização.',
+    icon: Building2,
+    adminOnly: true,
   },
   {
     href: '/configuracoes/importar',
