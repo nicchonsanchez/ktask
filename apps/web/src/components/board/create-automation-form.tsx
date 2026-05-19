@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Flag, Loader2, User as UserIcon, Zap } from 'lucide-react';
 
 import { boardsQueries, type ListWithCards } from '@/lib/queries/boards';
 import {
@@ -1155,14 +1155,19 @@ function ChecklistItemRow({
         title="Responsável"
         active={hasAssignee}
         onClick={() => toggle('assignee')}
-        label="👤"
+        icon={<UserIcon size={13} />}
       />
-      <IconBtn title="Prazo" active={hasDue} onClick={() => toggle('due')} label="🚩" />
+      <IconBtn
+        title="Prazo"
+        active={hasDue}
+        onClick={() => toggle('due')}
+        icon={<Flag size={13} />}
+      />
       <IconBtn
         title="Prioridade"
         active={hasPriority}
         onClick={() => toggle('priority')}
-        label="⚡"
+        icon={<Zap size={13} />}
       />
       <button
         type="button"
@@ -1295,23 +1300,23 @@ function IconBtn({
   title,
   active,
   onClick,
-  label,
+  icon,
 }: {
   title: string;
   active: boolean;
   onClick: () => void;
-  label: string;
+  icon: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
-      className={`size-6 shrink-0 rounded text-sm transition-opacity ${
-        active ? 'opacity-100' : 'opacity-40 hover:opacity-100'
+      className={`hover:bg-bg-muted inline-flex size-6 shrink-0 items-center justify-center rounded transition-opacity ${
+        active ? 'text-fg opacity-100' : 'text-fg-muted opacity-60 hover:opacity-100'
       }`}
     >
-      {label}
+      {icon}
     </button>
   );
 }

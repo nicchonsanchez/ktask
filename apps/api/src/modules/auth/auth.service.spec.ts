@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { AuthService } from './auth.service';
 import { PasswordService } from '@/common/crypto/password.service';
@@ -117,6 +118,13 @@ describe('AuthService', () => {
           useValue: {
             sendText: jest.fn().mockResolvedValue(true),
           },
+        },
+        // Federacao IDP (Ogma): AuthService passou a emitir eventos
+        // 'auth.validated' e 'auth.revoked' via EventEmitter2. Mock cobre
+        // testes que nao tocam essa parte.
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();
