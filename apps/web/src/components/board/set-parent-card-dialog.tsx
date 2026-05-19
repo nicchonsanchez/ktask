@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, Loader2, Search, X } from 'lucide-react';
 
-import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@ktask/ui';
 import { boardsQueries, type BoardListItem } from '@/lib/queries/boards';
 import { cardFamilyQuery, cardsQueries, setCardParent, type CardDetail } from '@/lib/queries/cards';
 import { searchGlobal } from '@/lib/queries/search';
@@ -148,18 +155,9 @@ function BoardCombobox({
   value: BoardListItem | null;
   onChange: (b: BoardListItem | null) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const boardsQ = useQuery({ ...boardsQueries.all() });
-
-  useEffect(() => {
-    function click(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    }
-    if (open) document.addEventListener('mousedown', click);
-    return () => document.removeEventListener('mousedown', click);
-  }, [open]);
 
   const filtered = useMemo(() => {
     const items = (boardsQ.data ?? []).filter((b) => !b.isArchived);
@@ -169,35 +167,30 @@ function BoardCombobox({
   }, [boardsQ.data, query]);
 
   return (
-    <div ref={ref} className="relative">
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => {
-            setOpen((v) => !v);
-            setQuery('');
-          }}
-          className="border-border bg-bg hover:border-border-strong flex flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm"
-        >
-          <span className={value ? 'text-fg' : 'text-fg-muted'}>
-            {value ? value.name : 'Todos os fluxos'}
-          </span>
-          <ChevronDown size={14} className="text-fg-muted" />
-        </button>
-        {value && (
+    <div className="flex items-center gap-1">
+      <Popover
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (v) setQuery('');
+        }}
+      >
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={() => onChange(null)}
-            className="border-border text-fg-muted hover:text-fg hover:bg-bg-muted rounded-md border px-2 py-2"
-            title="Limpar filtro de fluxo"
-            aria-label="Limpar filtro de fluxo"
+            className="border-border bg-bg hover:border-border-strong flex flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm"
           >
-            <X size={13} />
+            <span className={value ? 'text-fg' : 'text-fg-muted'}>
+              {value ? value.name : 'Todos os fluxos'}
+            </span>
+            <ChevronDown size={14} className="text-fg-muted" />
           </button>
-        )}
-      </div>
-      {open && (
-        <div className="border-border bg-bg absolute left-0 right-0 top-full z-50 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border shadow-lg">
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="flex max-h-[min(70vh,22rem)] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden p-0"
+        >
           <input
             autoFocus
             value={query}
@@ -236,7 +229,18 @@ function BoardCombobox({
               );
             })}
           </div>
-        </div>
+        </PopoverContent>
+      </Popover>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="border-border text-fg-muted hover:text-fg hover:bg-bg-muted rounded-md border px-2 py-2"
+          title="Limpar filtro de fluxo"
+          aria-label="Limpar filtro de fluxo"
+        >
+          <X size={13} />
+        </button>
       )}
     </div>
   );
@@ -258,24 +262,15 @@ function CardSearchPicker({
   value: { id: string; title: string } | null;
   onChange: (c: { id: string; title: string } | null) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!focused) return;
+    if (!open) return;
     const id = setTimeout(() => setDebounced(query.trim()), 250);
     return () => clearTimeout(id);
-  }, [query, focused]);
-
-  useEffect(() => {
-    function click(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setFocused(false);
-    }
-    if (focused) document.addEventListener('mousedown', click);
-    return () => document.removeEventListener('mousedown', click);
-  }, [focused]);
+  }, [query, open]);
 
   const searchQ = useQuery({
     queryKey: ['search', 'cards-for-parent', debounced],
@@ -293,91 +288,105 @@ function CardSearchPicker({
   }, [searchQ.data, excludeCardId, boardFilter]);
 
   return (
-    <div ref={ref} className="relative">
-      <div className="relative">
-        <Search
-          size={14}
-          className="text-fg-muted pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
-        />
-        <input
-          type="text"
-          value={value && !focused ? value.title : query}
-          onFocus={() => {
-            setFocused(true);
-            if (value) setQuery(value.title);
-          }}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            if (value) onChange(null);
-          }}
-          placeholder={
-            boardFilter ? `Buscar cards em "${boardFilter.name}"…` : 'Buscar cards por nome…'
-          }
-          className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-2 pl-8 pr-8 text-sm focus-visible:outline-none focus-visible:ring-2"
-        />
-        {(query || value) && (
-          <button
-            type="button"
-            onClick={() => {
-              setQuery('');
-              onChange(null);
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        // Bloqueia o auto-close do Radix quando o user clica no input:
+        // o input fica sempre dentro do trigger, entao close so via
+        // onSelect ou outside-click fora do popover content (Radix trata).
+        setOpen(v);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <div className="relative">
+          <Search
+            size={14}
+            className="text-fg-muted pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
+          />
+          <input
+            type="text"
+            value={value && !open ? value.title : query}
+            onFocus={() => {
+              setOpen(true);
+              if (value) setQuery(value.title);
             }}
-            className="text-fg-muted hover:text-fg absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5"
-            aria-label="Limpar"
-          >
-            <X size={12} />
-          </button>
-        )}
-      </div>
-
-      {focused && (
-        <div className="border-border bg-bg absolute left-0 right-0 top-full z-50 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border shadow-lg">
-          {debounced.length < 2 ? (
-            <p className="text-fg-muted px-3 py-3 text-center text-xs">
-              Digite ao menos 2 caracteres pra buscar.
-            </p>
-          ) : searchQ.isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 size={14} className="text-fg-muted animate-spin" />
-            </div>
-          ) : results.length === 0 ? (
-            <p className="text-fg-muted px-3 py-3 text-center text-xs">
-              {boardFilter
-                ? `Nenhum card encontrado em "${boardFilter.name}".`
-                : 'Nenhum card encontrado.'}
-            </p>
-          ) : (
-            <div className="overflow-y-auto py-1">
-              {results.map((c) => {
-                const isSelected = value?.id === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      onChange({ id: c.id, title: c.title });
-                      setQuery(c.title);
-                      setFocused(false);
-                    }}
-                    className={`hover:bg-bg-muted flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm ${
-                      isSelected ? 'bg-primary-subtle text-primary' : ''
-                    }`}
-                  >
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-medium">{c.title}</span>
-                      <span className="text-fg-subtle text-[10px]">
-                        {c.boardName} · {c.listName}
-                        {c.isCompleted && ' · concluído'}
-                      </span>
-                    </span>
-                    {isSelected && <Check size={13} className="text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
+            onChange={(e) => {
+              setOpen(true);
+              setQuery(e.target.value);
+              if (value) onChange(null);
+            }}
+            placeholder={
+              boardFilter ? `Buscar cards em "${boardFilter.name}"…` : 'Buscar cards por nome…'
+            }
+            className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-2 pl-8 pr-8 text-sm focus-visible:outline-none focus-visible:ring-2"
+          />
+          {(query || value) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setQuery('');
+                onChange(null);
+              }}
+              className="text-fg-muted hover:text-fg absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5"
+              aria-label="Limpar"
+            >
+              <X size={12} />
+            </button>
           )}
         </div>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="flex max-h-[min(70vh,22rem)] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden p-0"
+      >
+        {debounced.length < 2 ? (
+          <p className="text-fg-muted px-3 py-3 text-center text-xs">
+            Digite ao menos 2 caracteres pra buscar.
+          </p>
+        ) : searchQ.isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 size={14} className="text-fg-muted animate-spin" />
+          </div>
+        ) : results.length === 0 ? (
+          <p className="text-fg-muted px-3 py-3 text-center text-xs">
+            {boardFilter
+              ? `Nenhum card encontrado em "${boardFilter.name}".`
+              : 'Nenhum card encontrado.'}
+          </p>
+        ) : (
+          <div className="overflow-y-auto py-1">
+            {results.map((c) => {
+              const isSelected = value?.id === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => {
+                    onChange({ id: c.id, title: c.title });
+                    setQuery(c.title);
+                    setOpen(false);
+                  }}
+                  className={`hover:bg-bg-muted flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm ${
+                    isSelected ? 'bg-primary-subtle text-primary' : ''
+                  }`}
+                >
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-medium">{c.title}</span>
+                    <span className="text-fg-subtle text-[10px]">
+                      {c.boardName} · {c.listName}
+                      {c.isCompleted && ' · concluído'}
+                    </span>
+                  </span>
+                  {isSelected && <Check size={13} className="text-primary shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
