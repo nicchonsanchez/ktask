@@ -6,7 +6,13 @@ import { Check, ChevronDown, Loader2, X } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import { boardsQueries, type BoardListItem } from '@/lib/queries/boards';
-import { cardFamilyQuery, cardsQueries, setCardParent, type CardDetail } from '@/lib/queries/cards';
+import {
+  cardFamilyQuery,
+  cardsQueries,
+  moveCardInFlow,
+  setCardParent,
+  type CardDetail,
+} from '@/lib/queries/cards';
 import { ApiError } from '@/lib/api-client';
 
 /**
@@ -25,24 +31,67 @@ export function SetParentCardDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+
+  // Pre-fill com a posicao atual do card — geralmente o pai estara
+  // no mesmo fluxo/coluna, entao economiza cliques. User pode trocar.
+  // Board nao vem em CardDetail (so boardId), entao buscamos da lista
+  // de boards quando o dialog abre.
+  const boardsQ = useQuery({ ...boardsQueries.all() });
+  const initialBoard = useMemo<BoardListItem | null>(() => {
+    const found = (boardsQ.data ?? []).find((b) => b.id === card.boardId);
+    return found ?? null;
+  }, [boardsQ.data, card.boardId]);
+  const initialList = card.list ? { id: card.list.id, name: card.list.name } : null;
+
   const [boardSel, setBoardSel] = useState<BoardListItem | null>(null);
-  const [listSel, setListSel] = useState<{ id: string; name: string } | null>(null);
+  const [listSel, setListSel] = useState<{ id: string; name: string } | null>(initialList);
   const [cardSel, setCardSel] = useState<{ id: string; title: string } | null>(null);
+
+  // Quando boardsQ resolve depois do dialog ja aberto, aplicamos o
+  // initialBoard. Evita ficar com boardSel=null no primeiro render.
+  useEffect(() => {
+    if (open && initialBoard && !boardSel) {
+      setBoardSel(initialBoard);
+    }
+  }, [open, initialBoard, boardSel]);
+  // Toggle opcional: depois de vincular, mover este card pra mesma
+  // coluna do pai. Util quando o filho "segue" o pai no kanban.
+  const [moveToParent, setMoveToParent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setBoardSel(null);
-      setListSel(null);
+      // initialBoard pode estar null quando o boardsQ ainda nao resolveu —
+      // o useEffect de cima aplica quando chegar. listSel pre-fill da
+      // CardDetail (sem depender de boardsQ).
+      setBoardSel(initialBoard);
+      setListSel(initialList);
       setCardSel(null);
+      setMoveToParent(false);
       setError(null);
     }
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, card.id]);
 
   const mut = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!cardSel) throw new Error('Selecione um card pai.');
-      return setCardParent(card.id, cardSel.id);
+      await setCardParent(card.id, cardSel.id);
+      // Move opcional: se o user quer que o filho siga o pai, fazemos
+      // moveInFlow no board+list onde o pai esta. Best-effort — se der
+      // erro (ex: card nao tem presence no board do pai), nao desfaz o
+      // setParent, so reporta.
+      if (moveToParent && boardSel && listSel) {
+        try {
+          await moveCardInFlow(card.id, boardSel.id, { toListId: listSel.id });
+        } catch (err) {
+          throw new Error(
+            err instanceof ApiError
+              ? `Vinculado ao pai, mas não conseguiu mover: ${err.message}`
+              : 'Vinculado ao pai, mas não conseguiu mover.',
+          );
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: cardFamilyQuery(card.id).queryKey });
@@ -51,7 +100,11 @@ export function SetParentCardDialog({
       onOpenChange(false);
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Erro ao vincular card pai.');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : (err as Error)?.message || 'Erro ao vincular card pai.',
+      );
     },
   });
 
@@ -78,7 +131,8 @@ export function SetParentCardDialog({
         <div className="flex flex-col gap-4 px-5 pb-5">
           <p className="text-fg-muted text-xs">
             Selecione o card que vai virar pai deste. Funciona em qualquer fluxo da organização —
-            não precisa ser o mesmo fluxo do card atual.
+            não precisa ser o mesmo fluxo do card atual. Já vem pré-selecionado o fluxo e a coluna
+            onde este card está agora.
           </p>
 
           <div className="flex flex-col gap-2">
@@ -93,32 +147,64 @@ export function SetParentCardDialog({
             />
           </div>
 
-          {boardSel && (
-            <div className="flex flex-col gap-2">
-              <label className="text-fg text-xs font-medium">2. Coluna</label>
-              <ListCombobox
-                boardId={boardSel.id}
-                value={listSel}
-                onChange={(l) => {
-                  setListSel(l);
-                  setCardSel(null);
-                }}
-              />
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <label className={`text-xs font-medium ${boardSel ? 'text-fg' : 'text-fg-subtle'}`}>
+              2. Coluna
+            </label>
+            <ListCombobox
+              boardId={boardSel?.id ?? null}
+              value={listSel}
+              onChange={(l) => {
+                setListSel(l);
+                setCardSel(null);
+              }}
+              disabled={!boardSel}
+            />
+          </div>
 
-          {boardSel && listSel && (
-            <div className="flex flex-col gap-2">
-              <label className="text-fg text-xs font-medium">3. Card pai</label>
-              <CardCombobox
-                boardId={boardSel.id}
-                listId={listSel.id}
-                excludeCardId={card.id}
-                value={cardSel}
-                onChange={setCardSel}
-              />
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <label
+              className={`text-xs font-medium ${
+                boardSel && listSel ? 'text-fg' : 'text-fg-subtle'
+              }`}
+            >
+              3. Card pai
+            </label>
+            <CardCombobox
+              boardId={boardSel?.id ?? null}
+              listId={listSel?.id ?? null}
+              excludeCardId={card.id}
+              value={cardSel}
+              onChange={setCardSel}
+              disabled={!boardSel || !listSel}
+            />
+          </div>
+
+          {/* Toggle opcional: mover este card pra mesma posicao do pai. */}
+          <label
+            className={`border-border/60 flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-xs ${
+              boardSel && listSel ? '' : 'opacity-60'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={moveToParent}
+              onChange={(e) => setMoveToParent(e.target.checked)}
+              disabled={!boardSel || !listSel}
+              className="mt-0.5 size-3.5 shrink-0"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-fg font-medium">Mover este card pra mesma coluna do pai</span>
+              <span className="text-fg-muted leading-relaxed">
+                Quando marcado, depois de vincular, este card também é movido pra{' '}
+                <strong>
+                  {boardSel?.name ?? '…'}
+                  {listSel ? ` → ${listSel.name}` : ''}
+                </strong>
+                . Útil quando o filho deve “seguir” o pai no kanban.
+              </span>
+            </span>
+          </label>
 
           {error && (
             <p className="bg-danger-subtle text-danger rounded-md px-3 py-2 text-xs">{error}</p>
@@ -240,14 +326,19 @@ function ListCombobox({
   boardId,
   value,
   onChange,
+  disabled = false,
 }: {
-  boardId: string;
+  boardId: string | null;
   value: { id: string; name: string } | null;
   onChange: (l: { id: string; name: string } | null) => void;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const boardQ = useQuery({ ...boardsQueries.detail(boardId) });
+  const boardQ = useQuery({
+    ...boardsQueries.detail(boardId ?? ''),
+    enabled: Boolean(boardId),
+  });
 
   useEffect(() => {
     function click(e: MouseEvent) {
@@ -263,11 +354,12 @@ function ListCombobox({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="border-border bg-bg hover:border-border-strong flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        className="border-border bg-bg hover:border-border-strong disabled:hover:border-border flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={value ? 'text-fg' : 'text-fg-muted'}>
-          {value ? value.name : 'Selecione a coluna'}
+          {value ? value.name : disabled ? 'Escolha um fluxo primeiro' : 'Selecione a coluna'}
         </span>
         <ChevronDown size={14} className="text-fg-muted" />
       </button>
@@ -314,17 +406,22 @@ function CardCombobox({
   excludeCardId,
   value,
   onChange,
+  disabled = false,
 }: {
-  boardId: string;
-  listId: string;
+  boardId: string | null;
+  listId: string | null;
   excludeCardId: string;
   value: { id: string; title: string } | null;
   onChange: (c: { id: string; title: string } | null) => void;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const boardQ = useQuery({ ...boardsQueries.detail(boardId) });
+  const boardQ = useQuery({
+    ...boardsQueries.detail(boardId ?? ''),
+    enabled: Boolean(boardId),
+  });
 
   useEffect(() => {
     function click(e: MouseEvent) {
@@ -335,6 +432,7 @@ function CardCombobox({
   }, [open]);
 
   const cards = useMemo(() => {
+    if (!listId) return [];
     const list = boardQ.data?.lists.find((l) => l.id === listId);
     const all = (list?.cards ?? []).filter((c) => c.id !== excludeCardId);
     const q = query.trim().toLowerCase();
@@ -347,13 +445,19 @@ function CardCombobox({
       <button
         type="button"
         onClick={() => {
+          if (disabled) return;
           setOpen((v) => !v);
           setQuery('');
         }}
-        className="border-border bg-bg hover:border-border-strong flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm"
+        disabled={disabled}
+        className="border-border bg-bg hover:border-border-strong disabled:hover:border-border flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={value ? 'text-fg' : 'text-fg-muted'}>
-          {value ? value.title : 'Selecione o card pai'}
+          {value
+            ? value.title
+            : disabled
+              ? 'Escolha o fluxo e a coluna primeiro'
+              : 'Selecione o card pai'}
         </span>
         <ChevronDown size={14} className="text-fg-muted" />
       </button>
