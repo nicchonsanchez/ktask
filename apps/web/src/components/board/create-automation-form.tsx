@@ -101,8 +101,25 @@ export function CreateAutomationForm({
   /**
    * Doc 48: quando definido, o form cria automação escopada a um checklist
    * ou item, com trigger pré-fixado e oculto. Default = list-scoped.
+   *
+   * `draft`: variante usada por automações em cascata (subAutomation dentro
+   * de INSERT_CHECKLIST_GROUP/ITEMS). Em vez de fazer POST/PATCH no backend,
+   * o submit chama `onDraftSave(payload)` — quem chama persiste no
+   * actionConfig da automação-pai. Trigger fixado por `triggerLock`.
    */
-  scope?: { kind: 'checklist'; id: string } | { kind: 'item'; id: string };
+  scope?:
+    | { kind: 'checklist'; id: string }
+    | { kind: 'item'; id: string }
+    | {
+        kind: 'draft';
+        triggerLock: 'CHECKLIST_COMPLETED' | 'CHECKLIST_ITEM_DONE';
+        onDraftSave: (payload: {
+          actionType: AutomationActionType;
+          actionConfig: Record<string, unknown>;
+          label?: string;
+          conditions?: AutomationCondition[] | null;
+        }) => void;
+      };
   onCreated: () => void;
   onCancel: () => void;
 }) {
@@ -113,7 +130,9 @@ export function CreateAutomationForm({
       ? 'CHECKLIST_COMPLETED'
       : scope?.kind === 'item'
         ? 'CHECKLIST_ITEM_DONE'
-        : null;
+        : scope?.kind === 'draft'
+          ? scope.triggerLock
+          : null;
 
   const [trigger, setTrigger] = useState<AutomationTrigger>(
     lockedTrigger ?? initial?.trigger ?? 'CARD_ENTERED',
@@ -259,6 +278,17 @@ export function CreateAutomationForm({
         trigger === 'TIME_IN_LIST' || trigger === 'TIME_NO_INTERACTION' ? { minutes } : {};
       // Backend distingue undefined (não mexer) de null (limpar). Lista vazia -> null.
       const conditionsPayload = conditions.length > 0 ? conditions : null;
+      // Modo draft: nao chama API. Apenas devolve o payload via callback
+      // pra que o caller (automacao-pai) persista no actionConfig.
+      if (scope?.kind === 'draft') {
+        scope.onDraftSave({
+          actionType,
+          actionConfig,
+          label: label.trim() || undefined,
+          conditions: conditionsPayload,
+        });
+        return Promise.resolve({ ok: true } as never);
+      }
       if (editing) {
         return updateAutomation(editing.id, {
           trigger,
@@ -282,6 +312,12 @@ export function CreateAutomationForm({
       return createAutomation(list.id, input);
     },
     onSuccess: () => {
+      if (scope?.kind === 'draft') {
+        // Sem invalidate nem notify (nada foi pra API). onDraftSave ja
+        // foi chamado dentro de mutationFn — caller decide se mostra toast.
+        onCreated();
+        return;
+      }
       if (scope?.kind === 'checklist') {
         queryClient.invalidateQueries({
           queryKey: automationsQueries.byChecklist(scope.id).queryKey,
@@ -429,6 +465,7 @@ export function CreateAutomationForm({
               setItems={setChecklistItems}
               listAutomation={listAutomation}
               setListAutomation={setListAutomation}
+              list={list}
               boardId={boardId}
               members={membersQ.data ?? []}
               membersLoading={membersQ.isLoading}
@@ -1128,6 +1165,7 @@ function ChecklistItemsConfig({
   setItems,
   listAutomation,
   setListAutomation,
+  list,
   boardId,
   members,
   membersLoading,
@@ -1139,6 +1177,7 @@ function ChecklistItemsConfig({
   setItems: (v: ChecklistItemDraft[]) => void;
   listAutomation: NestedAutomationDraft | null;
   setListAutomation: (v: NestedAutomationDraft | null) => void;
+  list: ListWithCards;
   boardId: string;
   members: OrgMember[];
   membersLoading: boolean;
@@ -1166,6 +1205,7 @@ function ChecklistItemsConfig({
               Aparece preenchido quando configurada. */}
           <NestedAutomationButton
             scope="list"
+            list={list}
             boardId={boardId}
             value={listAutomation}
             onChange={setListAutomation}
@@ -1203,6 +1243,7 @@ function ChecklistItemsConfig({
               onEnterAddNew={() => {
                 if (idx === items.length - 1 && item.text.trim()) add();
               }}
+              list={list}
               boardId={boardId}
               members={members}
               membersLoading={membersLoading}
@@ -1236,6 +1277,7 @@ function ChecklistItemRow({
   onPatch,
   onRemove,
   onEnterAddNew,
+  list,
   boardId,
   members,
   membersLoading,
@@ -1244,6 +1286,7 @@ function ChecklistItemRow({
   onPatch: (p: Partial<ChecklistItemDraft>) => void;
   onRemove: () => void;
   onEnterAddNew: () => void;
+  list: ListWithCards;
   boardId: string;
   members: OrgMember[];
   membersLoading: boolean;
@@ -1299,6 +1342,7 @@ function ChecklistItemRow({
           dos outros 3 botoes, que usam absolute. */}
       <NestedAutomationButton
         scope="item"
+        list={list}
         boardId={boardId}
         value={item.itemAutomation}
         onChange={(next) => onPatch({ itemAutomation: next })}
