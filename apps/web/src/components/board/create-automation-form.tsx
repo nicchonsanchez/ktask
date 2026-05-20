@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Flag, Loader2, User as UserIcon, Zap } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 import { boardsQueries, type ListWithCards } from '@/lib/queries/boards';
 import {
@@ -18,7 +18,7 @@ import {
   type CreateAutomationInput,
 } from '@/lib/queries/automations';
 import { labelsQueries } from '@/lib/queries/labels';
-import { orgMembersQuery } from '@/lib/queries/cards';
+import { orgMembersQuery, type TaskRecurrence } from '@/lib/queries/cards';
 import { contactsQueries, type ContactRow } from '@/lib/queries/contacts';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
@@ -27,6 +27,12 @@ import { VarTextarea, type TemplateVar } from './var-textarea';
 import { MessageTemplateButtons } from './message-template-buttons';
 import { ConditionsBuilder } from './conditions-builder';
 import { NestedAutomationButton, type NestedAutomationDraft } from './nested-automation-popover';
+import {
+  ChecklistAssigneePicker,
+  ChecklistDueDatePicker,
+  ChecklistPriorityPicker,
+} from './checklist-item-pickers';
+import { RecurrencePicker } from './recurrence-picker';
 
 const COMMENT_VARS: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
@@ -468,7 +474,6 @@ export function CreateAutomationForm({
               list={list}
               boardId={boardId}
               members={membersQ.data ?? []}
-              membersLoading={membersQ.isLoading}
               hint={
                 actionType === 'INSERT_CHECKLIST_GROUP'
                   ? 'Cria um novo checklist sempre — útil pra rodadas que se repetem em fases diferentes.'
@@ -702,6 +707,9 @@ function checklistItemToPayload(item: ChecklistItemDraft): Record<string, unknow
   if (item.itemPriority !== 'NONE') {
     out.itemPriority = item.itemPriority;
   }
+  if (item.itemRecurrence) {
+    out.itemRecurrence = item.itemRecurrence;
+  }
   if (item.itemAutomation) {
     // Trigger fixo CHECKLIST_ITEM_DONE — backend valida via isValidNestedAutomation.
     out.itemAutomation = {
@@ -883,6 +891,8 @@ interface ChecklistItemDraft {
   dueOffsetDays: number;
   dueDate: string;
   itemPriority: ChecklistItemPriority;
+  /** Recorrencia (mesmo shape de TaskRecurrence de uma tarefa real do card). */
+  itemRecurrence: TaskRecurrence | null;
   /**
    * Sub-automacao opcional anexada quando este item for criado pela
    * automacao-pai. Engine cria 1 row Automation com scopeChecklistItemId
@@ -901,6 +911,7 @@ function newChecklistDraft(text = ''): ChecklistItemDraft {
     dueOffsetDays: 0,
     dueDate: '',
     itemPriority: 'NONE',
+    itemRecurrence: null,
     itemAutomation: null,
   };
 }
@@ -1015,9 +1026,24 @@ function parseChecklistItemsFromConfig(cfg: Record<string, unknown>): ChecklistI
         e.itemPriority === 'URGENT'
           ? (e.itemPriority as ChecklistItemPriority)
           : 'NONE',
+      itemRecurrence: parseRecurrence(e.itemRecurrence),
       itemAutomation: parseNestedAutomation(e.itemAutomation),
     };
   });
+}
+
+/**
+ * Aceita um objeto solto vindo do actionConfig e devolve um TaskRecurrence
+ * valido ou null. Validacao deliberadamente fraca — backend reaplica
+ * normalizacao via Prisma.
+ */
+function parseRecurrence(raw: unknown): TaskRecurrence | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (r.freq !== 'DAILY' && r.freq !== 'WEEKLY' && r.freq !== 'MONTHLY' && r.freq !== 'YEARLY') {
+    return null;
+  }
+  return r as unknown as TaskRecurrence;
 }
 
 /**
@@ -1174,7 +1200,6 @@ function ChecklistItemsConfig({
   list,
   boardId,
   members,
-  membersLoading,
   hint,
 }: {
   checklistTitle: string;
@@ -1186,7 +1211,6 @@ function ChecklistItemsConfig({
   list: ListWithCards;
   boardId: string;
   members: OrgMember[];
-  membersLoading: boolean;
   hint?: string;
 }) {
   function patch(uid: string, partial: Partial<ChecklistItemDraft>) {
@@ -1253,7 +1277,6 @@ function ChecklistItemsConfig({
               list={list}
               boardId={boardId}
               members={members}
-              membersLoading={membersLoading}
             />
           ))}
         </div>
@@ -1270,14 +1293,19 @@ function ChecklistItemsConfig({
 }
 
 /**
- * Linha de um item de checklist com 3 botoes-popover:
- * 👤 responsavel (Sem / Lider / Especifico),
- * 🚩 prazo (Sem / N dias apos / N dias do prazo / Data fixa),
- * ⚡ prioridade (5 niveis).
+ * Linha de tarefa no form de automacao. Usa EXATAMENTE os mesmos pickers
+ * que aparecem em uma tarefa real do card (ChecklistDueDatePicker,
+ * ChecklistPriorityPicker, ChecklistAssigneePicker, RecurrencePicker) +
+ * o botao robo que abre ChecklistAutomationDialog em modo draft.
  *
- * Cada botao mostra ativo (preenchido) quando o item tem override
- * setado pra aquele campo. Click toggla popover absoluto na propria
- * linha — fecha ao clicar em outro botao ou Esc.
+ * UX igual ao card. A unica adicao eh `allowCardLead` no AssigneePicker
+ * — automacao precisa do modo "Lider do card" porque nao sabe quem vai
+ * ser o lead na hora de configurar a automacao.
+ *
+ * Modos avancados de prazo (OFFSET_FROM_CARD_DUE, OFFSET_FROM_NOW) que
+ * existiam no engine NAO sao mais editaveis via UI — automacoes legacy
+ * com esses modos continuam funcionando no backend mas o editor mostra
+ * o campo vazio. Pra manter, edite pra data fixa.
  */
 function ChecklistItemRow({
   item,
@@ -1287,7 +1315,6 @@ function ChecklistItemRow({
   list,
   boardId,
   members,
-  membersLoading,
 }: {
   item: ChecklistItemDraft;
   onPatch: (p: Partial<ChecklistItemDraft>) => void;
@@ -1296,23 +1323,30 @@ function ChecklistItemRow({
   list: ListWithCards;
   boardId: string;
   members: OrgMember[];
-  membersLoading: boolean;
 }) {
-  const [open, setOpen] = useState<'assignee' | 'due' | 'priority' | null>(null);
+  // Constroi um "assignee" no formato esperado pelo ChecklistAssigneePicker
+  // a partir do draft. Quando assigneeMode='SPECIFIC_USER', monta a partir
+  // da lista de membros. Caso contrario, null.
+  const selectedMember =
+    item.assigneeMode === 'SPECIFIC_USER' && item.assigneeUserId
+      ? members.find((m) => m.userId === item.assigneeUserId)
+      : null;
+  const assigneeForPicker = selectedMember
+    ? {
+        id: selectedMember.userId,
+        name: selectedMember.user.name,
+        email: selectedMember.user.email,
+        avatarUrl: selectedMember.user.avatarUrl,
+      }
+    : null;
 
-  const hasAssignee = item.assigneeMode !== 'NONE';
-  const hasDue = item.dueMode !== 'NONE';
-  const hasPriority = item.itemPriority !== 'NONE';
-
-  function toggle(p: 'assignee' | 'due' | 'priority') {
-    setOpen(open === p ? null : p);
-  }
-  function close() {
-    setOpen(null);
-  }
+  // Data fixa (FIXED_DATE) eh o unico modo editavel via UI no picker do
+  // card. Modos legacy (OFFSET_FROM_*) ficam invisiveis no picker mas o
+  // backend continua suportando.
+  const dueDateForPicker = item.dueMode === 'FIXED_DATE' ? item.dueDate || null : null;
 
   return (
-    <div className="border-border/60 hover:border-border bg-bg relative flex items-center gap-1 rounded-md border px-2 py-1">
+    <li className="group/item border-border/60 hover:border-border bg-bg relative flex items-center gap-1 rounded-md border px-2 py-1.5">
       <input
         type="text"
         value={item.text}
@@ -1326,27 +1360,26 @@ function ChecklistItemRow({
         placeholder="Descrever a tarefa"
         className="flex-1 bg-transparent text-sm focus:outline-none"
       />
-      <IconBtn
-        title="Responsável"
-        active={hasAssignee}
-        onClick={() => toggle('assignee')}
-        icon={<UserIcon size={13} />}
+
+      {/* Mesmos pickers usados em uma tarefa real do card. */}
+      <ChecklistDueDatePicker
+        dueDate={dueDateForPicker}
+        onChange={(iso) => {
+          if (iso) {
+            onPatch({ dueMode: 'FIXED_DATE', dueDate: iso, dueOffsetDays: 0 });
+          } else {
+            onPatch({ dueMode: 'NONE', dueDate: '', dueOffsetDays: 0 });
+          }
+        }}
       />
-      <IconBtn
-        title="Prazo"
-        active={hasDue}
-        onClick={() => toggle('due')}
-        icon={<Flag size={13} />}
+      <ChecklistPriorityPicker
+        priority={item.itemPriority}
+        onChange={(p) => onPatch({ itemPriority: p })}
       />
-      <IconBtn
-        title="Prioridade"
-        active={hasPriority}
-        onClick={() => toggle('priority')}
-        icon={<Zap size={13} />}
+      <RecurrencePicker
+        value={item.itemRecurrence}
+        onChange={(rec) => onPatch({ itemRecurrence: rec })}
       />
-      {/* 4° botao: automacao no item (CHECKLIST_ITEM_DONE). Popover proprio
-          via Radix (NestedAutomationButton) — nao confunde com os ItemPopovers
-          dos outros 3 botoes, que usam absolute. */}
       <NestedAutomationButton
         scope="item"
         scopeLabel={item.text || 'esta tarefa'}
@@ -1356,197 +1389,35 @@ function ChecklistItemRow({
         onChange={(next) => onPatch({ itemAutomation: next })}
         size="sm"
       />
+      <ChecklistAssigneePicker
+        assignee={assigneeForPicker}
+        onAssign={(userId) => {
+          if (userId) {
+            onPatch({ assigneeMode: 'SPECIFIC_USER', assigneeUserId: userId });
+          } else if (item.assigneeMode !== 'CARD_LEAD') {
+            onPatch({ assigneeMode: 'NONE', assigneeUserId: '' });
+          }
+        }}
+        allowCardLead
+        cardLeadMode={item.assigneeMode === 'CARD_LEAD'}
+        onSetCardLead={(enabled) => {
+          if (enabled) {
+            onPatch({ assigneeMode: 'CARD_LEAD', assigneeUserId: '' });
+          } else {
+            onPatch({ assigneeMode: 'NONE', assigneeUserId: '' });
+          }
+        }}
+      />
+
       <button
         type="button"
         onClick={onRemove}
         title="Remover item"
-        className="text-fg-subtle hover:text-danger ml-0.5 size-6 shrink-0 text-sm"
+        className="text-fg-muted hover:text-danger ml-0.5 size-6 shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover/item:opacity-100"
       >
-        ×
+        <X size={12} />
       </button>
-
-      {open === 'assignee' && (
-        <ItemPopover onClose={close}>
-          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Responsável</p>
-          <RadioRow
-            label="Sem responsável"
-            active={item.assigneeMode === 'NONE'}
-            onClick={() => {
-              onPatch({ assigneeMode: 'NONE', assigneeUserId: '' });
-              close();
-            }}
-          />
-          <RadioRow
-            label="Líder do card"
-            active={item.assigneeMode === 'CARD_LEAD'}
-            onClick={() => {
-              onPatch({ assigneeMode: 'CARD_LEAD', assigneeUserId: '' });
-              close();
-            }}
-          />
-          <RadioRow
-            label="Membro específico"
-            active={item.assigneeMode === 'SPECIFIC_USER'}
-            onClick={() => onPatch({ assigneeMode: 'SPECIFIC_USER' })}
-          />
-          {item.assigneeMode === 'SPECIFIC_USER' && (
-            <div className="mt-2">
-              <SingleUserConfig
-                members={members}
-                loading={membersLoading}
-                selectedId={item.assigneeUserId}
-                onChange={(id) => {
-                  onPatch({ assigneeUserId: id });
-                  close();
-                }}
-              />
-            </div>
-          )}
-        </ItemPopover>
-      )}
-
-      {open === 'due' && (
-        <ItemPopover onClose={close}>
-          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Prazo</p>
-          <RadioRow
-            label="Sem prazo"
-            active={item.dueMode === 'NONE'}
-            onClick={() => {
-              onPatch({ dueMode: 'NONE', dueOffsetDays: 0, dueDate: '' });
-              close();
-            }}
-          />
-          <RadioRow
-            label="N dias após a criação"
-            active={item.dueMode === 'OFFSET_FROM_NOW'}
-            onClick={() => onPatch({ dueMode: 'OFFSET_FROM_NOW' })}
-          />
-          <RadioRow
-            label="N dias do prazo do card"
-            active={item.dueMode === 'OFFSET_FROM_CARD_DUE'}
-            onClick={() => onPatch({ dueMode: 'OFFSET_FROM_CARD_DUE' })}
-          />
-          <RadioRow
-            label="Data fixa"
-            active={item.dueMode === 'FIXED_DATE'}
-            onClick={() => onPatch({ dueMode: 'FIXED_DATE' })}
-          />
-          {(item.dueMode === 'OFFSET_FROM_NOW' || item.dueMode === 'OFFSET_FROM_CARD_DUE') && (
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number"
-                value={item.dueOffsetDays}
-                onChange={(e) => onPatch({ dueOffsetDays: Number(e.target.value) })}
-                className="border-border focus:border-primary w-20 rounded-md border px-2 py-1 text-sm focus:outline-none"
-              />
-              <span className="text-fg-subtle text-[10px]">
-                {item.dueMode === 'OFFSET_FROM_CARD_DUE' ? '(±)' : 'a partir de hoje'}
-              </span>
-            </div>
-          )}
-          {item.dueMode === 'FIXED_DATE' && (
-            <input
-              type="date"
-              value={item.dueDate}
-              onChange={(e) => onPatch({ dueDate: e.target.value })}
-              className="border-border focus:border-primary mt-2 rounded-md border px-2 py-1 text-sm focus:outline-none"
-            />
-          )}
-        </ItemPopover>
-      )}
-
-      {open === 'priority' && (
-        <ItemPopover onClose={close}>
-          <p className="text-fg-muted mb-1 text-[10px] font-medium uppercase">Prioridade</p>
-          {(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as ChecklistItemPriority[]).map((p) => (
-            <RadioRow
-              key={p}
-              label={
-                {
-                  NONE: 'Sem prioridade',
-                  LOW: 'Baixa',
-                  MEDIUM: 'Média',
-                  HIGH: 'Alta',
-                  URGENT: 'Urgente',
-                }[p]
-              }
-              active={item.itemPriority === p}
-              onClick={() => {
-                onPatch({ itemPriority: p });
-                close();
-              }}
-            />
-          ))}
-        </ItemPopover>
-      )}
-    </div>
-  );
-}
-
-function IconBtn({
-  title,
-  active,
-  onClick,
-  icon,
-}: {
-  title: string;
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={`hover:bg-bg-muted inline-flex size-6 shrink-0 items-center justify-center rounded transition-opacity ${
-        active ? 'text-fg opacity-100' : 'text-fg-muted opacity-60 hover:opacity-100'
-      }`}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function RadioRow({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`hover:bg-bg-muted flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-        active ? 'bg-primary-subtle/30 text-fg font-medium' : 'text-fg-muted'
-      }`}
-    >
-      <span className={`inline-block size-2 rounded-full ${active ? 'bg-primary' : 'bg-border'}`} />
-      {label}
-    </button>
-  );
-}
-
-function ItemPopover({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-10" onClick={onClose} aria-hidden />
-      <div className="bg-bg border-border absolute right-0 top-full z-20 mt-1 flex w-64 flex-col gap-1 rounded-md border p-2 shadow-lg">
-        {children}
-      </div>
-    </>
+    </li>
   );
 }
 

@@ -595,6 +595,7 @@ export class AutomationsEngine {
         ...(r.assigneeId ? { assigneeId: r.assigneeId } : {}),
         ...(r.dueDate ? { dueDate: r.dueDate } : {}),
         ...(r.priority ? { priority: r.priority } : {}),
+        ...(r.recurrence ? { recurrence: r.recurrence as Prisma.InputJsonValue } : {}),
       });
       basePos = computeInsertPosition(basePos, null);
     }
@@ -684,7 +685,12 @@ export class AutomationsEngine {
   private async resolveChecklistItemDefaults(
     cardId: string,
     config: ChecklistDefaultsConfig,
-  ): Promise<{ assigneeId: string | null; dueDate: Date | null; priority: Priority | null }> {
+  ): Promise<{
+    assigneeId: string | null;
+    dueDate: Date | null;
+    priority: Priority | null;
+    recurrence: Record<string, unknown> | null;
+  }> {
     // ---- assignee ----
     let assigneeId: string | null = null;
     if (config.assigneeMode === 'CARD_LEAD') {
@@ -721,7 +727,15 @@ export class AutomationsEngine {
         ? (config.itemPriority as Priority)
         : null;
 
-    return { assigneeId, dueDate, priority };
+    // ---- recurrence ----
+    // Shape vem do front (TaskRecurrence). Persiste como Json — validacao forte
+    // do payload acontece no momento de aplicar a recorrencia (item completed).
+    const recurrence =
+      config.itemRecurrence && typeof config.itemRecurrence === 'object'
+        ? (config.itemRecurrence as Record<string, unknown>)
+        : null;
+
+    return { assigneeId, dueDate, priority, recurrence };
   }
 
   /**
@@ -1245,6 +1259,7 @@ export class AutomationsEngine {
         ...(r.assigneeId ? { assigneeId: r.assigneeId } : {}),
         ...(r.dueDate ? { dueDate: r.dueDate } : {}),
         ...(r.priority ? { priority: r.priority } : {}),
+        ...(r.recurrence ? { recurrence: r.recurrence as Prisma.InputJsonValue } : {}),
       });
       basePos = computeInsertPosition(basePos, null);
     }
@@ -1889,6 +1904,12 @@ interface ChecklistDefaultsConfig {
   dueOffsetDays?: number;
   dueDate?: string;
   itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  /**
+   * Recorrencia opcional do item. Persistida em ChecklistItem.recurrence (Json).
+   * Shape espelha TaskRecurrence — validacao fraca aqui; quando o item completa,
+   * o handler de recorrencia normaliza/aplica.
+   */
+  itemRecurrence?: Record<string, unknown> | null;
 }
 
 /**
@@ -1988,6 +2009,7 @@ function hasItemSpecificConfig(item: ChecklistItemConfig): boolean {
   return Boolean(
     (item.assigneeMode && item.assigneeMode !== 'NONE') ||
     (item.dueMode && item.dueMode !== 'NONE') ||
-    (item.itemPriority && item.itemPriority !== 'NONE'),
+    (item.itemPriority && item.itemPriority !== 'NONE') ||
+    item.itemRecurrence,
   );
 }
