@@ -605,7 +605,13 @@ export function CreateAutomationForm({
           className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-60"
         >
           {createMut.isPending && <Loader2 size={13} className="animate-spin" />}
-          {isEdit ? 'Salvar alterações' : 'Criar automação'}
+          {scope?.kind === 'draft'
+            ? isEdit
+              ? 'Aplicar mudanças'
+              : 'Adicionar automação ao item'
+            : isEdit
+              ? 'Salvar alterações'
+              : 'Criar automação'}
         </button>
       </div>
     </form>

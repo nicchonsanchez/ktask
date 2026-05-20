@@ -477,9 +477,11 @@ export class AutomationsEngine {
     const title = config.checklistTitle?.trim() || 'Tarefas';
 
     // Procura checklist com mesmo título no card. Se não existir, cria.
+    // Carrega items com ID + text — precisamos do ID pra anexar
+    // sub-automation em items pre-existentes (idempotente).
     let checklist = await this.prisma.checklist.findFirst({
       where: { cardId, title },
-      include: { items: { select: { text: true } } },
+      include: { items: { select: { id: true, text: true } } },
     });
     let checklistIsNew = false;
     if (!checklist) {
@@ -499,28 +501,69 @@ export class AutomationsEngine {
       checklistIsNew = true;
     }
 
-    // Sub-automacao da LISTA — so cria quando o checklist foi recem-criado
-    // nesta execucao. Reaproveitamento de checklist existente NAO duplica
-    // sub-automacao (a antiga continua valendo).
     const cardCtx = await this.prisma.card.findUnique({
       where: { id: cardId },
       select: { boardId: true, organizationId: true },
     });
-    if (checklistIsNew && cardCtx && isValidNestedAutomation(config.listAutomation, 'list')) {
-      await this.createNestedChecklistAutomation({
-        parent: automation,
-        cfg: config.listAutomation,
-        scope: 'list',
-        targetId: checklist.id,
-        boardId: cardCtx.boardId,
-        organizationId: cardCtx.organizationId,
+
+    // Sub-automacao da LISTA:
+    // - Quando o checklist foi recem-criado nessa execucao → cria.
+    // - Quando o checklist ja existia → so cria se ainda nao tem
+    //   sub-automation com scopeChecklistId = checklist.id (idempotente).
+    //   Isso resolve o caso "configurei listAutomation depois e o
+    //   checklist ja existia no card".
+    if (cardCtx && isValidNestedAutomation(config.listAutomation, 'list')) {
+      const existingListAuto = await this.prisma.automation.findFirst({
+        where: { scopeChecklistId: checklist.id },
+        select: { id: true },
       });
+      if (!existingListAuto) {
+        await this.createNestedChecklistAutomation({
+          parent: automation,
+          cfg: config.listAutomation,
+          scope: 'list',
+          targetId: checklist.id,
+          boardId: cardCtx.boardId,
+          organizationId: cardCtx.organizationId,
+        });
+      }
     }
 
-    // Idempotência: filtra items cujo texto ja existe no checklist
-    // (comparacao case-insensitive + trim).
-    const existingTexts = new Set((checklist.items ?? []).map((i) => i.text.trim().toLowerCase()));
-    const itemsToCreate = parsedItems.filter((it) => !existingTexts.has(it.text.toLowerCase()));
+    // Idempotência de items: items cujo texto ja existe no checklist nao
+    // sao recriados. MAS — fix bug — sub-automacao do item config eh
+    // anexada ao item ja existente caso ele nao tenha uma ainda.
+    // Resolve cenario "configurei itemAutomation depois e o item ja
+    // estava criado de execucao anterior".
+    const existingItemsByText = new Map<string, string>(); // text-lower → itemId
+    for (const it of checklist.items ?? []) {
+      existingItemsByText.set(it.text.trim().toLowerCase(), it.id);
+    }
+
+    // Anexa sub-automation a items existentes (1x cada)
+    if (cardCtx) {
+      for (const cfgItem of parsedItems) {
+        if (!isValidNestedAutomation(cfgItem.itemAutomation, 'item')) continue;
+        const existingItemId = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
+        if (!existingItemId) continue;
+        const alreadyAttached = await this.prisma.automation.findFirst({
+          where: { scopeChecklistItemId: existingItemId },
+          select: { id: true },
+        });
+        if (alreadyAttached) continue;
+        await this.createNestedChecklistAutomation({
+          parent: automation,
+          cfg: cfgItem.itemAutomation,
+          scope: 'item',
+          targetId: existingItemId,
+          boardId: cardCtx.boardId,
+          organizationId: cardCtx.organizationId,
+        });
+      }
+    }
+
+    const itemsToCreate = parsedItems.filter(
+      (it) => !existingItemsByText.has(it.text.toLowerCase()),
+    );
     const itemsSkipped = parsedItems.length - itemsToCreate.length;
     if (itemsToCreate.length === 0) {
       return { checklistId: checklist.id, itemsAdded: 0, itemsSkipped };
