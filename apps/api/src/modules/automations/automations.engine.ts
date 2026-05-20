@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import type {
   Automation,
+  AutomationActionType,
   AutomationRun,
   AutomationTrigger,
-  Prisma,
   Priority,
 } from '@prisma/client';
 
@@ -480,6 +481,7 @@ export class AutomationsEngine {
       where: { cardId, title },
       include: { items: { select: { text: true } } },
     });
+    let checklistIsNew = false;
     if (!checklist) {
       const last = await this.prisma.checklist.findFirst({
         where: { cardId },
@@ -494,6 +496,25 @@ export class AutomationsEngine {
         },
       });
       checklist = { ...created, items: [] };
+      checklistIsNew = true;
+    }
+
+    // Sub-automacao da LISTA — so cria quando o checklist foi recem-criado
+    // nesta execucao. Reaproveitamento de checklist existente NAO duplica
+    // sub-automacao (a antiga continua valendo).
+    const cardCtx = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { boardId: true, organizationId: true },
+    });
+    if (checklistIsNew && cardCtx && isValidNestedAutomation(config.listAutomation, 'list')) {
+      await this.createNestedChecklistAutomation({
+        parent: automation,
+        cfg: config.listAutomation,
+        scope: 'list',
+        targetId: checklist.id,
+        boardId: cardCtx.boardId,
+        organizationId: cardCtx.organizationId,
+      });
     }
 
     // Idempotência: filtra items cujo texto ja existe no checklist
@@ -518,9 +539,11 @@ export class AutomationsEngine {
     let basePos = computeInsertPosition(lastItem?.position ?? null, null);
 
     const rows: Prisma.ChecklistItemCreateManyInput[] = [];
+    const itemsHaveAutomation = itemsToCreate.some((it) =>
+      isValidNestedAutomation(it.itemAutomation, 'item'),
+    );
+
     for (const item of itemsToCreate) {
-      // Per-item: se o item tem config propria, resolve dela; senao usa
-      // os defaults globais. Permite mix livre na mesma automacao.
       const r = hasItemSpecificConfig(item)
         ? await this.resolveChecklistItemDefaults(cardId, item)
         : globalDefaults;
@@ -534,9 +557,80 @@ export class AutomationsEngine {
       });
       basePos = computeInsertPosition(basePos, null);
     }
-    await this.prisma.checklistItem.createMany({ data: rows });
+
+    if (!itemsHaveAutomation || !cardCtx) {
+      await this.prisma.checklistItem.createMany({ data: rows });
+    } else {
+      // Caminho com sub-automacao por item — 1 INSERT por item pra ter ID.
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]!;
+        const itemCfg = itemsToCreate[i]!;
+        const created = await this.prisma.checklistItem.create({ data: row });
+        if (isValidNestedAutomation(itemCfg.itemAutomation, 'item')) {
+          await this.createNestedChecklistAutomation({
+            parent: automation,
+            cfg: itemCfg.itemAutomation,
+            scope: 'item',
+            targetId: created.id,
+            boardId: cardCtx.boardId,
+            organizationId: cardCtx.organizationId,
+          });
+        }
+      }
+    }
 
     return { checklistId: checklist.id, itemsAdded: rows.length, itemsSkipped };
+  }
+
+  /**
+   * Cria uma sub-automacao em cascata (listAutomation ou itemAutomation
+   * de um INSERT_CHECKLIST_GROUP/ITEMS). Reusa createdById e
+   * organizationId/boardId da automacao-pai pra manter rastreabilidade.
+   *
+   * `scope` define em qual coluna FK vai o registro:
+   *   - 'list' → scopeChecklistId, trigger CHECKLIST_COMPLETED
+   *   - 'item' → scopeChecklistItemId, trigger CHECKLIST_ITEM_DONE
+   *
+   * Best-effort: erros de validacao no actionConfig nao quebram a
+   * execucao da automacao-pai — soh logam o problema. A sub-automacao
+   * que falhar criacao simplesmente nao existira (user pode adicionar
+   * manualmente depois).
+   */
+  private async createNestedChecklistAutomation(params: {
+    parent: Automation;
+    cfg: NestedChecklistAutomation;
+    scope: 'list' | 'item';
+    targetId: string; // checklist.id ou checklistItem.id
+    boardId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const { parent, cfg, scope, targetId, boardId, organizationId } = params;
+    try {
+      await this.prisma.automation.create({
+        data: {
+          organizationId,
+          boardId,
+          ...(scope === 'list'
+            ? { scopeChecklistId: targetId }
+            : { scopeChecklistItemId: targetId }),
+          trigger: cfg.trigger,
+          triggerConfig: (cfg.triggerConfig ?? {}) as Prisma.InputJsonValue,
+          actionType: cfg.actionType as AutomationActionType,
+          actionConfig: (cfg.actionConfig ?? {}) as Prisma.InputJsonValue,
+          conditions:
+            cfg.conditions == null ? Prisma.JsonNull : (cfg.conditions as Prisma.InputJsonValue),
+          label: cfg.label ?? null,
+          isActive: true,
+          createdById: parent.createdById,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[nested-automation] falhou criar sub-automacao ${scope}=${targetId} (parent=${parent.id}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -1071,12 +1165,34 @@ export class AutomationsEngine {
       },
     });
 
+    // Pega boardId/orgId do card 1x — usado pelas sub-automacoes em cascata.
+    const cardCtx = await this.prisma.card.findUnique({
+      where: { id: cardId },
+      select: { boardId: true, organizationId: true },
+    });
+
+    // Sub-automacao da LISTA (scopeChecklistId). Trigger fixo CHECKLIST_COMPLETED.
+    if (cardCtx && isValidNestedAutomation(config.listAutomation, 'list')) {
+      await this.createNestedChecklistAutomation({
+        parent: automation,
+        cfg: config.listAutomation,
+        scope: 'list',
+        targetId: checklist.id,
+        boardId: cardCtx.boardId,
+        organizationId: cardCtx.organizationId,
+      });
+    }
+
     const globalDefaults = await this.resolveChecklistItemDefaults(cardId, config);
 
     // Items sempre começam do zero (checklist novo); usar espaçamento padrão
     // pra deixar gaps razoáveis pra inserções manuais futuras.
     let basePos = computeInsertPosition(null, null);
     const rows: Prisma.ChecklistItemCreateManyInput[] = [];
+    const itemsHaveAutomation = parsedItems.some((it) =>
+      isValidNestedAutomation(it.itemAutomation, 'item'),
+    );
+
     for (const item of parsedItems) {
       const r = hasItemSpecificConfig(item)
         ? await this.resolveChecklistItemDefaults(cardId, item)
@@ -1091,7 +1207,31 @@ export class AutomationsEngine {
       });
       basePos = computeInsertPosition(basePos, null);
     }
-    await this.prisma.checklistItem.createMany({ data: rows });
+
+    if (!itemsHaveAutomation || !cardCtx) {
+      // Caminho rapido: createMany quando nao ha itemAutomation pra anexar
+      await this.prisma.checklistItem.createMany({ data: rows });
+    } else {
+      // Caminho lento (1 INSERT por item) — necessario pra obter os IDs e
+      // criar as sub-automacoes. Aceitavel porque checklists tipicamente
+      // tem 5-20 items, e essa configuracao e opt-in (so quem habilita
+      // itemAutomation paga o custo).
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]!;
+        const itemCfg = parsedItems[i]!;
+        const created = await this.prisma.checklistItem.create({ data: row });
+        if (isValidNestedAutomation(itemCfg.itemAutomation, 'item')) {
+          await this.createNestedChecklistAutomation({
+            parent: automation,
+            cfg: itemCfg.itemAutomation,
+            scope: 'item',
+            targetId: created.id,
+            boardId: cardCtx.boardId,
+            organizationId: cardCtx.organizationId,
+          });
+        }
+      }
+    }
 
     return { checklistId: checklist.id, itemsAdded: rows.length };
   }
@@ -1710,15 +1850,44 @@ interface ChecklistDefaultsConfig {
   itemPriority?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 }
 
+/**
+ * Sub-automacao aninhada na config de INSERT_CHECKLIST_GROUP/ITEMS.
+ * Quando setada, o handler cria UM registro `Automation` extra com o
+ * escopo certo (scopeChecklistId pra lista ou scopeChecklistItemId pra
+ * item) — refletindo o mesmo modelo que o user pode criar manualmente
+ * pelos botoes "robo" no card.
+ */
+interface NestedChecklistAutomation {
+  trigger: 'CHECKLIST_ITEM_DONE' | 'CHECKLIST_COMPLETED';
+  triggerConfig?: Record<string, unknown>;
+  actionType: string; // valida AutomationActionType no momento de salvar (Zod do form)
+  actionConfig?: Record<string, unknown>;
+  conditions?: unknown;
+  label?: string;
+}
+
 /** Item individual no actionConfig.items (formato novo). */
 interface ChecklistItemConfig extends ChecklistDefaultsConfig {
   text: string;
+  /**
+   * Automacao a ser criada automaticamente para este item especifico,
+   * com escopo scopeChecklistItemId. Trigger restrito a CHECKLIST_ITEM_DONE.
+   */
+  itemAutomation?: NestedChecklistAutomation;
 }
 
 /** Action config completo do INSERT_CHECKLIST_ITEMS/GROUP. */
 interface ChecklistItemsActionConfig extends ChecklistDefaultsConfig {
   checklistTitle?: string;
   items?: Array<string | ChecklistItemConfig>;
+  /**
+   * Automacao a ser criada automaticamente quando o checklist for criado
+   * (so vale na primeira execucao que cria o checklist — execucoes
+   * subsequentes em `INSERT_CHECKLIST_ITEMS` que reaproveitam checklist
+   * existente nao criam segunda copia). Trigger restrito a
+   * CHECKLIST_COMPLETED. Aplica em scopeChecklistId.
+   */
+  listAutomation?: NestedChecklistAutomation;
 }
 
 /**
@@ -1741,10 +1910,32 @@ function parseChecklistItemsConfig(config: ChecklistItemsActionConfig): Checklis
       if (text) out.push({ text });
     } else if (entry && typeof entry === 'object' && typeof entry.text === 'string') {
       const text = entry.text.trim();
-      if (text) out.push({ ...entry, text });
+      if (text) {
+        // Preserva itemAutomation se vier — o spread {...entry, text} ja
+        // pega, so anotando aqui pra ficar explicito que e proposital.
+        out.push({ ...entry, text });
+      }
     }
   }
   return out;
+}
+
+/**
+ * Valida shape minimo da sub-automacao. Garante que `trigger` esta na
+ * lista permitida pro escopo (item vs lista). Outros campos sao livres
+ * — actionType/actionConfig sao validados pelo proprio handler quando a
+ * sub-automacao executar (mesmo caminho que automacoes manuais).
+ */
+function isValidNestedAutomation(
+  value: unknown,
+  scope: 'item' | 'list',
+): value is NestedChecklistAutomation {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Partial<NestedChecklistAutomation>;
+  if (typeof v.trigger !== 'string' || typeof v.actionType !== 'string') return false;
+  if (scope === 'item' && v.trigger !== 'CHECKLIST_ITEM_DONE') return false;
+  if (scope === 'list' && v.trigger !== 'CHECKLIST_COMPLETED') return false;
+  return true;
 }
 
 /**
