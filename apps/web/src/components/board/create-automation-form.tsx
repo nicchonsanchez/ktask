@@ -26,6 +26,7 @@ import { TemplateVarsBar } from './template-vars-bar';
 import { VarTextarea, type TemplateVar } from './var-textarea';
 import { MessageTemplateButtons } from './message-template-buttons';
 import { ConditionsBuilder } from './conditions-builder';
+import { NestedAutomationButton, type NestedAutomationDraft } from './nested-automation-popover';
 
 const COMMENT_VARS: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
@@ -127,6 +128,11 @@ export function CreateAutomationForm({
       ? initial.checklistItems
       : [newChecklistDraft()],
   );
+  // Sub-automacao da LISTA inteira (scope=CHECKLIST_COMPLETED). null = nao
+  // configurada — backend nao cria automation extra na execucao.
+  const [listAutomation, setListAutomation] = useState<NestedAutomationDraft | null>(
+    initial?.listAutomation ?? null,
+  );
   const [leadUserId, setLeadUserId] = useState(initial?.leadUserId ?? '');
   const [leadReplaceMode, setLeadReplaceMode] = useState<LeadReplaceMode>(
     initial?.leadReplaceMode ?? 'MOVE_TO_TEAM',
@@ -179,6 +185,7 @@ export function CreateAutomationForm({
     setTagIds(next.tagIds);
     setChecklistTitle(next.checklistTitle);
     setChecklistItems(next.checklistItems.length > 0 ? next.checklistItems : [newChecklistDraft()]);
+    setListAutomation(next.listAutomation);
     setLeadUserId(next.leadUserId);
     setLeadReplaceMode(next.leadReplaceMode);
     setTeamUserIds(next.teamUserIds);
@@ -227,6 +234,7 @@ export function CreateAutomationForm({
         tagIds,
         checklistTitle,
         checklistItems,
+        listAutomation,
         leadUserId,
         leadReplaceMode,
         teamUserIds,
@@ -419,6 +427,9 @@ export function CreateAutomationForm({
               setChecklistTitle={setChecklistTitle}
               items={checklistItems}
               setItems={setChecklistItems}
+              listAutomation={listAutomation}
+              setListAutomation={setListAutomation}
+              boardId={boardId}
               members={membersQ.data ?? []}
               membersLoading={membersQ.isLoading}
               hint={
@@ -601,6 +612,8 @@ interface ConfigState {
   tagIds: string[];
   checklistTitle: string;
   checklistItems: ChecklistItemDraft[];
+  /** Sub-automacao opcional anexada na Checklist criada (scope=CHECKLIST_COMPLETED). */
+  listAutomation: NestedAutomationDraft | null;
   leadUserId: string;
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
@@ -646,7 +659,56 @@ function checklistItemToPayload(item: ChecklistItemDraft): Record<string, unknow
   if (item.itemPriority !== 'NONE') {
     out.itemPriority = item.itemPriority;
   }
+  if (item.itemAutomation) {
+    // Trigger fixo CHECKLIST_ITEM_DONE — backend valida via isValidNestedAutomation.
+    out.itemAutomation = {
+      trigger: 'CHECKLIST_ITEM_DONE',
+      actionType: item.itemAutomation.actionType,
+      actionConfig: item.itemAutomation.actionConfig,
+      ...(item.itemAutomation.label ? { label: item.itemAutomation.label } : {}),
+    };
+  }
   return out;
+}
+
+/** Label PT-BR pros actionTypes suportados na sub-automacao. Reusado no badge. */
+function actionLabelOf(actionType: AutomationActionType): string {
+  switch (actionType) {
+    case 'POST_COMMENT':
+      return 'postar comentário';
+    case 'INSERT_TAGS':
+      return 'adicionar etiquetas';
+    case 'REMOVE_TAGS':
+      return 'remover etiquetas';
+    case 'SET_CARD_STATUS':
+      return 'mudar status';
+    case 'FLAG_DUE_TODAY':
+      return 'marcar prazo hoje';
+    case 'FLAG_OVERDUE':
+      return 'marcar prazo atrasado';
+    case 'SEND_WHATSAPP':
+      return 'enviar WhatsApp';
+    default:
+      return String(actionType).toLowerCase();
+  }
+}
+
+/**
+ * Empacota a sub-automacao da LISTA (scope=CHECKLIST_COMPLETED) pro shape
+ * esperado pelo backend. Trigger fixo. Retorna undefined quando nao
+ * configurada — chave fica fora do actionConfig (compat com configs
+ * antigos que nao tem o campo).
+ */
+function listAutomationToPayload(
+  value: NestedAutomationDraft | null,
+): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  return {
+    trigger: 'CHECKLIST_COMPLETED',
+    actionType: value.actionType,
+    actionConfig: value.actionConfig,
+    ...(value.label ? { label: value.label } : {}),
+  };
 }
 
 function buildActionConfig(
@@ -657,16 +719,24 @@ function buildActionConfig(
     case 'INSERT_TAGS':
     case 'REMOVE_TAGS':
       return { tagIds: s.tagIds };
-    case 'INSERT_CHECKLIST_ITEMS':
-      return {
+    case 'INSERT_CHECKLIST_ITEMS': {
+      const out: Record<string, unknown> = {
         checklistTitle: s.checklistTitle.trim() || 'Tarefas',
         items: s.checklistItems.filter((i) => i.text.trim().length > 0).map(checklistItemToPayload),
       };
-    case 'INSERT_CHECKLIST_GROUP':
-      return {
+      const listAuto = listAutomationToPayload(s.listAutomation);
+      if (listAuto) out.listAutomation = listAuto;
+      return out;
+    }
+    case 'INSERT_CHECKLIST_GROUP': {
+      const out: Record<string, unknown> = {
         title: s.checklistTitle.trim() || 'Tarefas',
         items: s.checklistItems.filter((i) => i.text.trim().length > 0).map(checklistItemToPayload),
       };
+      const listAuto = listAutomationToPayload(s.listAutomation);
+      if (listAuto) out.listAutomation = listAuto;
+      return out;
+    }
     case 'UPDATE_FLOW_POSITION':
       return { position: s.flowPosition };
     case 'MOVE_CARD':
@@ -770,6 +840,12 @@ interface ChecklistItemDraft {
   dueOffsetDays: number;
   dueDate: string;
   itemPriority: ChecklistItemPriority;
+  /**
+   * Sub-automacao opcional anexada quando este item for criado pela
+   * automacao-pai. Engine cria 1 row Automation com scopeChecklistItemId
+   * apontando pro item recem-criado. Trigger CHECKLIST_ITEM_DONE.
+   */
+  itemAutomation: NestedAutomationDraft | null;
 }
 
 function newChecklistDraft(text = ''): ChecklistItemDraft {
@@ -782,6 +858,7 @@ function newChecklistDraft(text = ''): ChecklistItemDraft {
     dueOffsetDays: 0,
     dueDate: '',
     itemPriority: 'NONE',
+    itemAutomation: null,
   };
 }
 
@@ -791,6 +868,7 @@ interface InitialState {
   tagIds: string[];
   checklistTitle: string;
   checklistItems: ChecklistItemDraft[];
+  listAutomation: NestedAutomationDraft | null;
   leadUserId: string;
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
@@ -894,8 +972,28 @@ function parseChecklistItemsFromConfig(cfg: Record<string, unknown>): ChecklistI
         e.itemPriority === 'URGENT'
           ? (e.itemPriority as ChecklistItemPriority)
           : 'NONE',
+      itemAutomation: parseNestedAutomation(e.itemAutomation),
     };
   });
+}
+
+/**
+ * Le um campo `itemAutomation` ou `listAutomation` do actionConfig
+ * persistido e devolve o draft. Retorna null se o shape nao for valido —
+ * UI trata como "nao configurado".
+ */
+function parseNestedAutomation(raw: unknown): NestedAutomationDraft | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.actionType !== 'string') return null;
+  return {
+    actionType: r.actionType as AutomationActionType,
+    actionConfig:
+      r.actionConfig && typeof r.actionConfig === 'object'
+        ? (r.actionConfig as Record<string, unknown>)
+        : {},
+    label: typeof r.label === 'string' ? (r.label as string) : undefined,
+  };
 }
 
 function extractInitial(a: Automation): InitialState {
@@ -912,6 +1010,7 @@ function extractInitial(a: Automation): InitialState {
       (typeof cfg.title === 'string' && (cfg.title as string)) ||
       'Tarefas',
     checklistItems: parseChecklistItemsFromConfig(cfg),
+    listAutomation: parseNestedAutomation(cfg.listAutomation),
     leadUserId: typeof cfg.userId === 'string' ? (cfg.userId as string) : '',
     leadReplaceMode:
       cfg.replaceMode === 'REMOVE_FROM_TEAM' || cfg.replaceMode === 'KEEP_IF_HAS_LEAD'
@@ -1027,6 +1126,9 @@ function ChecklistItemsConfig({
   setChecklistTitle,
   items,
   setItems,
+  listAutomation,
+  setListAutomation,
+  boardId,
   members,
   membersLoading,
   hint,
@@ -1035,6 +1137,9 @@ function ChecklistItemsConfig({
   setChecklistTitle: (v: string) => void;
   items: ChecklistItemDraft[];
   setItems: (v: ChecklistItemDraft[]) => void;
+  listAutomation: NestedAutomationDraft | null;
+  setListAutomation: (v: NestedAutomationDraft | null) => void;
+  boardId: string;
   members: OrgMember[];
   membersLoading: boolean;
   hint?: string;
@@ -1053,9 +1158,20 @@ function ChecklistItemsConfig({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <label className="text-fg-muted block text-[11px] font-medium">
-          Nome da lista de tarefas
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-fg-muted block text-[11px] font-medium">
+            Nome da lista de tarefas
+          </label>
+          {/* Bot icon — sub-automacao da lista inteira (CHECKLIST_COMPLETED).
+              Aparece preenchido quando configurada. */}
+          <NestedAutomationButton
+            scope="list"
+            boardId={boardId}
+            value={listAutomation}
+            onChange={setListAutomation}
+            size="sm"
+          />
+        </div>
         <input
           type="text"
           value={checklistTitle}
@@ -1067,6 +1183,12 @@ function ChecklistItemsConfig({
         <p className="text-fg-subtle mt-0.5 text-[10px]">
           {hint ?? 'Se já existir uma lista com esse nome no card, os itens são anexados nela.'}
         </p>
+        {listAutomation && (
+          <p className="text-fg-muted mt-1 text-[10px]">
+            <strong>Automação da lista:</strong> quando 100% concluída →{' '}
+            {actionLabelOf(listAutomation.actionType)}
+          </p>
+        )}
       </div>
 
       <div>
@@ -1081,6 +1203,7 @@ function ChecklistItemsConfig({
               onEnterAddNew={() => {
                 if (idx === items.length - 1 && item.text.trim()) add();
               }}
+              boardId={boardId}
               members={members}
               membersLoading={membersLoading}
             />
@@ -1113,6 +1236,7 @@ function ChecklistItemRow({
   onPatch,
   onRemove,
   onEnterAddNew,
+  boardId,
   members,
   membersLoading,
 }: {
@@ -1120,6 +1244,7 @@ function ChecklistItemRow({
   onPatch: (p: Partial<ChecklistItemDraft>) => void;
   onRemove: () => void;
   onEnterAddNew: () => void;
+  boardId: string;
   members: OrgMember[];
   membersLoading: boolean;
 }) {
@@ -1168,6 +1293,16 @@ function ChecklistItemRow({
         active={hasPriority}
         onClick={() => toggle('priority')}
         icon={<Zap size={13} />}
+      />
+      {/* 4° botao: automacao no item (CHECKLIST_ITEM_DONE). Popover proprio
+          via Radix (NestedAutomationButton) — nao confunde com os ItemPopovers
+          dos outros 3 botoes, que usam absolute. */}
+      <NestedAutomationButton
+        scope="item"
+        boardId={boardId}
+        value={item.itemAutomation}
+        onChange={(next) => onPatch({ itemAutomation: next })}
+        size="sm"
       />
       <button
         type="button"
