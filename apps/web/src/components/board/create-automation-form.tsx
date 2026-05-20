@@ -1211,6 +1211,7 @@ function ChecklistItemsConfig({
               Aparece preenchido quando configurada. */}
           <NestedAutomationButton
             scope="list"
+            scopeLabel={checklistTitle || 'esta lista'}
             list={list}
             boardId={boardId}
             value={listAutomation}
@@ -1348,6 +1349,7 @@ function ChecklistItemRow({
           dos outros 3 botoes, que usam absolute. */}
       <NestedAutomationButton
         scope="item"
+        scopeLabel={item.text || 'esta tarefa'}
         list={list}
         boardId={boardId}
         value={item.itemAutomation}
