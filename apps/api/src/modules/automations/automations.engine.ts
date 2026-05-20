@@ -483,7 +483,6 @@ export class AutomationsEngine {
       where: { cardId, title },
       include: { items: { select: { id: true, text: true } } },
     });
-    let checklistIsNew = false;
     if (!checklist) {
       const last = await this.prisma.checklist.findFirst({
         where: { cardId },
@@ -498,7 +497,6 @@ export class AutomationsEngine {
         },
       });
       checklist = { ...created, items: [] };
-      checklistIsNew = true;
     }
 
     const cardCtx = await this.prisma.card.findUnique({
