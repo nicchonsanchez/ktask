@@ -149,10 +149,10 @@ enum AutomationTrigger {
   TIME_NO_INTERACTION
   DUE_DATE_TODAY
   DUE_DATE_OVERDUE
-  CARD_APPROVED          // CardApproval termina como APPROVED
-  CARD_REJECTED          // CardApproval termina como REJECTED
-  CHECKLIST_ITEM_DONE    // ChecklistItem marcado como done (escopo: item específico)
-  CHECKLIST_COMPLETED    // todos os items de um Checklist marcados (escopo: checklist específico)
+  CARD_APPROVED // CardApproval termina como APPROVED
+  CARD_REJECTED // CardApproval termina como REJECTED
+  CHECKLIST_ITEM_DONE // ChecklistItem marcado como done (escopo: item específico)
+  CHECKLIST_COMPLETED // todos os items de um Checklist marcados (escopo: checklist específico)
 }
 
 enum AutomationActionType {
@@ -189,74 +189,74 @@ enum AutomationRunStatus {
 // ==================== Tenant / Auth ====================
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  emailVerifiedAt  DateTime?
-  passwordHash     String
-  name             String
-  avatarUrl        String?
+  id                        String    @id @default(cuid())
+  email                     String    @unique
+  emailVerifiedAt           DateTime?
+  passwordHash              String
+  name                      String
+  avatarUrl                 String?
   /// E.164 sem o '+', ex: 5521988887777. Usado pra notificar aprovações
   /// via WhatsApp quando o user é escolhido como reviewer.
-  phone            String?
+  phone                     String?
   /// Quando true, usa Evolution API pra mandar notificação de aprovação
   /// pendente pro `phone` do user (além das notificações in-app/push).
-  notifyApprovalsOnWhatsApp Boolean @default(false)
-  locale           String    @default("pt-BR")
-  timezone         String    @default("America/Sao_Paulo")
-  twoFactorSecret  String?
-  twoFactorEnabled Boolean   @default(false)
-  failedLoginCount Int       @default(0)
-  lastFailedAt     DateTime?
-  lockedUntil      DateTime?
+  notifyApprovalsOnWhatsApp Boolean   @default(false)
+  locale                    String    @default("pt-BR")
+  timezone                  String    @default("America/Sao_Paulo")
+  twoFactorSecret           String?
+  twoFactorEnabled          Boolean   @default(false)
+  failedLoginCount          Int       @default(0)
+  lastFailedAt              DateTime?
+  lockedUntil               DateTime?
   /// Suspensao admin: bloqueia login + uso da API mas preserva dados
   /// (diferente de deletedAt). Login retorna 403 com motivo amigavel.
   /// Reverter via PATCH /admin/users/:id/suspend (toggle).
-  suspendedAt      DateTime?
-  suspendedReason  String?
+  suspendedAt               DateTime?
+  suspendedReason           String?
   /// Pendencia de troca de email: novo email aguardando confirmacao via
   /// link enviado pro proprio user. Quando user clica, sistema move
   /// pendingEmail -> email e limpa pendingEmail. Anti-sequestro.
-  pendingEmail     String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  pendingEmail              String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
 
-  memberships            Membership[]
-  sessions               Session[]
-  invitationsSent        Invitation[]    @relation("InvitationCreator")
-  boardMemberships       BoardMember[]
-  boardsCreated          Board[]         @relation("BoardCreator")
-  boardFavorites         BoardFavorite[]
-  cardsCreated           Card[]          @relation("CardCreator")
-  cardsCompleted         Card[]          @relation("CardCompletedBy")
-  cardsLeading           Card[]          @relation("CardLead")
-  cardAssignments        CardMember[]
-  commentsAuthored       Comment[]
-  commentReactions       CommentReaction[]
-  attachmentsUploaded    Attachment[]
-  activities             Activity[]      @relation("ActivityActor")
-  notifications          Notification[]
-  timeEntries            TimeEntry[]
-  checklistItemsAssigned ChecklistItem[] @relation("ChecklistItemAssignee")
-  checklistItemsDone     ChecklistItem[] @relation("ChecklistItemDoneBy")
-  cardVisits             CardVisit[]
-  tasksAssigned          Task[]          @relation("TaskAssignee")
-  tasksCreated           Task[]          @relation("TaskCreator")
-  tasksDone              Task[]          @relation("TaskDoneBy")
-  automationsCreated     Automation[]    @relation("AutomationCreator")
-  cardPresencesCompleted CardPresence[]  @relation("CardPresenceCompletedBy")
-  pushSubscriptions      PushSubscription[]
-  checklistTemplatesCreated ChecklistTemplate[] @relation("ChecklistTemplateCreator")
-  approvalsRequested     CardApproval[]         @relation("ApprovalRequester")
-  approvalsDecided       CardApproval[]         @relation("ApprovalDecider")
-  approvalsReverted      CardApproval[]         @relation("ApprovalReverter")
-  approvalsCanceled      CardApproval[]         @relation("ApprovalCanceler")
-  approvalReviews        CardApprovalReviewer[] @relation("CardApprovalReviewer")
-  messageTemplates       MessageTemplate[]
-  passwordResetTokens    PasswordResetToken[]
+  memberships               Membership[]
+  sessions                  Session[]
+  invitationsSent           Invitation[]           @relation("InvitationCreator")
+  boardMemberships          BoardMember[]
+  boardsCreated             Board[]                @relation("BoardCreator")
+  boardFavorites            BoardFavorite[]
+  cardsCreated              Card[]                 @relation("CardCreator")
+  cardsCompleted            Card[]                 @relation("CardCompletedBy")
+  cardsLeading              Card[]                 @relation("CardLead")
+  cardAssignments           CardMember[]
+  commentsAuthored          Comment[]
+  commentReactions          CommentReaction[]
+  attachmentsUploaded       Attachment[]
+  activities                Activity[]             @relation("ActivityActor")
+  notifications             Notification[]
+  timeEntries               TimeEntry[]
+  checklistItemsAssigned    ChecklistItem[]        @relation("ChecklistItemAssignee")
+  checklistItemsDone        ChecklistItem[]        @relation("ChecklistItemDoneBy")
+  cardVisits                CardVisit[]
+  tasksAssigned             Task[]                 @relation("TaskAssignee")
+  tasksCreated              Task[]                 @relation("TaskCreator")
+  tasksDone                 Task[]                 @relation("TaskDoneBy")
+  automationsCreated        Automation[]           @relation("AutomationCreator")
+  cardPresencesCompleted    CardPresence[]         @relation("CardPresenceCompletedBy")
+  pushSubscriptions         PushSubscription[]
+  checklistTemplatesCreated ChecklistTemplate[]    @relation("ChecklistTemplateCreator")
+  approvalsRequested        CardApproval[]         @relation("ApprovalRequester")
+  approvalsDecided          CardApproval[]         @relation("ApprovalDecider")
+  approvalsReverted         CardApproval[]         @relation("ApprovalReverter")
+  approvalsCanceled         CardApproval[]         @relation("ApprovalCanceler")
+  approvalReviews           CardApprovalReviewer[] @relation("CardApprovalReviewer")
+  messageTemplates          MessageTemplate[]
+  passwordResetTokens       PasswordResetToken[]
   /// Contact vinculado (1:1 via Contact.userId). Quando existe, no CRM
   /// o User aparece como entrada de Contact com identidade vinda do User.
-  linkedContact          Contact?               @relation("ContactUser")
+  linkedContact             Contact?               @relation("ContactUser")
 
   @@index([email])
 }
@@ -265,15 +265,15 @@ model User {
 /// reset; expira em 1h; single-use (usedAt). Token raw vai pro email,
 /// hash sha256 fica no DB.
 model PasswordResetToken {
-  id         String    @id @default(cuid())
-  userId     String
-  tokenHash  String    @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
   /// IP e UA de quem solicitou — auditoria + detectar abuso.
-  requestIp  String?
-  userAgent  String?
+  requestIp String?
+  userAgent String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -282,18 +282,18 @@ model PasswordResetToken {
 }
 
 model Organization {
-  id        String    @id @default(cuid())
-  name      String
-  slug      String    @unique
-  logoUrl   String?
-  timezone  String    @default("America/Sao_Paulo")
-  locale    String    @default("pt-BR")
-  plan      OrgPlan   @default(INTERNAL)
+  id                           String    @id @default(cuid())
+  name                         String
+  slug                         String    @unique
+  logoUrl                      String?
+  timezone                     String    @default("America/Sao_Paulo")
+  locale                       String    @default("pt-BR")
+  plan                         OrgPlan   @default(INTERNAL)
   /// Counter sequencial pra gerar Card.shortCode na criacao. Incrementa
   /// atomicamente via UPDATE Postgres dentro da mesma transacao da
   /// criacao do card (evita race). Importadores (ex: CSV Ummense) podem
   /// gravar shortCodes literais (ex: "20250409000751") sem mexer aqui.
-  cardSequence Int    @default(0)
+  cardSequence                 Int       @default(0)
   /// Quando true, qualquer move/link/unlink de CardPresence dispara
   /// avaliacao do status do Card:
   ///   - Se TODAS as presences ativas estao em coluna isFinalList=true
@@ -301,10 +301,10 @@ model Organization {
   ///   - Caso reverso (alguma presence saiu de final e status era
   ///     COMPLETED) → volta pra ACTIVE.
   /// Mantem CANCELED imutavel. Default false (opt-in por Org).
-  autoCompleteCardWhenAllFinal Boolean @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  autoCompleteCardWhenAllFinal Boolean   @default(false)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+  deletedAt                    DateTime?
 
   memberships        Membership[]
   invitations        Invitation[]
@@ -399,15 +399,15 @@ model Board {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      User           @relation("BoardCreator", fields: [createdById], references: [id])
-  lists          List[]
-  labels         Label[]
-  members        BoardMember[]
-  cards          Card[]
-  automations    Automation[]
-  cardPresences  CardPresence[]
-  favorites      BoardFavorite[]
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy     User            @relation("BoardCreator", fields: [createdById], references: [id])
+  lists         List[]
+  labels        Label[]
+  members       BoardMember[]
+  cards         Card[]
+  automations   Automation[]
+  cardPresences CardPresence[]
+  favorites     BoardFavorite[]
 
   @@index([organizationId, isArchived])
 }
@@ -415,9 +415,9 @@ model Board {
 /// Doc 36: favorito de fluxo por usuario. Lista em /quadros separa
 /// favoritados no topo + alfabetico em ambos os grupos.
 model BoardFavorite {
-  userId       String
-  boardId      String
-  favoritedAt  DateTime @default(now())
+  userId      String
+  boardId     String
+  favoritedAt DateTime @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
@@ -465,11 +465,11 @@ model List {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  board         Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  cards         Card[]
-  automations   Automation[]
-  cardPresences CardPresence[]
+  organization               Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board                      Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards                      Card[]
+  automations                Automation[]
+  cardPresences              CardPresence[]
   defaultApproveForApprovals CardApproval[] @relation("ApprovalDefaultApproveList")
   defaultRejectForApprovals  CardApproval[] @relation("ApprovalDefaultRejectList")
 
@@ -491,20 +491,25 @@ enum CardPrivacy {
 /// "Finalizado" (isFinalList) e vice-versa. Status muda
 /// independentemente de drag-and-drop entre colunas.
 enum CardStatus {
-  ACTIVE     // padrao — em fluxo normal de trabalho
-  COMPLETED  // concluido (substitui o uso isolado de completedAt)
-  WAITING    // pausado, aguardando algo externo (cliente, fornecedor)
-  CANCELED   // cancelado, nao sera feito
+  ACTIVE // padrao — em fluxo normal de trabalho
+  COMPLETED // concluido (substitui o uso isolado de completedAt)
+  WAITING // pausado, aguardando algo externo (cliente, fornecedor)
+  CANCELED // cancelado, nao sera feito
 }
 
 model Card {
-  id                String    @id @default(cuid())
+  id                String      @id @default(cuid())
   organizationId    String // denormalizado: acelera filtros e futura RLS
   /// Identificador curto humano-legivel ("#412"), unico POR Org.
   /// Gerado sequencial via Organization.cardSequence pra cards novos;
   /// importadores podem gravar valores arbitrarios (ex: "20250409000751"
   /// preservando ID do Ummense). Indexado pra resolver lookups #N -> id.
-  shortCode         String?
+  /// NOT NULL desde 2026-05-21 pra fechar o gap do @@unique composto —
+  /// Postgres trata NULLs como distintos, permitindo multiplos cards sem
+  /// shortCode na mesma Org. Helper de criacao sempre seta; importador
+  /// tambem. Se algum dia precisar permitir null de novo, mudar tambem o
+  /// unique pra partial WHERE shortCode IS NOT NULL.
+  shortCode         String
   /// Doc 25: PUBLIC (default) = todos do board veem. TEAM_ONLY = so
   /// lider + CardMember veem (OWNER/ADMIN/GESTOR da Org bypass).
   privacy           CardPrivacy @default(PUBLIC)
@@ -537,13 +542,13 @@ model Card {
   completedAt       DateTime?
   completedById     String?
   estimateMinutes   Int?
-  isArchived        Boolean   @default(false)
+  isArchived        Boolean     @default(false)
   parentCardId      String?
   createdById       String
   leadId            String? // Líder do card: default = createdBy, pode trocar manualmente ou via automação
-  enteredListAt     DateTime  @default(now())
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  enteredListAt     DateTime    @default(now())
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   board          Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
   list           List            @relation(fields: [listId], references: [id], onDelete: Cascade)
@@ -646,18 +651,18 @@ enum ApprovalStatus {
 ///      OWNER/ADMIN/GESTOR), desde que nenhuma ação humana tenha tocado
 ///      nos side-effects (ações de automação não bloqueiam).
 model CardApproval {
-  id                     String         @id @default(cuid())
-  cardId                 String
-  organizationId         String // denormalizado pra acelerar queries multi-tenant
-  requestedById          String
-  status                 ApprovalStatus @default(PENDING)
-  requestedAt            DateTime       @default(now())
-  decidedAt              DateTime?
-  decidedById            String? // qual user decidiu (um dos reviewers internos OU null se decidido por token externo)
-  decidedByExternalName  String? // nome do reviewer externo que decidiu (quando phone-only)
-  note                   String? // nota da decisão; obrigatória pra REJECTED
-  defaultOnApproveListId String? /// @deprecated — use defaultOnApproveTargets. Mantido pra compat com pedidos criados antes do suporte multi-fluxo.
-  defaultOnRejectListId  String? /// @deprecated — use defaultOnRejectTargets. Mesmo motivo.
+  id                      String         @id @default(cuid())
+  cardId                  String
+  organizationId          String // denormalizado pra acelerar queries multi-tenant
+  requestedById           String
+  status                  ApprovalStatus @default(PENDING)
+  requestedAt             DateTime       @default(now())
+  decidedAt               DateTime?
+  decidedById             String? // qual user decidiu (um dos reviewers internos OU null se decidido por token externo)
+  decidedByExternalName   String? // nome do reviewer externo que decidiu (quando phone-only)
+  note                    String? // nota da decisão; obrigatória pra REJECTED
+  defaultOnApproveListId  String? /// @deprecated — use defaultOnApproveTargets. Mantido pra compat com pedidos criados antes do suporte multi-fluxo.
+  defaultOnRejectListId   String? /// @deprecated — use defaultOnRejectTargets. Mesmo motivo.
   /// Lista de destinos por board pra cards multi-fluxo. Shape:
   ///   `[{ boardId: string, listId: string }, ...]`
   /// Cada entry significa "ao APROVAR, mover este card pra esta lista
@@ -669,41 +674,41 @@ model CardApproval {
   defaultOnRejectTargets  Json?
   /// Acoes alem do move ao APROVAR. Shape:
   /// { addTagIds: string[], removeTagIds: string[] }
-  onApproveActions       Json?
+  onApproveActions        Json?
   /// Idem pra REPROVAR.
-  onRejectActions        Json?
+  onRejectActions         Json?
   /// JSON com side-effects executados pela decisão. Usado pra rollback no undo.
   /// Shape: { automationRunIds: string[], movedFromListId?: string,
   ///          createdChecklistItemIds?: string[], createdCommentIds?: string[],
   ///          addedLabelIds?: string[] }
-  sideEffects            Json?
-  revertedAt             DateTime?
-  revertedById           String? // user que desfez (decidedById ou ADMIN+)
-  revertReason           String?
+  sideEffects             Json?
+  revertedAt              DateTime?
+  revertedById            String? // user que desfez (decidedById ou ADMIN+)
+  revertReason            String?
   /// Mensagem original digitada pelo requester (campo `message` do request).
   /// Persistida pra que o reenvio (resend) use o mesmo texto que o cliente
   /// já viu da primeira vez. Null em pedidos pré-migration.
-  message                String?
-  canceledAt             DateTime?
-  canceledById           String? // user que cancelou (requester OU OWNER/ADMIN/GESTOR)
-  cancelReason           String?
+  message                 String?
+  canceledAt              DateTime?
+  canceledById            String? // user que cancelou (requester OU OWNER/ADMIN/GESTOR)
+  cancelReason            String?
   /// Timestamp do envio de WhatsApp/notificacao mais recente pros reviewers.
   /// Usado pra rate-limit do resend (cooldown 30s) e exibicao na UI.
-  lastNotifiedAt         DateTime?
+  lastNotifiedAt          DateTime?
   /// Contador de envios (initial + N resends). Usado pra cap diario do resend.
-  notifyCount            Int            @default(0)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  notifyCount             Int            @default(0)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
-  card             Card                   @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  requestedBy      User                   @relation("ApprovalRequester", fields: [requestedById], references: [id])
-  decidedBy        User?                  @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-  revertedBy       User?                  @relation("ApprovalReverter", fields: [revertedById], references: [id], onDelete: SetNull)
-  canceledBy       User?                  @relation("ApprovalCanceler", fields: [canceledById], references: [id], onDelete: SetNull)
-  defaultApproveList List?                @relation("ApprovalDefaultApproveList", fields: [defaultOnApproveListId], references: [id], onDelete: SetNull)
-  defaultRejectList  List?                @relation("ApprovalDefaultRejectList", fields: [defaultOnRejectListId], references: [id], onDelete: SetNull)
-  reviewers        CardApprovalReviewer[]
+  card               Card                   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedBy        User                   @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  decidedBy          User?                  @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  revertedBy         User?                  @relation("ApprovalReverter", fields: [revertedById], references: [id], onDelete: SetNull)
+  canceledBy         User?                  @relation("ApprovalCanceler", fields: [canceledById], references: [id], onDelete: SetNull)
+  defaultApproveList List?                  @relation("ApprovalDefaultApproveList", fields: [defaultOnApproveListId], references: [id], onDelete: SetNull)
+  defaultRejectList  List?                  @relation("ApprovalDefaultRejectList", fields: [defaultOnRejectListId], references: [id], onDelete: SetNull)
+  reviewers          CardApprovalReviewer[]
 
   @@index([cardId])
   @@index([organizationId, status, requestedAt])
@@ -919,18 +924,18 @@ model Attachment {
 // ==================== Comments ====================
 
 model Comment {
-  id        String    @id @default(cuid())
-  cardId    String
-  authorId  String
-  body      Json // Tiptap JSON (ou texto simples no MVP)
-  mentions  String[] // userIds mencionados (denormalizado pra notificação)
+  id              String    @id @default(cuid())
+  cardId          String
+  authorId        String
+  body            Json // Tiptap JSON (ou texto simples no MVP)
+  mentions        String[] // userIds mencionados (denormalizado pra notificação)
   /// Self-ref pra replies. Threads sao planos: reply-de-reply vira filho
   /// do root (flatten no service). UI renderiza 1 nivel de indentacao.
   /// onDelete: SetNull pra preservar replies quando parent vira soft-delete.
   parentCommentId String?
-  editedAt  DateTime?
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
+  editedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
 
   card        Card              @relation(fields: [cardId], references: [id], onDelete: Cascade)
   author      User              @relation(fields: [authorId], references: [id])
@@ -964,19 +969,19 @@ model CommentReaction {
 // ==================== Activity (audit log) ====================
 
 model Activity {
-  id             String       @id @default(cuid())
-  organizationId String
-  boardId        String?
-  cardId         String?
-  actorId        String?
-  type           ActivityType
-  payload        Json
+  id              String       @id @default(cuid())
+  organizationId  String
+  boardId         String?
+  cardId          String?
+  actorId         String?
+  type            ActivityType
+  payload         Json
   /// Quando a Activity foi criada por uma execução de automação, traz o
   /// AutomationRun correspondente. Null = ação manual de usuário.
   /// Crítico pra o fluxo de undo de aprovação: sabemos diferenciar
   /// "humano interveio" de "automação encadeada disparou".
   automationRunId String?
-  createdAt      DateTime     @default(now())
+  createdAt       DateTime     @default(now())
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id], onDelete: Cascade)
@@ -1041,14 +1046,14 @@ model MessageTemplate {
 /// browser — Mozilla/Google/Apple/etc). Se uma sub virar 410 (Gone) ao
 /// enviar, o registro é removido automaticamente.
 model PushSubscription {
-  id          String   @id @default(cuid())
-  userId      String
-  endpoint    String   @unique
-  p256dh      String // chave pública do cliente (base64url)
-  auth        String // segredo de auth (base64url)
-  userAgent   String? // hint sobre o dispositivo
-  createdAt   DateTime @default(now())
-  lastUsedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String // chave pública do cliente (base64url)
+  auth       String // segredo de auth (base64url)
+  userAgent  String? // hint sobre o dispositivo
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1133,40 +1138,40 @@ model Task {
 /// dispara, a engine cria um AutomationRun e processa a action.
 /// MVP: escopo principal é por LIST. Board/Org são preparação pra Fase 2+.
 model Automation {
-  id             String               @id @default(cuid())
-  organizationId String
-  listId         String?
-  boardId        String?
+  id                   String               @id @default(cuid())
+  organizationId       String
+  listId               String?
+  boardId              String?
   /// Doc 48: escopo de checklist quando trigger=CHECKLIST_COMPLETED.
   /// Mutex com listId pro mesmo registro.
   scopeChecklistId     String?
   /// Doc 48: escopo de item quando trigger=CHECKLIST_ITEM_DONE.
   scopeChecklistItemId String?
-  trigger        AutomationTrigger
+  trigger              AutomationTrigger
   /// Configuração do gatilho. Ex: { minutes: 60 } pra TIME_IN_LIST.
-  triggerConfig  Json                 @default("{}")
-  actionType     AutomationActionType
+  triggerConfig        Json                 @default("{}")
+  actionType           AutomationActionType
   /// Payload específico da action. Ex: { tagIds: ["..."] } pra INSERT_TAGS.
-  actionConfig   Json                 @default("{}")
-  isActive       Boolean              @default(true)
+  actionConfig         Json                 @default("{}")
+  isActive             Boolean              @default(true)
   /// Configuração condicional (AND entre todas). Cada item é um
   /// AutomationCondition (ver dto). Null/undefined = sempre roda.
   /// Avaliado em executeAutomation antes de chamar a action.
-  conditions     Json?
+  conditions           Json?
   /// Label opcional pra o usuário identificar a automação na lista
   /// (ex: "Marcar como urgente quando entrar em A fazer").
-  label          String?
-  createdById    String
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  label                String?
+  createdById          String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  list         List?           @relation(fields: [listId], references: [id], onDelete: Cascade)
-  board        Board?          @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  scopeChecklist     Checklist?     @relation(fields: [scopeChecklistId], references: [id], onDelete: Cascade)
-  scopeChecklistItem ChecklistItem? @relation(fields: [scopeChecklistItemId], references: [id], onDelete: Cascade)
-  createdBy    User            @relation("AutomationCreator", fields: [createdById], references: [id])
-  runs         AutomationRun[]
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  list               List?           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  board              Board?          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  scopeChecklist     Checklist?      @relation(fields: [scopeChecklistId], references: [id], onDelete: Cascade)
+  scopeChecklistItem ChecklistItem?  @relation(fields: [scopeChecklistItemId], references: [id], onDelete: Cascade)
+  createdBy          User            @relation("AutomationCreator", fields: [createdById], references: [id])
+  runs               AutomationRun[]
 
   @@index([organizationId])
   @@index([listId, isActive])
