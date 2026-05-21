@@ -2,10 +2,7 @@ import { z } from 'zod';
 
 const email = z.string().email({ message: 'E-mail inválido.' }).max(255).toLowerCase().trim();
 
-const password = z
-  .string()
-  .min(10, { message: 'A senha deve ter ao menos 10 caracteres.' })
-  .max(128);
+const password = z.string().min(8, { message: 'A senha deve ter ao menos 8 caracteres.' }).max(128);
 
 export const LoginRequestSchema = z.object({
   email,

@@ -30,6 +30,7 @@ import { pushQueries, unsubscribePushById } from '@/lib/queries/push';
 import { useAuthStore } from '@/stores/auth-store';
 import { ApiError } from '@/lib/api-client';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { PasswordStrengthHint } from '@/components/ui/password-strength-hint';
 
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
@@ -309,12 +310,15 @@ function PasswordForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<ChangePasswordRequest>({
     resolver: zodResolver(ChangePasswordRequestSchema),
     defaultValues: { currentPassword: '', newPassword: '' },
   });
+
+  const watchedNewPassword = watch('newPassword');
 
   const mut = useMutation({
     mutationFn: (data: ChangePasswordRequest) => changePassword(data),
@@ -346,12 +350,13 @@ function PasswordForm() {
         />
         <PasswordField
           id="newPassword"
-          label="Nova senha (mín. 10 caracteres)"
+          label="Nova senha (mín. 8 caracteres)"
           show={showNew}
           onToggle={() => setShowNew((v) => !v)}
           error={errors.newPassword?.message}
           register={register('newPassword')}
           autoComplete="new-password"
+          hint={<PasswordStrengthHint password={watchedNewPassword ?? ''} />}
         />
         {error && (
           <p className="bg-danger-subtle text-danger rounded-md px-3 py-2 text-sm">{error}</p>
@@ -400,6 +405,7 @@ function PasswordField({
   error,
   register,
   autoComplete,
+  hint,
 }: {
   id: string;
   label: string;
@@ -408,6 +414,7 @@ function PasswordField({
   error?: string;
   register: ReturnType<ReturnType<typeof useForm<ChangePasswordRequest>>['register']>;
   autoComplete?: string;
+  hint?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -432,6 +439,7 @@ function PasswordField({
         </button>
       </div>
       {error && <p className="text-danger text-xs">{error}</p>}
+      {hint}
     </div>
   );
 }

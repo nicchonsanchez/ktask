@@ -10,6 +10,7 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-
 
 import { Button, Input, Label } from '@ktask/ui';
 import { api } from '@/lib/api-client';
+import { PasswordStrengthHint } from '@/components/ui/password-strength-hint';
 
 const Schema = z
   .object({
@@ -37,11 +38,14 @@ export default function ResetPasswordPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(Schema),
     defaultValues: { newPassword: '', confirm: '' },
   });
+
+  const watchedPassword = watch('newPassword');
 
   async function onSubmit(values: FormValues) {
     setSubmitError(null);
@@ -122,17 +126,30 @@ export default function ResetPasswordPage() {
           {errors.newPassword && (
             <p className="text-danger text-xs">{errors.newPassword.message}</p>
           )}
+          <PasswordStrengthHint password={watchedPassword ?? ''} />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="confirm">Confirmar nova senha</Label>
-          <Input
-            id="confirm"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="new-password"
-            error={!!errors.confirm}
-            {...register('confirm')}
-          />
+          <div className="relative">
+            <Input
+              id="confirm"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              error={!!errors.confirm}
+              className="pr-10"
+              {...register('confirm')}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              className="text-fg-muted hover:text-fg absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           {errors.confirm && <p className="text-danger text-xs">{errors.confirm.message}</p>}
         </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Loader2, ShieldCheck, MailCheck, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, MailCheck, UserPlus } from 'lucide-react';
 import { ORG_ROLE_LABELS } from '@ktask/contracts';
 
 import { Button } from '@ktask/ui';
@@ -16,6 +16,7 @@ import {
 } from '@/lib/queries/members';
 import { ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
+import { PasswordStrengthHint } from '@/components/ui/password-strength-hint';
 
 /**
  * Pagina de convite (doc 34): 3 caminhos.
@@ -181,6 +182,7 @@ function SignupView({
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const signupMut = useMutation({
     mutationFn: () => signupFromInvite({ token, name: name.trim(), password }),
@@ -235,27 +237,50 @@ function SignupView({
 
         <div className="flex flex-col gap-1">
           <label className="text-fg-muted text-[11px] font-medium">Senha (mín. 8 caracteres)</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-            className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 pr-9 text-sm focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              className="text-fg-muted hover:text-fg absolute inset-y-0 right-0 flex w-9 items-center justify-center"
+            >
+              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           {passwordTooShort && (
             <p className="text-danger text-[11px]">Senha precisa de pelo menos 8 caracteres.</p>
           )}
+          <PasswordStrengthHint password={password} />
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-fg-muted text-[11px] font-medium">Confirme a senha</label>
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            autoComplete="new-password"
-            className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 pr-9 text-sm focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              className="text-fg-muted hover:text-fg absolute inset-y-0 right-0 flex w-9 items-center justify-center"
+            >
+              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           {passwordMismatch && <p className="text-danger text-[11px]">As senhas não coincidem.</p>}
         </div>
 
