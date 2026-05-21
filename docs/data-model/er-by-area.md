@@ -275,11 +275,13 @@ Indexes/uniques relevantes:
 
 ## Conteúdo do card {#conteudo-do-card}
 
-Modelos: `Checklist`, `ChecklistItem`, `ChecklistTemplate`, `Comment`, `Attachment`, `TimeEntry`, `Task`.
+Modelos: `Checklist`, `ChecklistItem`, `ChecklistTemplate`, `Comment`, `CommentReaction`, `Attachment`, `TimeEntry`, `Task`.
 
 Decisões críticas:
 
 - **`Comment.body` é Json** (Tiptap) e `Comment.mentions` é `String[]` denormalizado — notificação não precisa parsear JSON.
+- **`Comment.parentCommentId`** (self-FK, `onDelete: SetNull`): respostas. Preserva reply mesmo quando o pai é soft-deletado.
+- **`CommentReaction`**: emoji reactions com `@@unique([commentId, userId, emoji])` — um user só pode usar o mesmo emoji uma vez por comment.
 - **`Attachment.commentId` opcional**: anexo do card direto (`commentId = null`) vs anexo da timeline de um comment.
 - **`Attachment.embedded`**: true = imagem dentro do corpo do Comment/descrição, não aparece na lista visual de anexos.
 - **`Card.coverAttachmentId`**: 1:N reverso (um Attachment pode ser cover de muitos cards em tese, na prática 1).
@@ -297,6 +299,9 @@ erDiagram
     User         ||--o{ ChecklistTemplate  : "createdBy"
     Card         ||--o{ Comment            : "tem"
     User         ||--o{ Comment            : "autor"
+    Comment      ||--o{ CommentReaction    : "tem"
+    User         ||--o{ CommentReaction    : "reage"
+    Comment      ||--o{ Comment            : "parentCommentId (reply)"
     Card         ||--o{ Attachment         : "tem"
     Comment      ||--o{ Attachment         : "anexa (nullable)"
     User         ||--o{ Attachment         : "uploader"
@@ -336,10 +341,18 @@ erDiagram
         string id PK
         string cardId FK
         string authorId FK
+        string parentCommentId FK "nullable, self-FK SetNull"
         json   body "Tiptap JSON"
         string mentions "string[] denorm userIds"
         datetime editedAt "nullable"
         datetime deletedAt "nullable"
+    }
+    CommentReaction {
+        string id PK
+        string commentId FK
+        string userId FK
+        string emoji
+        datetime createdAt
     }
     Attachment {
         string id PK
@@ -384,6 +397,7 @@ Indexes relevantes:
 
 - `ChecklistItem @@index([assigneeId, dueDate, isDone])` — query da home pessoal.
 - `Comment @@index([cardId, createdAt])` — timeline.
+- `CommentReaction @@index([commentId])` + `@@unique([commentId, userId, emoji])` — agrupamento + dedup.
 - `Attachment @@index([cardId])`, `@@index([commentId])`.
 - `TimeEntry @@index([userId, endedAt])` — achar entry ativa do user em O(1).
 - `Task @@index([organizationId, assigneeId, isDone])`, `@@index([organizationId, dueDate])`.
@@ -614,6 +628,42 @@ Indexes relevantes:
 - `Activity @@index([organizationId, createdAt])`, `@@index([cardId, createdAt])`, `@@index([boardId, createdAt])`, `@@index([automationRunId])` — feed e undo.
 - `Notification @@index([userId, isRead, createdAt])` — sino do header.
 - `MessageTemplate @@index([organizationId, type])`.
+
+---
+
+## IDP / Federação {#idp-federacao}
+
+Modelos: `ServiceProvider`.
+
+Subsistema **global** (sem `organizationId`) gerido pelo admin de plataforma (`User.isPlatformAdmin`). Cada row é um Service Provider externo (ex: Ogma) que recebe webhooks de eventos sensíveis disparados pelo KTask.
+
+Decisões críticas:
+
+- **Sem `organizationId`**: deliberado. Federação IdP é responsabilidade do KTask como Identity Provider — quem decide quais SPs existem é o admin global, não cada Org. Se isso virar self-service por Org, adicionar FK depois.
+- **`slug @unique`**: identificador estável usado em logs e nas URLs internas (`ogma`, `creatyze-atendimento`).
+- **`secretHash` (SHA-256)**: plaintext nunca é armazenado. Mostrado 1 vez ao admin na criação. Verificação HMAC quando o webhook é assinado.
+- **`escopo String[]`**: lista de eventos assinados pelo SP. Hoje: `usuario.email_alterado`, `usuario.senha_alterada`, `usuario.desativado`. Sem enum porque eventos novos não exigem migration — só código novo no dispatcher.
+- **`ativo Boolean`**: kill switch sem deletar. Quando false, o dispatcher pula esse SP.
+
+```mermaid
+erDiagram
+    ServiceProvider {
+        string id PK
+        string nome
+        string slug "@unique"
+        string webhookUrl
+        string secretHash "SHA-256 do HMAC secret"
+        string escopo "String[] eventos assinados"
+        boolean ativo
+        string notas "nullable"
+        datetime criadoEm
+        datetime atualizadoEm
+    }
+```
+
+Sem relação direta com nenhum outro model — é uma tabela de configuração. Os webhooks dispatchados são fire-and-forget; sucesso/falha de entrega fica em logs do API, não no banco.
+
+Plano completo da federação em [tarefas-md/51-federacao-idp-para-ogma.md](../../tarefas-md/51-federacao-idp-para-ogma.md).
 
 ---
 
