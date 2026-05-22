@@ -363,6 +363,12 @@ export function CreateAutomationForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        // stopPropagation pra nao vazar submit pra forms ancestrais —
+        // ChecklistAutomationDialog em modo draft eh renderizado dentro
+        // de ChecklistItemRow que vive dentro de OUTRO CreateAutomationForm
+        // (automacao-pai). Sem isso, clicar "Aplicar mudancas" no nested
+        // dispara tambem o submit do externo e fecha o dialog inteiro.
+        e.stopPropagation();
         if (!canSubmit) return;
         createMut.mutate();
       }}
