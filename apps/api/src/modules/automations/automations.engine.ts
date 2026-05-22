@@ -477,11 +477,13 @@ export class AutomationsEngine {
     const title = config.checklistTitle?.trim() || 'Tarefas';
 
     // Procura checklist com mesmo título no card. Se não existir, cria.
-    // Carrega items com ID + text — precisamos do ID pra anexar
-    // sub-automation em items pre-existentes (idempotente).
+    // Carrega items com ID + text + isDone — precisamos do ID pra anexar
+    // sub-automation em items pre-existentes (idempotente) e do isDone
+    // pra decidir se "ressuscita" items concluidos quando o card volta
+    // pra coluna (ver bloco mais abaixo).
     let checklist = await this.prisma.checklist.findFirst({
       where: { cardId, title },
-      include: { items: { select: { id: true, text: true } } },
+      include: { items: { select: { id: true, text: true, isDone: true } } },
     });
     if (!checklist) {
       const last = await this.prisma.checklist.findFirst({
@@ -532,19 +534,19 @@ export class AutomationsEngine {
     // anexada ao item ja existente caso ele nao tenha uma ainda.
     // Resolve cenario "configurei itemAutomation depois e o item ja
     // estava criado de execucao anterior".
-    const existingItemsByText = new Map<string, string>(); // text-lower → itemId
+    const existingItemsByText = new Map<string, { id: string; isDone: boolean }>();
     for (const it of checklist.items ?? []) {
-      existingItemsByText.set(it.text.trim().toLowerCase(), it.id);
+      existingItemsByText.set(it.text.trim().toLowerCase(), { id: it.id, isDone: it.isDone });
     }
 
     // Anexa sub-automation a items existentes (1x cada)
     if (cardCtx) {
       for (const cfgItem of parsedItems) {
         if (!isValidNestedAutomation(cfgItem.itemAutomation, 'item')) continue;
-        const existingItemId = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
-        if (!existingItemId) continue;
+        const existing = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
+        if (!existing) continue;
         const alreadyAttached = await this.prisma.automation.findFirst({
-          where: { scopeChecklistItemId: existingItemId },
+          where: { scopeChecklistItemId: existing.id },
           select: { id: true },
         });
         if (alreadyAttached) continue;
@@ -552,11 +554,30 @@ export class AutomationsEngine {
           parent: automation,
           cfg: cfgItem.itemAutomation,
           scope: 'item',
-          targetId: existingItemId,
+          targetId: existing.id,
           boardId: cardCtx.boardId,
           organizationId: cardCtx.organizationId,
         });
       }
+    }
+
+    // Ressuscita items existentes que ja estavam concluidos. Caso de uso:
+    // card sai da coluna -> volta. A automacao roda de novo; sem isso, ela
+    // pulava silenciosamente. Limpa doneAt/doneById tambem pra zerar
+    // tracking. Notifica o assignee atual se houver (mesmo padrao de
+    // ASSIGNED do checklists.service).
+    const resurrectedIds: string[] = [];
+    for (const cfgItem of parsedItems) {
+      const existing = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
+      if (!existing || !existing.isDone) continue;
+      await this.prisma.checklistItem.update({
+        where: { id: existing.id },
+        data: { isDone: false, doneAt: null, doneById: null },
+      });
+      resurrectedIds.push(existing.id);
+    }
+    if (resurrectedIds.length > 0) {
+      await this.notifyAssigneesOfActiveItems(automation, cardId, resurrectedIds, 'resurrected');
     }
 
     const itemsToCreate = parsedItems.filter(
@@ -600,14 +621,24 @@ export class AutomationsEngine {
       basePos = computeInsertPosition(basePos, null);
     }
 
+    // Trackeia ids dos items recem-criados pra notificar assignees em
+    // batch depois (consistente entre os 2 caminhos abaixo).
+    const createdIds: string[] = [];
+
     if (!itemsHaveAutomation || !cardCtx) {
-      await this.prisma.checklistItem.createMany({ data: rows });
+      // createManyAndReturn (Prisma 6+) — devolve IDs sem refetch.
+      const justCreated = await this.prisma.checklistItem.createManyAndReturn({
+        data: rows,
+        select: { id: true },
+      });
+      createdIds.push(...justCreated.map((i) => i.id));
     } else {
       // Caminho com sub-automacao por item — 1 INSERT por item pra ter ID.
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]!;
         const itemCfg = itemsToCreate[i]!;
         const created = await this.prisma.checklistItem.create({ data: row });
+        createdIds.push(created.id);
         if (isValidNestedAutomation(itemCfg.itemAutomation, 'item')) {
           await this.createNestedChecklistAutomation({
             parent: automation,
@@ -621,7 +652,67 @@ export class AutomationsEngine {
       }
     }
 
+    if (createdIds.length > 0) {
+      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
+    }
+
     return { checklistId: checklist.id, itemsAdded: rows.length, itemsSkipped };
+  }
+
+  /**
+   * Notifica assignees de items de checklist criados/ressuscitados via
+   * automacao. Mesmo padrao do checklists.service.notifyIfOther: pula se o
+   * destinatario eh o proprio createdById da automacao. Fire-and-forget —
+   * erro nao bloqueia a execucao.
+   *
+   * `mode='created'`: items recem-criados. `mode='resurrected'`: items que
+   * estavam concluidos e voltaram pra pendente (caso do card que volta pra
+   * coluna da automacao). Texto diferente pra cada caso pro user entender.
+   */
+  private async notifyAssigneesOfActiveItems(
+    automation: Automation,
+    cardId: string,
+    itemIds: string[],
+    mode: 'created' | 'resurrected',
+  ): Promise<void> {
+    try {
+      const [card, items] = await Promise.all([
+        this.prisma.card.findUnique({
+          where: { id: cardId },
+          select: { title: true, organizationId: true },
+        }),
+        this.prisma.checklistItem.findMany({
+          where: { id: { in: itemIds }, assigneeId: { not: null } },
+          select: { text: true, assigneeId: true },
+        }),
+      ]);
+      if (!card || items.length === 0) return;
+
+      const rows = items
+        .filter((it) => it.assigneeId && it.assigneeId !== automation.createdById)
+        .map((it) => ({
+          userId: it.assigneeId as string,
+          organizationId: card.organizationId,
+          type: 'ASSIGNED' as const,
+          title: `Tarefa atribuída: ${it.text}`,
+          body:
+            mode === 'created'
+              ? `Você foi atribuído a uma tarefa no card "${card.title}".`
+              : `Uma tarefa sua voltou a ficar pendente no card "${card.title}".`,
+          entityType: 'card',
+          entityId: cardId,
+        }));
+
+      if (rows.length > 0) {
+        await this.prisma.notification.createMany({ data: rows, skipDuplicates: true });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[notifyAssignees] falhou pra automation=${automation.id} card=${cardId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -1264,9 +1355,15 @@ export class AutomationsEngine {
       basePos = computeInsertPosition(basePos, null);
     }
 
+    const createdIds: string[] = [];
+
     if (!itemsHaveAutomation || !cardCtx) {
-      // Caminho rapido: createMany quando nao ha itemAutomation pra anexar
-      await this.prisma.checklistItem.createMany({ data: rows });
+      // Caminho rapido: createManyAndReturn (Prisma 6+) devolve IDs.
+      const justCreated = await this.prisma.checklistItem.createManyAndReturn({
+        data: rows,
+        select: { id: true },
+      });
+      createdIds.push(...justCreated.map((i) => i.id));
     } else {
       // Caminho lento (1 INSERT por item) — necessario pra obter os IDs e
       // criar as sub-automacoes. Aceitavel porque checklists tipicamente
@@ -1276,6 +1373,7 @@ export class AutomationsEngine {
         const row = rows[i]!;
         const itemCfg = parsedItems[i]!;
         const created = await this.prisma.checklistItem.create({ data: row });
+        createdIds.push(created.id);
         if (isValidNestedAutomation(itemCfg.itemAutomation, 'item')) {
           await this.createNestedChecklistAutomation({
             parent: automation,
@@ -1287,6 +1385,10 @@ export class AutomationsEngine {
           });
         }
       }
+    }
+
+    if (createdIds.length > 0) {
+      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
     }
 
     return { checklistId: checklist.id, itemsAdded: rows.length };
