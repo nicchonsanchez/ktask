@@ -116,6 +116,13 @@ services:
       EVOLUTION_DEFAULT_URL: ${EVOLUTION_DEFAULT_URL:-}
       EVOLUTION_DEFAULT_API_KEY: ${EVOLUTION_DEFAULT_API_KEY:-}
       EVOLUTION_DEFAULT_INSTANCE: ${EVOLUTION_DEFAULT_INSTANCE:-}
+      # Web Push (VAPID). Sem essas chaves PushService nao habilita push e
+      # endpoint /push/vapid-public-key retorna 503. Gerar com:
+      #   docker exec ktask-api node -e "console.log(require('web-push').generateVAPIDKeys())"
+      # Setar VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY em prod.env + reapply compose.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # URL pública do frontend — usada em links que saem por WhatsApp
       # (aprovações, notificações). Se não setado vira localhost:3000 e
       # links saem quebrados.
