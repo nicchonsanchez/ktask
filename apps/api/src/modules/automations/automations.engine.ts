@@ -13,6 +13,7 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
 import { createCardWithPresence } from '@/modules/cards/helpers/create-card-with-presence';
 import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 import {
   EVENT_NAMES,
   type CardCreatedPayload,
@@ -65,6 +66,7 @@ export class AutomationsEngine {
     private readonly events: EventEmitter2,
     private readonly whatsapp: WhatsAppHelper,
     private readonly statusSync: CardStatusSyncService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -704,7 +706,10 @@ export class AutomationsEngine {
         }));
 
       if (rows.length > 0) {
-        await this.prisma.notification.createMany({ data: rows, skipDuplicates: true });
+        // Usa NotificationsService.createMany em vez de prisma direto — alem
+        // do INSERT, dispara push em batch (fire-and-forget) via PushService.
+        // Equipara o caminho automatico ao caminho manual (ChecklistsService).
+        await this.notifications.createMany(rows);
       }
     } catch (err) {
       this.logger.warn(
