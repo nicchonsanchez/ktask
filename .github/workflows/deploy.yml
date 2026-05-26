@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Aguarda job "Lint, Typecheck, Test" do workflow CI
-        uses: lewagon/wait-on-check-action@v1.3.4
+        uses: lewagon/wait-on-check-action@v1.7.0
         with:
           ref: ${{ github.sha }}
           check-name: 'Lint, Typecheck, Test'
