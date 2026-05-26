@@ -658,6 +658,18 @@ export class AutomationsEngine {
       await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
     }
 
+    // Emite CARD_UPDATED se o card mudou (items novos OU ressuscitados) pra
+    // RealtimeGateway fazer broadcast Socket.IO. Sem isso o frontend so
+    // ve a mudanca apos F5. cardCtx tem boardId/orgId necessarios.
+    if (cardCtx && (rows.length > 0 || resurrectedIds.length > 0)) {
+      this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+        boardId: cardCtx.boardId,
+        organizationId: cardCtx.organizationId,
+        actorId: automation.createdById,
+        cardId,
+      });
+    }
+
     return { checklistId: checklist.id, itemsAdded: rows.length, itemsSkipped };
   }
 
@@ -1394,6 +1406,17 @@ export class AutomationsEngine {
 
     if (createdIds.length > 0) {
       await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
+    }
+
+    // Emite CARD_UPDATED pra RealtimeGateway fazer broadcast Socket.IO —
+    // frontend invalida cache e re-renderiza sem precisar de F5.
+    if (cardCtx && rows.length > 0) {
+      this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+        boardId: cardCtx.boardId,
+        organizationId: cardCtx.organizationId,
+        actorId: automation.createdById,
+        cardId,
+      });
     }
 
     return { checklistId: checklist.id, itemsAdded: rows.length };
