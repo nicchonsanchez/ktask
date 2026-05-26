@@ -194,7 +194,7 @@ export function DeleteBoardDialog({
           )}
         </div>
 
-        <div className="border-border/60 bg-bg-subtle/50 flex justify-end gap-2 border-t px-5 py-3">
+        <div className="border-border/60 bg-bg-subtle/50 flex flex-col-reverse gap-2 border-t px-5 py-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={() => onOpenChange(false)}

@@ -19,7 +19,7 @@ import { UserAvatar } from '@/components/user-avatar';
 import { TemplateVarsBar } from './template-vars-bar';
 import { MessageTemplateButtons } from './message-template-buttons';
 
-type Mode = 'user' | 'phone-existing' | 'phone-new';
+type Mode = 'user' | 'phone-new';
 
 interface ReviewerDraft {
   /** ID local pra remoção. */
@@ -412,8 +412,8 @@ export function RequestApprovalDialog({
                 Notificar por WhatsApp
               </span>
               <span className="text-fg-muted text-xs leading-relaxed">
-                Externos sempre recebem por WhatsApp. Revisores internos recebem se tiverem opt-in
-                ativado no perfil.
+                Externos recebem por WhatsApp. Membros do workspace também recebem se tiverem
+                telefone cadastrado no perfil.
               </span>
             </span>
           </label>
@@ -422,7 +422,7 @@ export function RequestApprovalDialog({
             <p className="bg-danger-subtle text-danger rounded-md px-3 py-2 text-xs">{error}</p>
           )}
 
-          <div className="border-border flex items-center justify-end gap-2 border-t pt-3">
+          <div className="border-border flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
@@ -537,10 +537,14 @@ function LabelMultiSelect({
 }
 
 /**
- * Picker com 3 modos:
- *   1. user: busca por nome de membro da Org
- *   2. phone-existing: busca em nome dos membros e usa o `phone` deles
- *   3. phone-new: digita um telefone avulso + nome de exibição
+ * Picker com 2 modos:
+ *   1. user: busca por nome/email de membro da Org
+ *   2. phone-new: digita um telefone avulso + nome de exibição (externo)
+ *
+ * Quando o telefone digitado em phone-new bate com o `phone` de algum membro,
+ * o reviewer é promovido pra interno automaticamente (`userId`). Garante que
+ * o membro veja os botões Aprovar/Reprovar dentro do app — só usar telefone
+ * cria reviewer externo, que só pode aprovar via link público no WhatsApp.
  */
 function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
   const [mode, setMode] = useState<Mode>('user');
@@ -561,18 +565,49 @@ function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
       .slice(0, 8);
   }, [membersQ.data, query]);
 
-  const filteredWithPhone = useMemo(() => {
-    return (membersQ.data ?? [])
-      .filter((m) => m.user.phone)
-      .filter((m) => {
-        const q = query.trim().toLowerCase();
-        if (!q) return true;
-        return (
-          m.user.name.toLowerCase().includes(q) || (m.user.phone ?? '').toLowerCase().includes(q)
-        );
-      })
-      .slice(0, 8);
-  }, [membersQ.data, query]);
+  // Membro do workspace cujo phone bate com o digitado em phone-new. Quando
+  // encontrado, o submit vira "Vincular como membro" e o reviewer é gravado
+  // como interno (userId) em vez de externo.
+  const matchedMember = useMemo(() => {
+    if (mode !== 'phone-new') return null;
+    if (externalPhone.length < 10) return null;
+    return (
+      (membersQ.data ?? []).find(
+        (m) => (m.user.phone ?? '').replace(/\D/g, '') === externalPhone,
+      ) ?? null
+    );
+  }, [mode, externalPhone, membersQ.data]);
+
+  function submitPhoneNew() {
+    if (!/^\d{10,15}$/.test(externalPhone)) return;
+    if (matchedMember) {
+      onAdd({
+        key: `user-${matchedMember.userId}`,
+        data: { userId: matchedMember.userId },
+        display: {
+          name: matchedMember.user.name,
+          subtitle: matchedMember.user.email,
+          avatarUrl: matchedMember.user.avatarUrl,
+        },
+      });
+    } else {
+      if (externalName.trim().length === 0) return;
+      onAdd({
+        key: `new-${externalPhone}`,
+        data: { phone: externalPhone, externalName: externalName.trim() },
+        display: {
+          name: externalName.trim(),
+          subtitle: externalPhone,
+          phone: externalPhone,
+        },
+      });
+    }
+    setExternalName('');
+    setExternalPhone('');
+  }
+
+  const phoneNewSubmitDisabled =
+    !/^\d{10,15}$/.test(externalPhone) || (!matchedMember && externalName.trim().length === 0);
 
   return (
     <div className="border-border flex flex-col gap-2 rounded-md border p-3">
@@ -581,62 +616,38 @@ function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
           Membro
         </ModeBtn>
         <ModeBtn
-          active={mode === 'phone-existing'}
-          onClick={() => setMode('phone-existing')}
-          icon={<Phone size={12} />}
-        >
-          WhatsApp de membro
-        </ModeBtn>
-        <ModeBtn
           active={mode === 'phone-new'}
           onClick={() => setMode('phone-new')}
-          icon={<MessageCircle size={12} />}
+          icon={<Phone size={12} />}
         >
           WhatsApp avulso
         </ModeBtn>
       </div>
 
-      {(mode === 'user' || mode === 'phone-existing') && (
+      {mode === 'user' && (
         <>
           <input
             type="text"
-            placeholder={
-              mode === 'user' ? 'Buscar por nome ou email...' : 'Buscar membros com WhatsApp...'
-            }
+            placeholder="Buscar por nome ou email..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2"
           />
           <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
-            {(mode === 'user' ? filteredMembers : filteredWithPhone).map((m) => (
+            {filteredMembers.map((m) => (
               <li key={m.userId}>
                 <button
                   type="button"
                   onClick={() =>
-                    onAdd(
-                      mode === 'user'
-                        ? {
-                            key: `user-${m.userId}`,
-                            data: { userId: m.userId },
-                            display: {
-                              name: m.user.name,
-                              subtitle: m.user.email,
-                              avatarUrl: m.user.avatarUrl,
-                            },
-                          }
-                        : {
-                            key: `phone-${m.user.phone}`,
-                            data: {
-                              phone: m.user.phone!,
-                              externalName: m.user.name,
-                            },
-                            display: {
-                              name: m.user.name,
-                              subtitle: m.user.phone!,
-                              phone: m.user.phone!,
-                            },
-                          },
-                    )
+                    onAdd({
+                      key: `user-${m.userId}`,
+                      data: { userId: m.userId },
+                      display: {
+                        name: m.user.name,
+                        subtitle: m.user.email,
+                        avatarUrl: m.user.avatarUrl,
+                      },
+                    })
                   }
                   className="hover:bg-bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
                 >
@@ -648,19 +659,13 @@ function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
                   />
                   <span className="min-w-0 flex-1 truncate">
                     <span className="font-medium">{m.user.name}</span>
-                    <span className="text-fg-muted ml-1.5 text-xs">
-                      · {mode === 'user' ? m.user.email : m.user.phone}
-                    </span>
+                    <span className="text-fg-muted ml-1.5 text-xs">· {m.user.email}</span>
                   </span>
                 </button>
               </li>
             ))}
-            {(mode === 'user' ? filteredMembers : filteredWithPhone).length === 0 && (
-              <p className="text-fg-muted py-3 text-center text-xs">
-                {mode === 'phone-existing'
-                  ? 'Nenhum membro com WhatsApp cadastrado.'
-                  : 'Nenhum membro encontrado.'}
-              </p>
+            {filteredMembers.length === 0 && (
+              <p className="text-fg-muted py-3 text-center text-xs">Nenhum membro encontrado.</p>
             )}
           </ul>
         </>
@@ -670,10 +675,15 @@ function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
         <div className="flex flex-col gap-2">
           <input
             type="text"
-            placeholder="Nome do revisor (ex: João - Cliente XYZ)"
+            placeholder={
+              matchedMember
+                ? `Nome (preenchido com "${matchedMember.user.name}")`
+                : 'Nome do revisor (ex: João - Cliente XYZ)'
+            }
             value={externalName}
             onChange={(e) => setExternalName(e.target.value)}
-            className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2"
+            disabled={!!matchedMember}
+            className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <input
             type="text"
@@ -683,27 +693,35 @@ function ReviewerPicker({ onAdd }: { onAdd: (r: ReviewerDraft) => void }) {
             onChange={(e) => setExternalPhone(e.target.value.replace(/\D/g, ''))}
             className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2"
           />
+
+          {matchedMember && (
+            <div className="border-primary/40 bg-primary/5 flex items-center gap-2 rounded-md border p-2">
+              <UserAvatar
+                name={matchedMember.user.name}
+                userId={matchedMember.userId}
+                avatarUrl={matchedMember.user.avatarUrl}
+                size="sm"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-fg text-xs leading-snug">
+                  <CheckCircle2
+                    size={11}
+                    className="text-primary mr-1 inline-block align-text-bottom"
+                  />
+                  Esse número é do <span className="font-medium">{matchedMember.user.name}</span> —
+                  será vinculado como membro pra ele(a) ver os botões Aprovar/Reprovar no app.
+                </p>
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={() => {
-              if (externalName.trim().length === 0) return;
-              if (!/^\d{10,15}$/.test(externalPhone)) return;
-              onAdd({
-                key: `new-${externalPhone}`,
-                data: { phone: externalPhone, externalName: externalName.trim() },
-                display: {
-                  name: externalName.trim(),
-                  subtitle: externalPhone,
-                  phone: externalPhone,
-                },
-              });
-              setExternalName('');
-              setExternalPhone('');
-            }}
-            disabled={externalName.trim().length === 0 || !/^\d{10,15}$/.test(externalPhone)}
+            onClick={submitPhoneNew}
+            disabled={phoneNewSubmitDisabled}
             className="bg-bg-muted hover:bg-bg-emphasis self-start rounded-md px-3 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Adicionar revisor
+            {matchedMember ? 'Vincular como membro' : 'Adicionar revisor'}
           </button>
         </div>
       )}

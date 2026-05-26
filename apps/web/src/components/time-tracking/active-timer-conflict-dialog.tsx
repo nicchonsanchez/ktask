@@ -55,7 +55,7 @@ export function ActiveTimerConflictDialog() {
 
   return (
     <Dialog open onOpenChange={(open) => !open && closeConflict()}>
-      <DialogContent hideClose className="max-w-[460px] gap-0 overflow-hidden p-0">
+      <DialogContent hideClose className="max-w-[520px] gap-0 overflow-hidden p-0">
         <div className="flex items-start gap-3 px-6 pb-2 pt-6">
           <span className="bg-warning-subtle text-warning inline-flex size-9 shrink-0 items-center justify-center rounded-full">
             <AlertCircle size={18} />
@@ -116,12 +116,15 @@ export function ActiveTimerConflictDialog() {
           )}
         </div>
 
-        <div className="border-border/60 bg-bg-subtle/40 flex items-center justify-end gap-2 border-t px-6 py-3">
+        {/* Footer: empilha vertical em mobile, lado-a-lado em sm+. Botoes
+            podem ter texto longo (PT-BR) — sem flex-col em telas pequenas
+            os botoes overflowam pra direita e somem (bug visto em 2026-05). */}
+        <div className="border-border/60 bg-bg-subtle/40 flex flex-col-reverse gap-2 border-t px-6 py-3 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={() => stopAndStartMut.mutate()}
             disabled={stopAndStartMut.isPending}
-            className="text-fg-muted hover:text-fg hover:bg-bg-muted inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[13px] font-medium transition-colors disabled:opacity-50"
+            className="text-fg-muted hover:text-fg hover:bg-bg-muted inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors disabled:opacity-50"
           >
             {stopAndStartMut.isPending && <Loader2 size={13} className="animate-spin" />}
             Parar e iniciar no novo
@@ -130,7 +133,7 @@ export function ActiveTimerConflictDialog() {
             type="button"
             onClick={() => closeConflict()}
             disabled={stopAndStartMut.isPending}
-            className="bg-primary text-primary-fg hover:bg-primary-hover whitespace-nowrap rounded-md px-4 py-2 text-[13px] font-semibold shadow-sm transition-all hover:shadow disabled:opacity-50"
+            className="bg-primary text-primary-fg hover:bg-primary-hover rounded-md px-4 py-2 text-[13px] font-semibold shadow-sm transition-all hover:shadow disabled:opacity-50"
           >
             Manter cronômetro atual
           </button>

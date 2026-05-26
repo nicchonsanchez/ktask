@@ -267,7 +267,7 @@ export function CreateChildCardDialog({
           )}
 
           {/* Botões */}
-          <div className="border-border/70 mt-1 flex items-center justify-end gap-3 border-t pt-3">
+          <div className="border-border/70 mt-1 flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
             <button
               type="button"
               onClick={() => submit(true)}
