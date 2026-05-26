@@ -47,7 +47,7 @@ export class CommentsService {
 
   async create(userId: string, tenant: TenantContext, input: CreateCommentInput) {
     const card = await this.getCardOrThrow(input.cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'COMMENTER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'COMMENTER');
 
     const mentionUserIds = await this.resolveMentions(tenant.organizationId, input.plainText);
 
@@ -194,7 +194,7 @@ export class CommentsService {
     }
     if (existing.authorId !== userId) {
       // Modelo unificado: autor sempre pode; ou EDITOR+ no board (MEMBER ou superior).
-      await this.access.assertAccess(userId, existing.card.boardId, tenant, 'EDITOR');
+      await this.access.assertCardAccess(userId, existing.card.id, tenant, 'EDITOR');
     }
     if (existing.deletedAt) {
       throw new BadRequestException('Comentário já foi excluído.');
@@ -236,7 +236,7 @@ export class CommentsService {
     }
     if (existing.authorId !== userId) {
       // Modelo unificado: autor sempre pode; ou EDITOR+ no board (MEMBER ou superior).
-      await this.access.assertAccess(userId, existing.card.boardId, tenant, 'EDITOR');
+      await this.access.assertCardAccess(userId, existing.card.id, tenant, 'EDITOR');
     }
 
     await this.prisma.comment.update({
@@ -283,7 +283,7 @@ export class CommentsService {
     if (comment.deletedAt) {
       throw new BadRequestException('Comentário foi removido.');
     }
-    await this.access.assertAccess(userId, comment.card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, comment.card.id, tenant, 'VIEWER');
 
     const existing = await this.prisma.commentReaction.findUnique({
       where: { commentId_userId_emoji: { commentId, userId, emoji } },

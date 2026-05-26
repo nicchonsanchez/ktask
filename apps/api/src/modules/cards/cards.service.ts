@@ -148,7 +148,7 @@ export class CardsService {
 
   async getOne(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'VIEWER');
     const result = await this.prisma.card.findUnique({
       where: { id: cardId },
       include: {
@@ -237,7 +237,7 @@ export class CardsService {
 
   async update(userId: string, tenant: TenantContext, cardId: string, input: UpdateCardInput) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     // Troca de líder: valida que o user alvo é membro da Org e registra activity específica
     const leadChanged = input.leadId !== undefined && input.leadId !== card.leadId;
@@ -532,7 +532,7 @@ export class CardsService {
 
   async move(userId: string, tenant: TenantContext, cardId: string, input: MoveCardInput) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const destList = await this.prisma.list.findUnique({ where: { id: input.toListId } });
     if (!destList || destList.boardId !== card.boardId) {
@@ -615,7 +615,7 @@ export class CardsService {
 
   async archive(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const updated = await this.prisma.card.update({
       where: { id: cardId },
@@ -645,7 +645,7 @@ export class CardsService {
 
   async restore(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
     return this.prisma.card.update({
       where: { id: cardId },
       data: { isArchived: false },
@@ -659,7 +659,7 @@ export class CardsService {
    */
   async deletePermanent(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     await this.prisma.card.delete({ where: { id: cardId } });
 
@@ -907,7 +907,7 @@ export class CardsService {
    */
   async getFamily(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'VIEWER');
 
     const include = {
       list: { select: { id: true, name: true, isArchived: true } },
@@ -1010,7 +1010,7 @@ export class CardsService {
     if (!parent || parent.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card pai não encontrado.');
     }
-    await this.access.assertAccess(userId, parent.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, parent.id, tenant, 'EDITOR');
 
     let destBoardId = parent.boardId;
     let destListId = parent.listId;
@@ -1157,7 +1157,7 @@ export class CardsService {
     newParentId: string | null,
   ) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     if (newParentId) {
       if (newParentId === cardId) {
@@ -1232,7 +1232,7 @@ export class CardsService {
 
   async complete(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     if (card.completedAt) {
       return card; // idempotente
@@ -1275,7 +1275,7 @@ export class CardsService {
 
   async uncomplete(userId: string, tenant: TenantContext, cardId: string, toListId?: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     if (!card.completedAt) {
       return card; // idempotente
@@ -1345,7 +1345,7 @@ export class CardsService {
 
   async assignMember(userId: string, tenant: TenantContext, cardId: string, memberUserId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     // Verifica se memberUserId é da Org
     const membership = await this.prisma.membership.findUnique({
@@ -1401,7 +1401,7 @@ export class CardsService {
     memberUserId: string,
   ) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     await this.prisma.cardMember
       .delete({ where: { cardId_userId: { cardId, userId: memberUserId } } })
@@ -1423,7 +1423,7 @@ export class CardsService {
 
   async addLabel(userId: string, tenant: TenantContext, cardId: string, labelId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const label = await this.prisma.label.findUnique({ where: { id: labelId } });
     if (!label || label.organizationId !== tenant.organizationId) {
@@ -1455,7 +1455,7 @@ export class CardsService {
 
   async removeLabel(userId: string, tenant: TenantContext, cardId: string, labelId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     await this.prisma.cardLabel
       .delete({ where: { cardId_labelId: { cardId, labelId } } })
@@ -1488,7 +1488,7 @@ export class CardsService {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
     // Acesso ao card = acesso a pelo menos 1 board onde ele tem presença.
     // Como check inicial, basta exigir VIEWER no board primário.
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'VIEWER');
 
     const presences = await this.prisma.cardPresence.findMany({
       where: { cardId, removedAt: null },
@@ -1572,7 +1572,7 @@ export class CardsService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'VIEWER');
     if (!canViewCard(card, userId, tenant.role)) {
       throw new NotFoundException('Card não encontrado.');
     }
@@ -1610,7 +1610,7 @@ export class CardsService {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
     // Precisa permissão de EDITOR no board origem (pra "saber" o card)
     // E EDITOR no board destino (pra "incluir" o card lá).
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
     await this.access.assertAccess(userId, input.boardId, tenant, 'EDITOR');
 
     if (input.boardId === card.boardId) {

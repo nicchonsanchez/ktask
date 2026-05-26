@@ -156,7 +156,7 @@ function buildFlat(result: SearchResult | undefined): FlatItem[] {
       type: 'card',
       title: c.title,
       subtitle: `${c.boardName} · ${c.listName}`,
-      href: `/b/${c.boardId}?card=${c.id}`,
+      href: `?card=${c.id}`,
       data: c,
     });
   }
@@ -219,7 +219,7 @@ function SearchSections({
                     id: c.id,
                     type: 'card',
                     title: c.title,
-                    href: `/b/${c.boardId}?card=${c.id}`,
+                    href: `?card=${c.id}`,
                     data: c,
                   })
                 }

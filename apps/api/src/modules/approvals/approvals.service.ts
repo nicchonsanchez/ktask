@@ -118,7 +118,7 @@ export class ApprovalsService {
     if (card.isArchived) {
       throw new BadRequestException('Card arquivado — não pode pedir aprovação.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     // Não criar duas aprovações pendentes pra mesmo card simultaneamente —
     // simplifica UI e evita race entre decisões concorrentes.
@@ -128,6 +128,31 @@ export class ApprovalsService {
     });
     if (pending) {
       throw new BadRequestException('Já existe um pedido de aprovação pendente neste card.');
+    }
+
+    // Normaliza reviewers phone-only: se o telefone bate com o `phone` de um
+    // membro do workspace, promove pra interno (userId). Garante que membros
+    // sempre vejam botões Aprovar/Reprovar no app mesmo quando o operador
+    // digitou o telefone deles em vez de selecionar na lista de membros.
+    const phoneOnlyPhones = body.reviewers
+      .filter((r) => !r.userId && r.phone)
+      .map((r) => r.phone as string);
+    if (phoneOnlyPhones.length > 0) {
+      const matchedUsers = await this.prisma.user.findMany({
+        where: {
+          phone: { in: phoneOnlyPhones },
+          memberships: { some: { organizationId: tenant.organizationId } },
+        },
+        select: { id: true, phone: true },
+      });
+      const userIdByPhone = new Map(
+        matchedUsers.filter((u) => u.phone).map((u) => [u.phone as string, u.id]),
+      );
+      body.reviewers = body.reviewers.map((r) => {
+        if (r.userId || !r.phone) return r;
+        const userId = userIdByPhone.get(r.phone);
+        return userId ? { userId } : r;
+      });
     }
 
     // Valida userIds dos reviewers internos: precisa ser membro da Org.
@@ -1522,7 +1547,7 @@ export class ApprovalsService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, cardId, tenant, 'VIEWER');
 
     return this.prisma.cardApproval.findMany({
       where: { cardId, organizationId: tenant.organizationId },

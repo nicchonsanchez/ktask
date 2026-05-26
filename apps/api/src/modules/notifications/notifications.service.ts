@@ -25,10 +25,11 @@ export class NotificationsService {
   ) {}
 
   /**
-   * Resolve URL pra clique na notif (sino e push). Card → /b/{boardId}?card=X
-   * faz lookup do boardId pra que o front (que ja tem CardModal montado em
-   * /b/[boardId]) abra o modal direto. Se o card foi deletado entre criar a
-   * notif e clicar, fallback pra home com /n={id}.
+   * Resolve URL pra clique na notif (sino e push). Card → `/?card=X&n=Y`
+   * (modal sobre home, board-agnostico). Multi-fluxo: usuario pode nao ter
+   * acesso ao board primario do card mas sim ao card via outra presenca —
+   * link via board causava 403 nesses casos. Frontend GlobalCardModal
+   * cuida do render em qualquer rota fora de /b/.
    */
   private async deriveUrl(
     params: CreateNotificationParams,
@@ -38,13 +39,7 @@ export class NotificationsService {
     const isCard =
       (params.entityType === 'card' || params.entityType === 'Card') && params.entityId;
     if (isCard) {
-      const card = await this.prisma.card.findUnique({
-        where: { id: params.entityId },
-        select: { boardId: true },
-      });
-      if (card) {
-        return `/b/${card.boardId}?card=${params.entityId}&n=${notificationId}`;
-      }
+      return `/?card=${params.entityId}&n=${notificationId}`;
     }
     return `/?n=${notificationId}`;
   }
@@ -115,27 +110,10 @@ export class NotificationsService {
       take: opts.take ?? 50,
     });
 
-    // Resolve cardId → boardId em batch pra evitar N+1
-    const cardIds = items
-      .filter((n) => (n.entityType === 'card' || n.entityType === 'Card') && n.entityId)
-      .map((n) => n.entityId as string);
-    const cardMap = cardIds.length
-      ? new Map(
-          (
-            await this.prisma.card.findMany({
-              where: { id: { in: cardIds } },
-              select: { id: true, boardId: true },
-            })
-          ).map((c) => [c.id, c.boardId]),
-        )
-      : new Map<string, string>();
-
     return items.map((n) => {
-      const boardId =
-        (n.entityType === 'card' || n.entityType === 'Card') && n.entityId
-          ? cardMap.get(n.entityId)
-          : undefined;
-      const url = boardId ? `/b/${boardId}?card=${n.entityId}&n=${n.id}` : `/?n=${n.id}`;
+      const isCard = (n.entityType === 'card' || n.entityType === 'Card') && n.entityId;
+      // URL board-agnostica — modal sobre rota atual via GlobalCardModal.
+      const url = isCard ? `/?card=${n.entityId}&n=${n.id}` : `/?n=${n.id}`;
       return { ...n, url };
     });
   }

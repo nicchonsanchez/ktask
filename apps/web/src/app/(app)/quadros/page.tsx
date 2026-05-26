@@ -244,11 +244,7 @@ function ActivityFeedPanel({ items, loading }: { items: OrgActivityItem[]; loadi
 }
 
 function ActivityRow({ item }: { item: OrgActivityItem }) {
-  const cardLink = item.card
-    ? `/b/${item.card.board.id}?card=${item.card.id}`
-    : item.boardId
-      ? `/b/${item.boardId}`
-      : null;
+  const cardLink = item.card ? `?card=${item.card.id}` : item.boardId ? `/b/${item.boardId}` : null;
   const verb = activityVerb(item.type, item.payload);
   const cardLabel = item.card?.title ?? '(sem card)';
   const boardLabel = item.card?.board.name ?? '';

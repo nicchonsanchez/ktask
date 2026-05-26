@@ -231,7 +231,7 @@ export default function IndicadoresCardsPage() {
                 <span className="text-fg-muted shrink-0">{s.board?.name ?? '—'}</span>
                 <span className="text-fg-subtle shrink-0">·</span>
                 <Link
-                  href={s.board ? `/b/${s.board.id}?card=${s.id}` : '#'}
+                  href={`?card=${s.id}`}
                   className="hover:text-primary min-w-0 flex-1 truncate"
                   title={s.title}
                 >

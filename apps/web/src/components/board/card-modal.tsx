@@ -342,6 +342,7 @@ export function CardModalContent({
           <CardMenu
             cardId={card.id}
             boardId={boardId}
+            shortCode={card.shortCode}
             busy={deleteMut.isPending}
             onArchive={async () => {
               const ok = await confirmDialog({
@@ -807,6 +808,7 @@ function ChecklistIcon() {
 function CardMenu({
   cardId,
   boardId,
+  shortCode,
   onArchive,
   onDuplicate,
   onDelete,
@@ -816,6 +818,7 @@ function CardMenu({
 }: {
   cardId: string;
   boardId: string;
+  shortCode: string | null;
   onArchive: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -826,10 +829,19 @@ function CardMenu({
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Compartilhar: prefere /c/<shortCode> (curto, memoravel, board-agnostico).
+  // Fallback pra /?card=<id> quando shortCode faltar (legacy / edge).
+  // Antes era /b/<boardId>?card=<id> mas isso quebrava acesso multi-fluxo.
+  function shareUrl() {
+    if (shortCode) {
+      return `${window.location.origin}/c/${encodeURIComponent(shortCode)}`;
+    }
+    return `${window.location.origin}/?card=${cardId}`;
+  }
+
   function copyUrl() {
-    const url = `${window.location.origin}/b/${boardId}?card=${cardId}`;
     navigator.clipboard
-      .writeText(url)
+      .writeText(shareUrl())
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -838,10 +850,11 @@ function CardMenu({
   }
 
   function openNewTab() {
-    const url = `${window.location.origin}/b/${boardId}?card=${cardId}`;
-    window.open(url, '_blank', 'noopener');
+    window.open(shareUrl(), '_blank', 'noopener');
     setOpen(false);
   }
+  // boardId mantido na prop pra compat com callers; nao usado no menu.
+  void boardId;
 
   return (
     <div className="relative">

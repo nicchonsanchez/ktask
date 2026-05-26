@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Check, ChevronDown, Loader2, X } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle, Input } from '@ktask/ui';
@@ -84,6 +84,7 @@ export function CreateChildCardDialog({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const [title, setTitle] = useState('');
   const [opts, setOpts] = useState<Record<string, boolean>>({});
   const [description, setDescription] = useState<unknown>(null);
@@ -152,9 +153,9 @@ export function CreateChildCardDialog({
       queryClient.invalidateQueries({ queryKey: ['boards'] });
       onOpenChange(false);
       if (openAfterCreate && created?.id) {
-        // Navega pro card recém criado
-        const targetBoardId = created.boardId ?? boardSel?.id ?? parent.boardId;
-        router.push(`/b/${targetBoardId}?card=${created.id}`);
+        // Abre modal do card recem criado por cima da rota atual
+        // (preserva contexto). Se quiser ver no board, usuario navega depois.
+        router.push(`${pathname}?card=${created.id}`);
       }
     },
     onError: (err) => {

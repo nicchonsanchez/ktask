@@ -60,7 +60,7 @@ export class TimeTrackingService {
       if (!found || found.organizationId !== tenant.organizationId) {
         throw new NotFoundException('Card não encontrado.');
       }
-      await this.access.assertAccess(userId, found.boardId, tenant, 'EDITOR');
+      await this.access.assertCardAccess(userId, found.id, tenant, 'EDITOR');
       card = { id: found.id, boardId: found.boardId };
     }
 
@@ -212,7 +212,7 @@ export class TimeTrackingService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const targetUserId = input.userId && input.userId !== userId ? input.userId : userId;
     if (targetUserId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
@@ -335,7 +335,7 @@ export class TimeTrackingService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'VIEWER');
 
     const entries = await this.prisma.timeEntry.findMany({
       where: { cardId, organizationId: tenant.organizationId },

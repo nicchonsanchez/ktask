@@ -145,7 +145,8 @@ const CARD_COLOR_HEX: Record<string, string> = {
 
 function RecentCardItemCard({ item }: { item: RecentCardItem }) {
   const { card } = item;
-  const href = `/b/${card.board.id}?card=${card.id}`;
+  // ?card=<id> preserva pathname atual; GlobalCardModal renderiza por cima.
+  const href = `?card=${card.id}`;
   const colorHex = card.cardColor ? (CARD_COLOR_HEX[card.cardColor] ?? null) : null;
   return (
     <Link

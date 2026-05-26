@@ -100,7 +100,7 @@ function ApprovalRow({ approval }: { approval: PendingApprovalForUser }) {
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 flex-1">
           <a
-            href={`/b/${approval.card.boardId}?card=${approval.cardId}`}
+            href={`/aprovacoes?card=${approval.cardId}`}
             className="hover:text-primary group inline-flex items-center gap-1.5 text-base font-medium"
           >
             <span className="truncate">{approval.card.title}</span>
@@ -167,7 +167,7 @@ function ApprovalRow({ approval }: { approval: PendingApprovalForUser }) {
           Reprovar
         </button>
         <a
-          href={`/b/${approval.card.boardId}?card=${approval.cardId}`}
+          href={`/aprovacoes?card=${approval.cardId}`}
           className="border-border hover:bg-bg-muted text-fg-muted inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium sm:ml-auto sm:w-auto"
         >
           Ver card completo

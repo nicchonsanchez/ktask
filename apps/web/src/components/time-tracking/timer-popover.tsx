@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Loader2, Pause, X } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -26,6 +26,7 @@ export function TimerPopover({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const me = useAuthStore((s) => s.user);
   const [note, setNote] = useState(active.note ?? '');
   const [tick, setTick] = useState(0);
@@ -68,7 +69,7 @@ export function TimerPopover({
 
   function goToCard() {
     if (!active.card) return;
-    router.push(`/b/${active.card.boardId}?card=${active.cardId}`);
+    router.push(`${pathname}?card=${active.cardId}`);
     onClose();
   }
 

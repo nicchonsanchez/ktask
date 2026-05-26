@@ -100,9 +100,7 @@ export function TarefaRow({
   });
 
   const isStandalone = task.kind === 'standalone';
-  const cardHref = isStandalone
-    ? null
-    : `/b/${task.checklist.card.boardId}?card=${task.checklist.card.id}`;
+  const cardHref = isStandalone ? null : `?card=${task.checklist.card.id}`;
   const dueLabel = formatDueDate(task.dueDate);
   const cardTitle = isStandalone ? null : task.checklist.card.title;
   const cardListName = isStandalone ? null : task.checklist.card.list.name;

@@ -74,10 +74,7 @@ function ActivityRow({ item }: { item: RecentActivityItem }) {
       <span className="bg-primary-subtle/60 size-1.5 shrink-0 rounded-full" />
       <p className="text-fg min-w-0 flex-1 truncate text-[12px]">
         {item.card ? (
-          <Link
-            href={`/b/${item.card.board.id}?card=${item.card.id}`}
-            className="hover:text-primary"
-          >
+          <Link href={`?card=${item.card.id}`} className="hover:text-primary">
             {summary}
           </Link>
         ) : (

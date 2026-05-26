@@ -41,7 +41,7 @@ export class AttachmentsService {
       throw new ServiceUnavailableException('Armazenamento de arquivos não configurado.');
     }
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     return this.storage.presignUpload({
       keyPrefix: `attachments/${card.boardId}/${cardId}`,
@@ -65,7 +65,7 @@ export class AttachmentsService {
     },
   ) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     // Se commentId vier, valida que o comment pertence ao card e está visível.
     if (input.commentId) {
@@ -146,7 +146,7 @@ export class AttachmentsService {
       }
     } else {
       // Anexo direto do card: requer EDITOR no board.
-      await this.access.assertAccess(userId, attachment.card.boardId, tenant, 'EDITOR');
+      await this.access.assertCardAccess(userId, attachment.card.id, tenant, 'EDITOR');
     }
 
     await this.prisma.attachment.delete({ where: { id: attachmentId } });

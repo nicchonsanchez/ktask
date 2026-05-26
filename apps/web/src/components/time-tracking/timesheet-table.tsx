@@ -83,7 +83,7 @@ function MobileCard({ item }: { item: TimesheetItem }) {
         <div className="min-w-0 flex-1">
           {item.card ? (
             <Link
-              href={`/b/${item.card.boardId}?card=${item.cardId}`}
+              href={`?card=${item.cardId}`}
               className="text-fg hover:text-primary block truncate text-sm font-medium"
               title={item.card.title}
             >
@@ -190,7 +190,7 @@ function Row({ item }: { item: TimesheetItem }) {
       <Td>
         {item.card ? (
           <Link
-            href={`/b/${item.card.boardId}?card=${item.cardId}`}
+            href={`?card=${item.cardId}`}
             className="text-fg hover:text-primary inline-flex max-w-[260px] items-center gap-1 truncate font-medium"
             title={item.card.title}
           >

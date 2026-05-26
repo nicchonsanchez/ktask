@@ -534,7 +534,7 @@ function CardRow({ card }: { card: ManagementCardItem }) {
     >
       <td className="px-3 py-2">
         <Link
-          href={`/b/${card.board.id}?card=${card.id}`}
+          href={`/visao-gerencial?card=${card.id}`}
           className="text-fg hover:text-primary inline-flex items-center gap-1.5 font-medium"
         >
           {card.cardColor && (

@@ -644,7 +644,7 @@ function ContactDetailView({
           {contact.cards.map((cc) => (
             <li key={cc.cardId}>
               <a
-                href={`/b/${cc.card.boardId}?card=${cc.cardId}`}
+                href={`/contatos?card=${cc.cardId}`}
                 className="hover:bg-bg-muted text-fg flex items-center gap-2 rounded px-2 py-1.5 text-xs"
               >
                 {cc.card.shortCode && (

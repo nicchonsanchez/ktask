@@ -53,7 +53,7 @@ export class ChecklistsService {
 
   async create(userId: string, tenant: TenantContext, input: { cardId: string; title: string }) {
     const card = await this.getCardOrThrow(input.cardId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const last = await this.prisma.checklist.findFirst({
       where: { cardId: input.cardId },
@@ -95,7 +95,7 @@ export class ChecklistsService {
     input: { title: string },
   ) {
     const { checklist, card } = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const renamed = input.title !== checklist.title;
 
@@ -129,7 +129,7 @@ export class ChecklistsService {
 
   async remove(userId: string, tenant: TenantContext, checklistId: string) {
     const { card, checklist } = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     await this.prisma.checklist.delete({ where: { id: checklistId } });
 
@@ -168,7 +168,7 @@ export class ChecklistsService {
     },
   ) {
     const { card } = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const last = await this.prisma.checklistItem.findFirst({
       where: { checklistId },
@@ -239,7 +239,7 @@ export class ChecklistsService {
     },
   ) {
     const { card, item } = await this.getItemOrThrow(itemId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const isToggling = input.isDone !== undefined && input.isDone !== item.isDone;
     const isRenaming = input.text !== undefined && input.text !== item.text;
@@ -391,7 +391,7 @@ export class ChecklistsService {
 
   async removeItem(userId: string, tenant: TenantContext, itemId: string) {
     const { card, item } = await this.getItemOrThrow(itemId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     await this.prisma.checklistItem.delete({ where: { id: itemId } });
 
@@ -436,7 +436,7 @@ export class ChecklistsService {
     input: { afterItemId: string | null; toChecklistId?: string },
   ) {
     const { card, item } = await this.getItemOrThrow(itemId, tenant.organizationId);
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const destChecklistId = input.toChecklistId ?? item.checklistId;
     if (destChecklistId !== item.checklistId) {

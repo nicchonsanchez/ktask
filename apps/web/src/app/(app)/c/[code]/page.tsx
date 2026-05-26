@@ -8,8 +8,14 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api-client';
 
 /**
- * Rota curta /c/:code — resolve shortCode (#412) -> { id, boardId } e
- * redireciona pro modal do card no board correspondente.
+ * Rota curta /c/:code — resolve shortCode (#412) -> { id } e redireciona
+ * pra `/?card=<id>` (modal sobre home, renderizado por GlobalCardModal).
+ *
+ * Antes redirecionava pra `/b/<boardId>?card=<id>`, mas isso quebrava o
+ * acesso de usuarios que sao membros so de boards secundarios do card
+ * (multi-fluxo): board primario do card pode ser inacessivel pra eles.
+ * Agora a permissao eh verificada no proprio endpoint do card via
+ * assertCardAccess no backend.
  *
  * Uso: link verbal/escrito ("/c/412") sem precisar saber em qual board
  * o card está. Se o codigo nao existir, mostra mensagem amigavel.
@@ -28,7 +34,7 @@ export default function CardByShortCodePage() {
 
   useEffect(() => {
     if (q.data) {
-      router.replace(`/b/${q.data.boardId}?card=${q.data.id}`);
+      router.replace(`/?card=${q.data.id}`);
     }
   }, [q.data, router]);
 

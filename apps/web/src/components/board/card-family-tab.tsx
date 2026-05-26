@@ -205,7 +205,7 @@ function CurrentCardRow({ card, indent }: { card: CardDetail; indent: number }) 
   });
 
   function cardUrl() {
-    return `${window.location.origin}/b/${card.boardId}?card=${card.id}`;
+    return `${window.location.origin}/?card=${card.id}`;
   }
 
   function copyUrl() {
@@ -359,17 +359,20 @@ function FamilyRow({
   });
 
   function open() {
+    // Sempre abre como modal layered (?card=) — preserva contexto. Multi-fluxo:
+    // user pode nao ter acesso ao board primario do family, mas tem acesso ao
+    // card via outra presenca; ir pro board quebra.
     const next = new URLSearchParams(params.toString());
     next.set('card', family.id);
-    if (family.boardId !== routeParams.boardId) {
-      router.push(`/b/${family.boardId}?card=${family.id}`);
-    } else {
+    if (routeParams?.boardId) {
       router.push(`/b/${routeParams.boardId}?${next.toString()}`, { scroll: false });
+    } else {
+      router.push(`?${next.toString()}`, { scroll: false });
     }
   }
 
   function cardUrl() {
-    return `${window.location.origin}/b/${family.boardId}?card=${family.id}`;
+    return `${window.location.origin}/?card=${family.id}`;
   }
 
   function copyUrl() {
