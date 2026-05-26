@@ -504,7 +504,7 @@ function CommentItem({
           <>
             {!showPlaceholder && (
               <div className="bg-bg-muted rounded-md px-3 py-2 text-sm">
-                <p className="whitespace-pre-wrap">
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {renderInlineMentions(plain, orgMembers.data ?? [])}
                 </p>
               </div>
