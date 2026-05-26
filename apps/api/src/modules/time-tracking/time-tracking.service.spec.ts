@@ -18,7 +18,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 describe('TimeTrackingService', () => {
   let service: TimeTrackingService;
   let prisma: ReturnType<typeof makePrismaMock>;
-  let access: { assertAccess: jest.Mock };
+  let access: { assertAccess: jest.Mock; assertCardAccess: jest.Mock };
   let events: { emit: jest.Mock };
 
   const tenant = (role: OrgRole = 'MEMBER'): TenantContext => ({
@@ -30,7 +30,10 @@ describe('TimeTrackingService', () => {
 
   beforeEach(async () => {
     prisma = makePrismaMock();
-    access = { assertAccess: jest.fn().mockResolvedValue(undefined) };
+    access = {
+      assertAccess: jest.fn().mockResolvedValue(undefined),
+      assertCardAccess: jest.fn().mockResolvedValue({ role: 'EDITOR' }),
+    };
     events = { emit: jest.fn() };
 
     const module = await Test.createTestingModule({
@@ -81,9 +84,9 @@ describe('TimeTrackingService', () => {
 
       await service.start('user_1', tenant(), 'card_1');
 
-      expect(access.assertAccess).toHaveBeenCalledWith(
+      expect(access.assertCardAccess).toHaveBeenCalledWith(
         'user_1',
-        'board_1',
+        'card_1',
         expect.any(Object),
         'EDITOR',
       );
@@ -105,6 +108,7 @@ describe('TimeTrackingService', () => {
 
       await service.start('user_1', tenant(), null);
 
+      expect(access.assertCardAccess).not.toHaveBeenCalled();
       expect(access.assertAccess).not.toHaveBeenCalled();
       expect(prisma.timeEntry.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ cardId: null, userId: 'user_1' }),
