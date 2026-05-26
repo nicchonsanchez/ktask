@@ -40,12 +40,9 @@ jobs:
       checks: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      # Polling via gh CLI em vez de lewagon/wait-on-check-action — o mirror
-      # de actions do GHA tem falhado intermitentemente em baixar o tarball.
-      # Comportamento equivalente: aguarda check "Lint, Typecheck, Test" do
-      # CI completar pra esse SHA, polling a cada 15s. Falha se status != success.
+      # gh CLI nao precisa de working tree — autentica via GH_TOKEN e bate
+      # direto na API. Sem checkout = sem dependencia de actions/checkout
+      # nem do mirror de actions do GHA.
       - name: Aguarda job "Lint, Typecheck, Test" do workflow CI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
