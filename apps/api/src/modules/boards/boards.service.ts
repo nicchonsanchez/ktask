@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Board, BoardRole, BoardVisibility, CardOrdering } from '@prisma/client';
 import { ORG_ROLES_WITH_BOARD_BYPASS } from '@ktask/contracts';
@@ -555,6 +560,72 @@ export class BoardsService {
     });
 
     return updated;
+  }
+
+  /**
+   * Aplica a equipe do board (BoardMember) a todos os cards presentes nele —
+   * retroativo, aditivo e idempotente. Resolve o caso "liguei o toggle
+   * inheritTeamOnNewCards depois, mas os cards antigos nao tem a equipe".
+   *
+   * - Considera cards com CardPresence ativa (removedAt null) — multi-fluxo,
+   *   nao so o board primario.
+   * - NAO remove ninguem (so adiciona quem falta).
+   * - NAO notifica (operacao administrativa; notificar N×M seria spam).
+   */
+  async applyTeamToCards(userId: string, tenant: TenantContext, boardId: string) {
+    await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
+
+    const board = await this.prisma.board.findUnique({
+      where: { id: boardId },
+      select: { id: true, organizationId: true, members: { select: { userId: true } } },
+    });
+    if (!board || board.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Quadro não encontrado.');
+    }
+    if (board.members.length === 0) {
+      return { cardsAffected: 0, membersApplied: 0, rowsCreated: 0 };
+    }
+
+    // Cards com presenca ativa nesse board (distinct cardId).
+    const presences = await this.prisma.cardPresence.findMany({
+      where: { boardId, removedAt: null },
+      select: { cardId: true },
+    });
+    const cardIds = [...new Set(presences.map((p) => p.cardId))];
+    if (cardIds.length === 0) {
+      return { cardsAffected: 0, membersApplied: board.members.length, rowsCreated: 0 };
+    }
+
+    // Produto cartesiano cards × membros. skipDuplicates resolve quem ja existe.
+    const rows = cardIds.flatMap((cardId) =>
+      board.members.map((mb) => ({ cardId, userId: mb.userId })),
+    );
+    const result = await this.prisma.cardMember.createMany({
+      data: rows,
+      skipDuplicates: true,
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId,
+        actorId: userId,
+        type: 'BOARD_UPDATED',
+        payload: {
+          boardId,
+          action: 'applyTeamToCards',
+          cardsAffected: cardIds.length,
+          membersApplied: board.members.length,
+          rowsCreated: result.count,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      cardsAffected: cardIds.length,
+      membersApplied: board.members.length,
+      rowsCreated: result.count,
+    };
   }
 
   async archive(userId: string, tenant: TenantContext, boardId: string) {

@@ -162,6 +162,14 @@ export function restoreBoard(boardId: string) {
   return api.post(`/api/v1/boards/${boardId}/restore`, {});
 }
 
+/** Aplica a equipe do fluxo a todos os cards presentes (retroativo, aditivo). */
+export function applyTeamToCards(boardId: string) {
+  return api.post<{ cardsAffected: number; membersApplied: number; rowsCreated: number }>(
+    `/api/v1/boards/${boardId}/apply-team-to-cards`,
+    {},
+  );
+}
+
 /** Doc 36: favorita/desfavorita board pro user atual. */
 export function favoriteBoard(boardId: string) {
   return api.post<{ ok: true }>(`/api/v1/boards/${boardId}/favorite`, {});

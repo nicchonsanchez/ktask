@@ -1619,7 +1619,13 @@ export class CardsService {
 
     const board = await this.prisma.board.findUnique({
       where: { id: input.boardId },
-      select: { id: true, organizationId: true, isArchived: true },
+      select: {
+        id: true,
+        organizationId: true,
+        isArchived: true,
+        inheritTeamOnNewCards: true,
+        members: { select: { userId: true } },
+      },
     });
     if (!board || board.organizationId !== tenant.organizationId || board.isArchived) {
       throw new BadRequestException('Fluxo destino inválido.');
@@ -1665,6 +1671,17 @@ export class CardsService {
         position,
       },
     });
+
+    // Herda a equipe do board destino quando ele tem inheritTeamOnNewCards.
+    // Coerencia multi-fluxo: card que ENTRA no fluxo (nascido OU vinculado)
+    // ganha a equipe. Aditivo — nao remove ninguem. skipDuplicates evita
+    // erro se membro ja estava no card.
+    if (board.inheritTeamOnNewCards && board.members.length > 0) {
+      await this.prisma.cardMember.createMany({
+        data: board.members.map((mb) => ({ cardId, userId: mb.userId })),
+        skipDuplicates: true,
+      });
+    }
 
     await this.prisma.activity.create({
       data: {

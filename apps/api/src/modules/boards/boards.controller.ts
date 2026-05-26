@@ -100,6 +100,18 @@ export class BoardsController {
     return this.boards.restore(user.userId, org, boardId);
   }
 
+  @Post(':boardId/apply-team-to-cards')
+  @ApiOperation({
+    summary: 'Aplica a equipe do quadro a todos os cards presentes (retroativo, aditivo)',
+  })
+  applyTeamToCards(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.boards.applyTeamToCards(user.userId, org, boardId);
+  }
+
   @Post(':boardId/favorite')
   @ApiOperation({ summary: 'Favoritar fluxo (doc 36) — pessoal por usuário' })
   favorite(

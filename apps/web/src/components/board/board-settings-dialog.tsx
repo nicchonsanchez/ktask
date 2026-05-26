@@ -6,6 +6,7 @@ import { Archive, ChevronDown, Globe, Loader2, Lock, Plus, Trash2 } from 'lucide
 
 import { Button, Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import {
+  applyTeamToCards,
   archiveBoard,
   boardsQueries,
   updateBoard,
@@ -14,7 +15,7 @@ import {
 } from '@/lib/queries/boards';
 import { ApiError } from '@/lib/api-client';
 import { UserAvatar } from '@/components/user-avatar';
-import { useConfirm } from '@/components/ui/dialogs';
+import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { BoardMemberPicker } from './board-member-picker';
 import { DeleteBoardDialog } from './delete-board-dialog';
 
@@ -40,6 +41,7 @@ export function BoardSettingsDialog({
 }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
+  const notify = useNotify();
   const [description, setDescription] = useState(board.description ?? '');
   const [visibility, setVisibility] = useState<Visibility>(board.visibility);
   const [cardOrdering, setCardOrdering] = useState<CardOrdering>(board.cardOrdering);
@@ -85,6 +87,30 @@ export function BoardSettingsDialog({
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Erro ao inativar.'),
   });
+
+  const applyTeamMut = useMutation({
+    mutationFn: () => applyTeamToCards(board.id),
+    onSuccess: (res) => {
+      invalidate();
+      notify.success(
+        res.rowsCreated > 0
+          ? `Equipe aplicada a ${res.cardsAffected} card(s).`
+          : 'Todos os cards já tinham a equipe completa.',
+      );
+    },
+    onError: (err) =>
+      notify.error(err instanceof ApiError ? err.message : 'Erro ao aplicar equipe.'),
+  });
+
+  async function handleApplyTeam() {
+    const ok = await confirm({
+      title: 'Aplicar a equipe aos cards atuais?',
+      description:
+        'Adiciona os membros da equipe do fluxo a todos os cards presentes que ainda não os têm. Não remove ninguém.',
+      confirmLabel: 'Aplicar',
+    });
+    if (ok) applyTeamMut.mutate();
+  }
 
   const dirty =
     description !== (board.description ?? '') ||
@@ -258,9 +284,28 @@ export function BoardSettingsDialog({
               <label className="mb-3 flex cursor-pointer items-start gap-2 text-xs">
                 <Checkbox checked={inheritTeam} onChange={() => setInheritTeam((v) => !v)} />
                 <span className="leading-snug">
-                  Incluir equipe do fluxo como equipe dos cards quando novos cards forem criados.
+                  Incluir equipe do fluxo como equipe dos cards quando novos cards forem criados ou
+                  vinculados a este fluxo.
                 </span>
               </label>
+
+              <div className="border-border/60 mb-3 rounded-md border border-dashed p-3">
+                <p className="text-fg text-xs font-medium">Aplicar a equipe aos cards atuais</p>
+                <p className="text-fg-muted mt-0.5 text-[11px] leading-snug">
+                  Adiciona os membros da equipe a todos os cards já presentes no fluxo que ainda não
+                  os têm. Não remove ninguém.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleApplyTeam}
+                  disabled={applyTeamMut.isPending || board.members.length === 0}
+                  className="border-border hover:bg-bg-muted text-fg mt-2 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                >
+                  {applyTeamMut.isPending && <Loader2 size={12} className="animate-spin" />}
+                  Aplicar agora
+                </button>
+              </div>
+
               <BoardMemberPicker boardId={board.id} members={board.members} />
             </Section>
 
