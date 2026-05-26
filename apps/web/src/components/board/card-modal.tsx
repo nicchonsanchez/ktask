@@ -830,14 +830,13 @@ function CardMenu({
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Compartilhar: prefere /c/<shortCode> (curto, memoravel, board-agnostico).
-  // Fallback pra /?card=<id> quando shortCode faltar (legacy / edge).
-  // Antes era /b/<boardId>?card=<id> mas isso quebrava acesso multi-fluxo.
+  // Compartilhar: usa CUID (`/c/cmoxpj1...`) — globalmente unico, sem risco
+  // de abrir card errado em outra Org (shortCode tipo "#121" colide entre
+  // organizacoes). Trade-off: URL mais longa, menos memoravel, mas correta.
+  // shortCode mantido como prop pra futura reativacao (toggle de UX).
+  void shortCode;
   function shareUrl() {
-    if (shortCode) {
-      return `${window.location.origin}/c/${encodeURIComponent(shortCode)}`;
-    }
-    return `${window.location.origin}/?card=${cardId}`;
+    return `${window.location.origin}/c/${cardId}`;
   }
 
   function copyUrl() {

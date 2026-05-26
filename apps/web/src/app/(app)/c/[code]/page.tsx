@@ -8,42 +8,54 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api-client';
 
 /**
- * Rota curta /c/:code — resolve shortCode (#412) -> { id } e redireciona
- * pra `/?card=<id>` (modal sobre home, renderizado por GlobalCardModal).
+ * Rota /c/:code — abre o card como modal sobre home.
  *
- * Antes redirecionava pra `/b/<boardId>?card=<id>`, mas isso quebrava o
- * acesso de usuarios que sao membros so de boards secundarios do card
- * (multi-fluxo): board primario do card pode ser inacessivel pra eles.
- * Agora a permissao eh verificada no proprio endpoint do card via
- * assertCardAccess no backend.
+ * Aceita dois formatos:
+ *  - **CUID** (formato preferido pra links compartilhados): `cmoxpj1i...`
+ *    25 chars iniciando com 'c'. Globalmente unico — ninguem abre o card
+ *    errado, mesmo cross-organization. Redireciona direto sem API call.
+ *  - **shortCode** (#412): backward compat com links antigos. Resolve
+ *    via /api/v1/cards/by-code dentro da Org do user logado.
  *
- * Uso: link verbal/escrito ("/c/412") sem precisar saber em qual board
- * o card está. Se o codigo nao existir, mostra mensagem amigavel.
+ * Permissao do card eh checada via assertCardAccess no proprio
+ * /cards/:id (chamado pelo GlobalCardModal apos o redirect). Multi-fluxo:
+ * user com acesso a qualquer board do card consegue abrir.
  */
+const CUID_PATTERN = /^c[0-9a-z]{20,30}$/;
+
 export default function CardByShortCodePage() {
   const router = useRouter();
   const { code } = useParams<{ code: string }>();
+  const isCuid = code ? CUID_PATTERN.test(code) : false;
 
+  // Caminho CUID: redireciona direto. Sem API call.
+  useEffect(() => {
+    if (isCuid && code) {
+      router.replace(`/?card=${code}`);
+    }
+  }, [isCuid, code, router]);
+
+  // Caminho shortCode: precisa resolver via API pra pegar o id.
   const q = useQuery({
     queryKey: ['cards', 'by-code', code],
     queryFn: () =>
       api.get<{ id: string; boardId: string }>(`/api/v1/cards/by-code/${encodeURIComponent(code)}`),
-    enabled: !!code,
+    enabled: !!code && !isCuid,
     retry: false,
   });
 
   useEffect(() => {
-    if (q.data) {
+    if (!isCuid && q.data) {
       router.replace(`/?card=${q.data.id}`);
     }
-  }, [q.data, router]);
+  }, [isCuid, q.data, router]);
 
-  if (q.isLoading) {
+  if (isCuid || q.isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-fg-muted flex items-center gap-2 text-sm">
           <Loader2 size={16} className="animate-spin" />
-          Procurando card #{code}…
+          {isCuid ? 'Abrindo card…' : `Procurando card #${code}…`}
         </div>
       </div>
     );
