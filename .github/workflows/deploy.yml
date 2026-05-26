@@ -42,13 +42,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Polling via gh CLI em vez de lewagon/wait-on-check-action — o mirror
+      # de actions do GHA tem falhado intermitentemente em baixar o tarball.
+      # Comportamento equivalente: aguarda check "Lint, Typecheck, Test" do
+      # CI completar pra esse SHA, polling a cada 15s. Falha se status != success.
       - name: Aguarda job "Lint, Typecheck, Test" do workflow CI
-        uses: lewagon/wait-on-check-action@v1.7.0
-        with:
-          ref: ${{ github.sha }}
-          check-name: 'Lint, Typecheck, Test'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 15
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          for i in $(seq 1 120); do
+            CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" \
+              --jq '.check_runs[] | select(.name=="Lint, Typecheck, Test") | .conclusion' | head -1)
+            STATUS=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" \
+              --jq '.check_runs[] | select(.name=="Lint, Typecheck, Test") | .status' | head -1)
+            echo "Tentativa $i: status=$STATUS conclusion=$CONCLUSION"
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "CI passou."
+                exit 0
+              else
+                echo "CI falhou (conclusion=$CONCLUSION). Abortando deploy."
+                exit 1
+              fi
+            fi
+            sleep 15
+          done
+          echo "Timeout aguardando CI (30 min)."
+          exit 1
 
   build:
     name: Build & push imagens GHCR
