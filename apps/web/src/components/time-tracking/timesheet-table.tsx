@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Loader2, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { UserAvatar } from '@/components/user-avatar';
 import { deleteTimeEntry, formatDuration, type TimesheetItem } from '@/lib/queries/time-tracking';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
+import { ManualEntryDialog } from './manual-entry-dialog';
 
 export function TimesheetTable({ items }: { items: TimesheetItem[] }) {
   return (
@@ -74,6 +76,7 @@ function useDeleteEntry(item: TimesheetItem) {
 
 function MobileCard({ item }: { item: TimesheetItem }) {
   const { deleteMut, handleDelete } = useDeleteEntry(item);
+  const [editOpen, setEditOpen] = useState(false);
   const isRunning = item.endedAt === null;
 
   return (
@@ -149,29 +152,42 @@ function MobileCard({ item }: { item: TimesheetItem }) {
             )}
           </div>
           {!isRunning && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleteMut.isPending}
-              className="text-fg-muted hover:text-danger hover:bg-danger-subtle shrink-0 rounded p-1.5"
-              aria-label="Remover entrada"
-              title="Remover"
-            >
-              {deleteMut.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Trash2 size={14} />
-              )}
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="text-fg-muted hover:text-primary hover:bg-primary-subtle rounded p-1.5"
+                aria-label="Editar entrada"
+                title="Editar"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleteMut.isPending}
+                className="text-fg-muted hover:text-danger hover:bg-danger-subtle rounded p-1.5"
+                aria-label="Remover entrada"
+                title="Remover"
+              >
+                {deleteMut.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+              </button>
+            </div>
           )}
         </div>
       )}
+      <ManualEntryDialog open={editOpen} onOpenChange={setEditOpen} entry={item} />
     </li>
   );
 }
 
 function Row({ item }: { item: TimesheetItem }) {
   const { deleteMut, handleDelete } = useDeleteEntry(item);
+  const [editOpen, setEditOpen] = useState(false);
   const isRunning = item.endedAt === null;
 
   return (
@@ -271,21 +287,33 @@ function Row({ item }: { item: TimesheetItem }) {
       </Td>
       <Td align="right">
         {!isRunning && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleteMut.isPending}
-            className="text-fg-muted hover:text-danger rounded p-1"
-            aria-label="Remover entrada"
-            title="Remover"
-          >
-            {deleteMut.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Trash2 size={12} />
-            )}
-          </button>
+          <div className="flex items-center justify-end gap-0.5">
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="text-fg-muted hover:text-primary rounded p-1"
+              aria-label="Editar entrada"
+              title="Editar"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteMut.isPending}
+              className="text-fg-muted hover:text-danger rounded p-1"
+              aria-label="Remover entrada"
+              title="Remover"
+            >
+              {deleteMut.isPending ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Trash2 size={12} />
+              )}
+            </button>
+          </div>
         )}
+        <ManualEntryDialog open={editOpen} onOpenChange={setEditOpen} entry={item} />
       </Td>
     </tr>
   );

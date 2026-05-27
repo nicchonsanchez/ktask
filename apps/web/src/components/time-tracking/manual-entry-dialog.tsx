@@ -6,7 +6,11 @@ import { Loader2, Search, Timer, X } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import { ApiError } from '@/lib/api-client';
-import { createManualEntry } from '@/lib/queries/time-tracking';
+import {
+  createManualEntry,
+  updateTimeEntry,
+  type TimesheetItem,
+} from '@/lib/queries/time-tracking';
 import { searchGlobal } from '@/lib/queries/search';
 import { useNotify } from '@/components/ui/dialogs';
 
@@ -17,15 +21,34 @@ interface PickedCard {
   listName: string;
 }
 
+/** Extrai data (YYYY-MM-DD) e hora (HH:MM) locais de um ISO string. */
+function splitLocal(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+/**
+ * Dialog de entrada de tempo manual. Dois modos:
+ *  - Criar (entry undefined): cria via createManualEntry.
+ *  - Editar (entry setado): pre-preenche e salva via updateTimeEntry,
+ *    permitindo trocar card, data, horarios e anotacao.
+ */
 export function ManualEntryDialog({
   open,
   onOpenChange,
+  entry,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  entry?: TimesheetItem;
 }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const isEdit = !!entry;
   const [card, setCard] = useState<PickedCard | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('09:00');
@@ -34,7 +57,26 @@ export function ManualEntryDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (!open) return;
+    if (entry) {
+      // Modo edicao: pre-preenche com os dados da entry.
+      setCard(
+        entry.card
+          ? {
+              id: entry.card.id,
+              title: entry.card.title,
+              boardName: entry.card.board.name,
+              listName: '',
+            }
+          : null,
+      );
+      const s = splitLocal(entry.startedAt);
+      setDate(s.date);
+      setStartTime(s.time);
+      setEndTime(entry.endedAt ? splitLocal(entry.endedAt).time : s.time);
+      setNote(entry.note ?? '');
+      setError(null);
+    } else {
       setCard(null);
       setDate(new Date().toISOString().slice(0, 10));
       setStartTime('09:00');
@@ -42,7 +84,7 @@ export function ManualEntryDialog({
       setNote('');
       setError(null);
     }
-  }, [open]);
+  }, [open, entry]);
 
   const createMut = useMutation({
     mutationFn: () => {
@@ -51,6 +93,14 @@ export function ManualEntryDialog({
       const endedAt = new Date(`${date}T${endTime}:00`).toISOString();
       if (new Date(endedAt).getTime() <= new Date(startedAt).getTime()) {
         throw new Error('Horário final deve ser depois do inicial');
+      }
+      if (isEdit && entry) {
+        return updateTimeEntry(entry.id, {
+          cardId: card.id,
+          startedAt,
+          endedAt,
+          note: note.trim() || null,
+        });
       }
       return createManualEntry({
         cardId: card.id,
@@ -61,7 +111,7 @@ export function ManualEntryDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['time-tracking'] });
-      notify.success('Entrada manual registrada.');
+      notify.success(isEdit ? 'Entrada atualizada.' : 'Entrada manual registrada.');
       onOpenChange(false);
     },
     onError: (err) => {
@@ -86,10 +136,12 @@ export function ManualEntryDialog({
           </span>
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-fg text-[15px] font-semibold">
-              Adicionar tempo manualmente
+              {isEdit ? 'Editar entrada de tempo' : 'Adicionar tempo manualmente'}
             </DialogTitle>
             <p className="text-fg-muted text-[11px]">
-              Registre uma entrada de tempo num card, sem usar o cronômetro
+              {isEdit
+                ? 'Ajuste o card, a data, os horários ou a anotação desta entrada'
+                : 'Registre uma entrada de tempo num card, sem usar o cronômetro'}
             </p>
           </div>
           <button
@@ -169,7 +221,7 @@ export function ManualEntryDialog({
               className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[13px] font-semibold shadow-sm transition-all hover:shadow disabled:opacity-50"
             >
               {createMut.isPending && <Loader2 size={13} className="animate-spin" />}
-              Registrar
+              {isEdit ? 'Salvar' : 'Registrar'}
             </button>
           </div>
         </form>

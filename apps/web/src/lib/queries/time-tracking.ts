@@ -154,7 +154,12 @@ export function createManualEntry(input: {
 
 export function updateTimeEntry(
   entryId: string,
-  input: { startedAt?: string; endedAt?: string | null; note?: string | null },
+  input: {
+    cardId?: string | null;
+    startedAt?: string;
+    endedAt?: string | null;
+    note?: string | null;
+  },
 ) {
   return api.patch<TimeEntry>(`/api/v1/time-entries/${entryId}`, input);
 }

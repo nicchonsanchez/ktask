@@ -21,6 +21,7 @@ interface ManualEntryInput {
 }
 
 interface UpdateEntryInput {
+  cardId?: string | null;
   startedAt?: string;
   endedAt?: string | null;
   note?: string | null;
@@ -277,9 +278,29 @@ export class TimeTrackingService {
       ? Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000))
       : null;
 
+    // Troca de card: undefined = nao mexe; null = desvincula (timer livre);
+    // cuid = vincula a outro card (revalida acesso EDITOR no card destino).
+    let cardIdData: { cardId?: string | null } = {};
+    if (input.cardId !== undefined) {
+      if (input.cardId === null) {
+        cardIdData = { cardId: null };
+      } else if (input.cardId !== entry.cardId) {
+        const target = await this.prisma.card.findUnique({
+          where: { id: input.cardId },
+          select: { id: true, organizationId: true },
+        });
+        if (!target || target.organizationId !== tenant.organizationId) {
+          throw new NotFoundException('Card destino não encontrado.');
+        }
+        await this.access.assertCardAccess(userId, target.id, tenant, 'EDITOR');
+        cardIdData = { cardId: input.cardId };
+      }
+    }
+
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
       data: {
+        ...cardIdData,
         startedAt,
         endedAt,
         durationSec,

@@ -23,6 +23,9 @@ export type ManualEntryRequest = z.infer<typeof ManualEntrySchema>;
 
 export const UpdateTimeEntrySchema = z
   .object({
+    // cardId: trocar o card vinculado. null = desvincular (timer livre).
+    // undefined = nao mexe.
+    cardId: z.string().cuid().nullable().optional(),
     startedAt: z.string().datetime().optional(),
     endedAt: z.string().datetime().nullable().optional(),
     note: z.string().max(500).nullable().optional(),
