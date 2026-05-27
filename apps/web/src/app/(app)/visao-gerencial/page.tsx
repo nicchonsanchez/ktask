@@ -13,8 +13,10 @@ import {
   ChevronRight,
   Filter,
   LayoutDashboard,
+  List as ListIcon,
   Loader2,
   Search,
+  Trello,
   Users,
   X,
 } from 'lucide-react';
@@ -31,6 +33,7 @@ import { contactsQueries } from '@/lib/queries/contacts';
 import { membersQueries } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { UserAvatar } from '@/components/user-avatar';
+import { ManagementKanban } from '@/components/management/management-kanban';
 
 interface CurrentOrg {
   id: string;
@@ -71,6 +74,7 @@ export default function VisaoGerencialPage() {
 
   const isPrivileged = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
 
+  const [view, setView] = useState<'lista' | 'kanban'>('lista');
   const [q, setQ] = useState('');
   const [companyIds, setCompanyIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
@@ -162,6 +166,27 @@ export default function VisaoGerencialPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Toggle Lista | Kanban */}
+          <div className="border-border inline-flex overflow-hidden rounded-md border">
+            <button
+              type="button"
+              onClick={() => setView('lista')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium ${
+                view === 'lista' ? 'bg-primary text-primary-fg' : 'hover:bg-bg-muted'
+              }`}
+            >
+              <ListIcon size={13} /> Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('kanban')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium ${
+                view === 'kanban' ? 'bg-primary text-primary-fg' : 'hover:bg-bg-muted'
+              }`}
+            >
+              <Trello size={13} /> Kanban
+            </button>
+          </div>
           <Link
             href="/visao-gerencial/finalizados"
             className="border-border hover:bg-bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium"
@@ -179,123 +204,132 @@ export default function VisaoGerencialPage() {
         </div>
       </header>
 
-      {/* Métricas */}
-      <section className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <MetricCard
-          icon={<LayoutDashboard size={14} />}
-          label="Cards em aberto"
-          value={metrics?.total ?? 0}
-          loading={cardsQ.isLoading}
-        />
-        <MetricCard
-          icon={<AlertTriangle size={14} />}
-          label="Atrasados"
-          value={metrics?.overdue ?? 0}
-          tone={metrics && metrics.overdue > 0 ? 'danger' : 'default'}
-          loading={cardsQ.isLoading}
-        />
-        <MetricCard
-          icon={<Users size={14} />}
-          label="Colaboradores"
-          value={metrics?.collaborators ?? 0}
-          loading={cardsQ.isLoading}
-        />
-        <MetricCard
-          icon={<Building2 size={14} />}
-          label="Clientes"
-          value={metrics?.clients ?? 0}
-          loading={cardsQ.isLoading}
-        />
-      </section>
+      {view === 'kanban' && <ManagementKanban />}
 
-      {/* Filtros */}
-      <section className="border-border bg-bg-subtle/40 mb-4 flex flex-col gap-2 rounded-md border p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1">
-            <Search
-              size={13}
-              className="text-fg-muted pointer-events-none absolute left-2 top-1/2 -translate-y-1/2"
-            />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar pelo título…"
-              className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-1.5 pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2"
-            />
-          </div>
-
-          <FilterMultiSelect
-            icon={<Building2 size={12} />}
-            label="Cliente"
-            options={(companiesQ.data ?? []).map((c) => ({ value: c.id, label: c.name }))}
-            selected={companyIds}
-            onChange={setCompanyIds}
-          />
-
-          <FilterMultiSelect
-            icon={<Users size={12} />}
-            label="Responsável"
-            options={(membersQ.data ?? []).map((m) => ({ value: m.userId, label: m.user.name }))}
-            selected={userIds}
-            onChange={setUserIds}
-          />
-
-          <FilterMultiSelect
-            icon={<LayoutDashboard size={12} />}
-            label="Quadro"
-            options={(boardsForFilter.data ?? []).map((b) => ({ value: b.id, label: b.name }))}
-            selected={boardIds}
-            onChange={setBoardIds}
-          />
-
-          <select
-            value={dueStatus ?? ''}
-            onChange={(e) =>
-              setDueStatus((e.target.value || undefined) as ManagementFilters['dueStatus'])
-            }
-            className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2"
-          >
-            {DUE_STATUS_OPTIONS.map((o) => (
-              <option key={o.label} value={o.value ?? ''}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          {hasFilters && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-fg-muted hover:text-fg inline-flex items-center gap-1 rounded px-2 py-1 text-[11px]"
-            >
-              <X size={11} /> Limpar
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Tabela */}
-      {cardsQ.isLoading ? (
-        <div className="text-fg-muted flex items-center gap-2 py-12 text-sm">
-          <Loader2 size={14} className="animate-spin" />
-          Carregando cards…
-        </div>
-      ) : items.length === 0 ? (
-        <div className="text-fg-muted py-12 text-center text-sm">
-          <Filter size={20} className="mx-auto mb-2 opacity-50" />
-          Nenhum card encontrado com esses filtros.
-        </div>
-      ) : (
+      {view === 'lista' && (
         <>
-          <CardsTable items={items} />
-          <PaginationBar
-            total={cardsQ.data?.total ?? 0}
-            page={page}
-            pageSize={pageSize}
-            onPage={setPage}
-            onPageSize={setPageSize}
-          />
+          {/* Métricas */}
+          <section className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MetricCard
+              icon={<LayoutDashboard size={14} />}
+              label="Cards em aberto"
+              value={metrics?.total ?? 0}
+              loading={cardsQ.isLoading}
+            />
+            <MetricCard
+              icon={<AlertTriangle size={14} />}
+              label="Atrasados"
+              value={metrics?.overdue ?? 0}
+              tone={metrics && metrics.overdue > 0 ? 'danger' : 'default'}
+              loading={cardsQ.isLoading}
+            />
+            <MetricCard
+              icon={<Users size={14} />}
+              label="Colaboradores"
+              value={metrics?.collaborators ?? 0}
+              loading={cardsQ.isLoading}
+            />
+            <MetricCard
+              icon={<Building2 size={14} />}
+              label="Clientes"
+              value={metrics?.clients ?? 0}
+              loading={cardsQ.isLoading}
+            />
+          </section>
+
+          {/* Filtros */}
+          <section className="border-border bg-bg-subtle/40 mb-4 flex flex-col gap-2 rounded-md border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[200px] flex-1">
+                <Search
+                  size={13}
+                  className="text-fg-muted pointer-events-none absolute left-2 top-1/2 -translate-y-1/2"
+                />
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar pelo título…"
+                  className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-1.5 pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2"
+                />
+              </div>
+
+              <FilterMultiSelect
+                icon={<Building2 size={12} />}
+                label="Cliente"
+                options={(companiesQ.data ?? []).map((c) => ({ value: c.id, label: c.name }))}
+                selected={companyIds}
+                onChange={setCompanyIds}
+              />
+
+              <FilterMultiSelect
+                icon={<Users size={12} />}
+                label="Responsável"
+                options={(membersQ.data ?? []).map((m) => ({
+                  value: m.userId,
+                  label: m.user.name,
+                }))}
+                selected={userIds}
+                onChange={setUserIds}
+              />
+
+              <FilterMultiSelect
+                icon={<LayoutDashboard size={12} />}
+                label="Quadro"
+                options={(boardsForFilter.data ?? []).map((b) => ({ value: b.id, label: b.name }))}
+                selected={boardIds}
+                onChange={setBoardIds}
+              />
+
+              <select
+                value={dueStatus ?? ''}
+                onChange={(e) =>
+                  setDueStatus((e.target.value || undefined) as ManagementFilters['dueStatus'])
+                }
+                className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2"
+              >
+                {DUE_STATUS_OPTIONS.map((o) => (
+                  <option key={o.label} value={o.value ?? ''}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-fg-muted hover:text-fg inline-flex items-center gap-1 rounded px-2 py-1 text-[11px]"
+                >
+                  <X size={11} /> Limpar
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Tabela */}
+          {cardsQ.isLoading ? (
+            <div className="text-fg-muted flex items-center gap-2 py-12 text-sm">
+              <Loader2 size={14} className="animate-spin" />
+              Carregando cards…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-fg-muted py-12 text-center text-sm">
+              <Filter size={20} className="mx-auto mb-2 opacity-50" />
+              Nenhum card encontrado com esses filtros.
+            </div>
+          ) : (
+            <>
+              <CardsTable items={items} />
+              <PaginationBar
+                total={cardsQ.data?.total ?? 0}
+                page={page}
+                pageSize={pageSize}
+                onPage={setPage}
+                onPageSize={setPageSize}
+              />
+            </>
+          )}
         </>
       )}
     </div>

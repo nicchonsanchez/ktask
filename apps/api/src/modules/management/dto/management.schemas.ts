@@ -39,6 +39,29 @@ export const ManagementListQuerySchema = z.object({
 });
 export type ManagementListQuery = z.infer<typeof ManagementListQuerySchema>;
 
+// ---- Kanban gerencial (colunas virtuais) ----
+
+export const CreateColumnSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+});
+export type CreateColumnRequest = z.infer<typeof CreateColumnSchema>;
+
+export const UpdateColumnSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    position: z.number().optional(),
+  })
+  .refine((v) => v.name !== undefined || v.position !== undefined, {
+    message: 'Informe name e/ou position.',
+  });
+export type UpdateColumnRequest = z.infer<typeof UpdateColumnSchema>;
+
+export const AddSourceSchema = z.object({
+  boardId: z.string().cuid(),
+  listId: z.string().cuid(),
+});
+export type AddSourceRequest = z.infer<typeof AddSourceSchema>;
+
 export const ManagementArchivedQuerySchema = ManagementListQuerySchema.extend({
   /**
    * Periodo de arquivamento. Filtra `archivedAt` quando setado.

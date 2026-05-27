@@ -121,6 +121,58 @@ export const managementQueries = {
   }),
 };
 
+// ---- Kanban gerencial (colunas virtuais) ----
+
+export interface KanbanSource {
+  id: string;
+  boardId: string;
+  listId: string;
+  boardName: string;
+  boardColor: string | null;
+  listName: string;
+}
+
+/** Card dentro de uma coluna virtual — reusa o shape do management card +
+ *  inColumnIds (todas as colunas onde o card aparece; >1 = repetido). */
+export interface KanbanCard extends ManagementCardItem {
+  inColumnIds: string[];
+}
+
+export interface KanbanColumn {
+  id: string;
+  name: string;
+  position: number;
+  sources: KanbanSource[];
+  cards: KanbanCard[];
+}
+
+export interface KanbanResponse {
+  boardId: string;
+  name: string;
+  columns: KanbanColumn[];
+}
+
+export const managementKanbanQuery = () => ({
+  queryKey: ['management', 'kanban'] as const,
+  queryFn: () => api.get<KanbanResponse>('/api/v1/management/kanban'),
+});
+
+export function createKanbanColumn(name: string) {
+  return api.post<{ id: string }>('/api/v1/management/kanban/columns', { name });
+}
+export function updateKanbanColumn(columnId: string, input: { name?: string; position?: number }) {
+  return api.patch(`/api/v1/management/kanban/columns/${columnId}`, input);
+}
+export function deleteKanbanColumn(columnId: string) {
+  return api.delete(`/api/v1/management/kanban/columns/${columnId}`);
+}
+export function addKanbanSource(columnId: string, input: { boardId: string; listId: string }) {
+  return api.post(`/api/v1/management/kanban/columns/${columnId}/sources`, input);
+}
+export function removeKanbanSource(sourceId: string) {
+  return api.delete(`/api/v1/management/kanban/sources/${sourceId}`);
+}
+
 export interface CardVisitNode {
   userId: string;
   visitedAt: string;

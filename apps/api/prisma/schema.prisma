@@ -320,6 +320,7 @@ model Organization {
   contacts           Contact[]
   messageTemplates   MessageTemplate[]
   importMappings     OrgImportMapping[]
+  managementBoards   ManagementBoard[]
 
   @@index([slug])
 }
@@ -399,15 +400,16 @@ model Board {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy     User            @relation("BoardCreator", fields: [createdById], references: [id])
-  lists         List[]
-  labels        Label[]
-  members       BoardMember[]
-  cards         Card[]
-  automations   Automation[]
-  cardPresences CardPresence[]
-  favorites     BoardFavorite[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy               User                     @relation("BoardCreator", fields: [createdById], references: [id])
+  lists                   List[]
+  labels                  Label[]
+  members                 BoardMember[]
+  cards                   Card[]
+  automations             Automation[]
+  cardPresences           CardPresence[]
+  favorites               BoardFavorite[]
+  managementColumnSources ManagementColumnSource[]
 
   @@index([organizationId, isArchived])
 }
@@ -465,13 +467,14 @@ model List {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization               Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  board                      Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  organization               Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board                      Board                    @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards                      Card[]
   automations                Automation[]
   cardPresences              CardPresence[]
-  defaultApproveForApprovals CardApproval[] @relation("ApprovalDefaultApproveList")
-  defaultRejectForApprovals  CardApproval[] @relation("ApprovalDefaultRejectList")
+  defaultApproveForApprovals CardApproval[]           @relation("ApprovalDefaultApproveList")
+  defaultRejectForApprovals  CardApproval[]           @relation("ApprovalDefaultRejectList")
+  managementColumnSources    ManagementColumnSource[]
 
   @@index([organizationId])
   @@index([boardId, position])
@@ -1266,4 +1269,59 @@ model ServiceProvider {
   notas        String?
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
+}
+
+// ==================== Visão Gerencial — Kanban virtual ====================
+// Colunas virtuais que agregam cards de listas de quadros diferentes numa
+// lente de leitura pra gestao (OWNER/ADMIN/GESTOR). Read-only — nao move
+// cards. Ver tarefas-md/visao-gerencial-kanban.md.
+
+/// Uma "visao" Kanban gerencial da org. V1 usa 1 por org (auto-criada no
+/// primeiro acesso), mas o modelo ja suporta N (multi-visao no futuro).
+model ManagementBoard {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String   @default("Visão Kanban")
+  position       Float    @default(0)
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  columns      ManagementColumn[]
+
+  @@index([organizationId])
+}
+
+/// Coluna virtual ("A fazer", "Fazendo", etc). Ordem via position.
+model ManagementColumn {
+  id                String   @id @default(cuid())
+  managementBoardId String
+  name              String
+  position          Float
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  managementBoard ManagementBoard          @relation(fields: [managementBoardId], references: [id], onDelete: Cascade)
+  sources         ManagementColumnSource[]
+
+  @@index([managementBoardId, position])
+}
+
+/// Fonte de uma coluna virtual: um par (board, list). Os cards presentes
+/// nessa lista aparecem na coluna. FK com cascade — lista/board apagado
+/// limpa a fonte automaticamente (sem referencia fantasma).
+model ManagementColumnSource {
+  id       String @id @default(cuid())
+  columnId String
+  boardId  String
+  listId   String
+
+  column ManagementColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  board  Board            @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  list   List             @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([columnId, boardId, listId])
+  @@index([columnId])
+  @@index([listId])
 }
