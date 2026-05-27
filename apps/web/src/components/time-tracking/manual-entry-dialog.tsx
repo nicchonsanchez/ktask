@@ -164,21 +164,25 @@ export function ManualEntryDialog({
         >
           <CardPicker selected={card} onSelect={setCard} />
 
-          <div className="grid grid-cols-3 gap-2">
-            <Field label="Data">
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
-              />
-            </Field>
+          {/* Mobile: data ocupa a linha toda (input date precisa de largura),
+              inicio/fim dividem a linha de baixo. sm+: 3 colunas lado-a-lado. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="col-span-2 sm:col-span-1">
+              <Field label="Data">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                />
+              </Field>
+            </div>
             <Field label="Início">
               <input
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
               />
             </Field>
             <Field label="Fim">
@@ -186,7 +190,7 @@ export function ManualEntryDialog({
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="border-border focus:border-primary rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
               />
             </Field>
           </div>
