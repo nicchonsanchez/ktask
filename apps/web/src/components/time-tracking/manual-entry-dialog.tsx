@@ -50,8 +50,10 @@ export function ManualEntryDialog({
   const notify = useNotify();
   const isEdit = !!entry;
   const [card, setCard] = useState<PickedCard | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState(today);
   const [startTime, setStartTime] = useState('09:00');
+  const [endDate, setEndDate] = useState(today);
   const [endTime, setEndTime] = useState('10:00');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -71,15 +73,19 @@ export function ManualEntryDialog({
           : null,
       );
       const s = splitLocal(entry.startedAt);
-      setDate(s.date);
+      setStartDate(s.date);
       setStartTime(s.time);
-      setEndTime(entry.endedAt ? splitLocal(entry.endedAt).time : s.time);
+      const e = entry.endedAt ? splitLocal(entry.endedAt) : s;
+      setEndDate(e.date);
+      setEndTime(e.time);
       setNote(entry.note ?? '');
       setError(null);
     } else {
+      const d = new Date().toISOString().slice(0, 10);
       setCard(null);
-      setDate(new Date().toISOString().slice(0, 10));
+      setStartDate(d);
       setStartTime('09:00');
+      setEndDate(d);
       setEndTime('10:00');
       setNote('');
       setError(null);
@@ -89,10 +95,10 @@ export function ManualEntryDialog({
   const createMut = useMutation({
     mutationFn: () => {
       if (!card) throw new Error('Selecione um card');
-      const startedAt = new Date(`${date}T${startTime}:00`).toISOString();
-      const endedAt = new Date(`${date}T${endTime}:00`).toISOString();
+      const startedAt = new Date(`${startDate}T${startTime}:00`).toISOString();
+      const endedAt = new Date(`${endDate}T${endTime}:00`).toISOString();
       if (new Date(endedAt).getTime() <= new Date(startedAt).getTime()) {
-        throw new Error('Horário final deve ser depois do inicial');
+        throw new Error('Data/hora final deve ser depois da inicial');
       }
       if (isEdit && entry) {
         return updateTimeEntry(entry.id, {
@@ -125,7 +131,8 @@ export function ManualEntryDialog({
     },
   });
 
-  const canSubmit = !!card && !!date && !!startTime && !!endTime && !createMut.isPending;
+  const canSubmit =
+    !!card && !!startDate && !!startTime && !!endDate && !!endTime && !createMut.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -164,35 +171,47 @@ export function ManualEntryDialog({
         >
           <CardPicker selected={card} onSelect={setCard} />
 
-          {/* Mobile: data ocupa a linha toda (input date precisa de largura),
-              inicio/fim dividem a linha de baixo. sm+: 3 colunas lado-a-lado. */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <div className="col-span-2 sm:col-span-1">
-              <Field label="Data">
+          {/* Início e Fim, cada um com data + hora. 2 colunas (data | hora)
+              por linha — funciona bem de mobile a desktop dentro do max-w-md. */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-fg-muted text-[11px] font-medium">Início</span>
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  aria-label="Data de início"
                   className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
                 />
-              </Field>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  aria-label="Hora de início"
+                  className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                />
+              </div>
             </div>
-            <Field label="Início">
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
-              />
-            </Field>
-            <Field label="Fim">
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
-              />
-            </Field>
+            <div className="flex flex-col gap-1">
+              <span className="text-fg-muted text-[11px] font-medium">Fim</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  aria-label="Data de fim"
+                  className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                />
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  aria-label="Hora de fim"
+                  className="border-border focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none"
+                />
+              </div>
+            </div>
           </div>
 
           <Field label="Anotação (opcional)">

@@ -41,7 +41,10 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4',
+        // w-[calc(100%-1.5rem)] garante ~12px de margem lateral no mobile
+        // (em vez de edge-to-edge). max-w-lg cap no desktop. Dialogs
+        // fullscreen sobrescrevem com w-screen/max-w-[100vw] via className.
+        'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4',
         'border-border bg-bg rounded-xl border p-6 shadow-lg',
         'focus-visible:outline-none',
         className,
