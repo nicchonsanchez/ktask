@@ -119,7 +119,61 @@ export const managementQueries = {
       );
     },
   }),
+  approvals: (filters: ManagementApprovalsFilters = {}) => ({
+    queryKey: ['management', 'approvals', filters] as const,
+    queryFn: () => {
+      const sp = new URLSearchParams();
+      if (filters.reviewerId) sp.set('reviewerId', filters.reviewerId);
+      if (filters.ageFilter && filters.ageFilter !== 'all') sp.set('ageFilter', filters.ageFilter);
+      const qs = sp.toString();
+      return api.get<ManagementApprovalsResponse>(
+        `/api/v1/management/approvals${qs ? `?${qs}` : ''}`,
+      );
+    },
+  }),
 };
+
+// ---- Aprovacoes (visao gerencial) ----
+
+export interface ManagementApprovalsFilters {
+  reviewerId?: string;
+  /** 'over3d' = >3 dias parada, 'over7d' = >7 dias, 'all' = sem filtro (default). */
+  ageFilter?: 'all' | 'over3d' | 'over7d';
+}
+
+export interface ManagementApprovalItem {
+  id: string;
+  cardId: string;
+  requestedAt: string;
+  requestedBy: { id: string; name: string; avatarUrl: string | null } | null;
+  card: {
+    id: string;
+    title: string;
+    boardId: string;
+    listId: string;
+    board: { id: string; name: string; color: string | null };
+    list: { id: string; name: string };
+  };
+  reviewers: Array<{
+    id: string;
+    userId: string | null;
+    phone: string | null;
+    externalName: string | null;
+    notifiedAt: string | null;
+    user: { id: string; name: string; avatarUrl: string | null } | null;
+  }>;
+  /** true se o user logado eh reviewer desta aprovacao (pode decidir).
+   *  false = somente visualizacao (gestor olhando aprovacao alheia). */
+  canDecide: boolean;
+}
+
+export interface ManagementApprovalsResponse {
+  items: ManagementApprovalItem[];
+  /** Lista deduplicada de reviewers que tem pelo menos 1 approval pendente.
+   *  Usado pelo dropdown de filtro "Filtrar por aprovador". */
+  reviewers: Array<{ id: string; name: string; avatarUrl: string | null }>;
+  total: number;
+}
 
 // ---- Kanban gerencial (colunas virtuais) ----
 

@@ -62,6 +62,22 @@ export const AddSourceSchema = z.object({
 });
 export type AddSourceRequest = z.infer<typeof AddSourceSchema>;
 
+// ---- Aprovacoes (visao gerencial) ----
+
+export const ManagementApprovalsQuerySchema = z.object({
+  /** ID de User reviewer pra filtrar (opcional). Approval onde algum
+   * CardApprovalReviewer.userId == reviewerId. */
+  reviewerId: z.string().cuid().optional(),
+  /**
+   * Filtro de idade da aprovacao (`requestedAt`):
+   * - `over3d` = mais de 3 dias parada
+   * - `over7d` = mais de 7 dias parada
+   * - `all`    = sem filtro (default)
+   */
+  ageFilter: z.enum(['over3d', 'over7d', 'all']).default('all'),
+});
+export type ManagementApprovalsQuery = z.infer<typeof ManagementApprovalsQuerySchema>;
+
 export const ManagementArchivedQuerySchema = ManagementListQuerySchema.extend({
   /**
    * Periodo de arquivamento. Filtra `archivedAt` quando setado.

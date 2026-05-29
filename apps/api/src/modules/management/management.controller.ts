@@ -22,11 +22,13 @@ import { ManagementService } from './management.service';
 import {
   AddSourceSchema,
   CreateColumnSchema,
+  ManagementApprovalsQuerySchema,
   ManagementArchivedQuerySchema,
   ManagementListQuerySchema,
   UpdateColumnSchema,
   type AddSourceRequest,
   type CreateColumnRequest,
+  type ManagementApprovalsQuery,
   type ManagementArchivedQuery,
   type ManagementListQuery,
   type UpdateColumnRequest,
@@ -71,6 +73,23 @@ export class ManagementController {
     @Query(new ZodValidationPipe(ManagementListQuerySchema)) query: ManagementListQuery,
   ) {
     return this.mgmt.listCards(user.userId, org, { ...query, onlyFinalLists: true });
+  }
+
+  // ---- Aprovacoes (visao gerencial) ----
+
+  @Get('approvals')
+  @ApiOperation({
+    summary: 'Visão Gerencial: todas as aprovações pendentes da org',
+    description:
+      'Diferente de /me/pending-approvals, lista approvals de qualquer reviewer (não só do user logado). Restrito a OWNER/ADMIN/GESTOR e escopado aos boards acessíveis.',
+  })
+  listApprovals(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query(new ZodValidationPipe(ManagementApprovalsQuerySchema))
+    query: ManagementApprovalsQuery,
+  ) {
+    return this.mgmt.listApprovals(user.userId, org, query);
   }
 
   // ---- Kanban gerencial (colunas virtuais) ----

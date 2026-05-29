@@ -6,7 +6,11 @@ import { cardVisibilityWhere } from '@/common/util/card-privacy';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 
-import type { ManagementArchivedQuery, ManagementListQuery } from './dto/management.schemas';
+import type {
+  ManagementApprovalsQuery,
+  ManagementArchivedQuery,
+  ManagementListQuery,
+} from './dto/management.schemas';
 
 /**
  * Roles que conseguem abrir a Visao Gerencial. Membros comuns nao —
@@ -105,6 +109,101 @@ export class ManagementService {
       total,
       page: query.page,
       pageSize: query.pageSize,
+    };
+  }
+
+  // ============================================================
+  // Aprovacoes (visao gerencial — todas pendentes da org)
+  // ============================================================
+
+  /**
+   * Lista TODAS as aprovacoes pendentes da org, restritas aos boards que
+   * o gestor tem acesso. Diferente de `/me/pending-approvals` (que filtra
+   * `reviewers.userId = me`), aqui ele ve aprovacoes de qualquer revisor.
+   *
+   * Permissao: OWNER/ADMIN/GESTOR (assertManagementAccess).
+   * Escopo: cards de boards retornados por `listAccessibleBoardIds` —
+   * gestor sem acesso a board X nao ve approvals de cards desse board.
+   *
+   * Retorna o mesmo shape do `listPendingForUser` pro frontend reusar o
+   * componente de card, MAIS um `canDecide: boolean` indicando se o user
+   * eh reviewer (front desabilita botoes quando false).
+   */
+  async listApprovals(userId: string, tenant: TenantContext, query: ManagementApprovalsQuery) {
+    this.assertManagementAccess(tenant);
+
+    const boardIds = await this.access.listAccessibleBoardIds(userId, tenant);
+    if (boardIds.length === 0) {
+      return { items: [], reviewers: [], total: 0 };
+    }
+
+    const where: Prisma.CardApprovalWhereInput = {
+      organizationId: tenant.organizationId,
+      status: 'PENDING',
+      card: { boardId: { in: boardIds } },
+    };
+
+    // Filtro de idade: requestedAt < (now - N dias)
+    if (query.ageFilter !== 'all') {
+      const days = query.ageFilter === 'over3d' ? 3 : 7;
+      where.requestedAt = { lt: new Date(Date.now() - days * 24 * 60 * 60 * 1000) };
+    }
+
+    // Filtro por reviewer especifico (dropdown do front)
+    if (query.reviewerId) {
+      where.reviewers = { some: { userId: query.reviewerId } };
+    }
+
+    const approvals = await this.prisma.cardApproval.findMany({
+      where,
+      orderBy: { requestedAt: 'asc' }, // mais antigas primeiro = mais atrasadas
+      include: {
+        card: {
+          select: {
+            id: true,
+            title: true,
+            boardId: true,
+            listId: true,
+            board: { select: { id: true, name: true, color: true } },
+            list: { select: { id: true, name: true } },
+          },
+        },
+        requestedBy: { select: { id: true, name: true, avatarUrl: true } },
+        reviewers: {
+          select: {
+            id: true,
+            userId: true,
+            phone: true,
+            externalName: true,
+            notifiedAt: true,
+            user: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
+      },
+    });
+
+    // Lista deduplicada de reviewers internos pendentes — usada pelo
+    // dropdown "Filtrar por aprovador" no front. So users (nao phones
+    // externos) entram aqui pra simplificar a UX do filtro.
+    const reviewerMap = new Map<string, { id: string; name: string; avatarUrl: string | null }>();
+    for (const a of approvals) {
+      for (const r of a.reviewers) {
+        if (r.user && !reviewerMap.has(r.user.id)) {
+          reviewerMap.set(r.user.id, r.user);
+        }
+      }
+    }
+
+    // Anexa `canDecide` em cada approval: true se userId logado eh reviewer.
+    const items = approvals.map((a) => ({
+      ...a,
+      canDecide: a.reviewers.some((r) => r.userId === userId),
+    }));
+
+    return {
+      items,
+      reviewers: Array.from(reviewerMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      total: approvals.length,
     };
   }
 
