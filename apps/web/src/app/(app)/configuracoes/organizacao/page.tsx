@@ -165,14 +165,12 @@ export default function ConfiguracoesOrganizacaoPage() {
             org.approvalReminderEnabled ? '' : 'opacity-50'
           }`}
         >
-          <NumberField
-            label="Intervalo entre lembretes (horas)"
-            value={org.approvalReminderIntervalHours}
-            min={1}
-            max={72}
+          <IntervalField
+            label="Intervalo entre lembretes"
+            hours={org.approvalReminderIntervalHours}
             disabled={!org.approvalReminderEnabled || patchMut.isPending}
             onChange={(v) => patchMut.mutate({ approvalReminderIntervalHours: v })}
-            hint="Tempo entre 1 lembrete e o próximo (só conta horas úteis)."
+            hint="Tempo entre 1 lembrete e o próximo (só conta horas úteis). Mínimo: 30min."
           />
           <NumberField
             label="Máximo de lembretes por aprovação"
@@ -221,6 +219,97 @@ export default function ConfiguracoesOrganizacaoPage() {
         <p className="bg-danger-subtle text-danger mt-3 rounded-md px-3 py-2 text-xs">{error}</p>
       )}
     </div>
+  );
+}
+
+/**
+ * Campo de intervalo com seletor de unidade (minutos/horas).
+ * Backend armazena sempre em horas (Float); UI escolhe a unidade conforme
+ * o valor pra ficar legivel ("30 minutos" em vez de "0.5 horas").
+ *
+ * Inicia em horas se >= 1h, senao em minutos. Quando user troca a unidade
+ * sem editar o valor, mantem o valor textual e converte ao salvar.
+ */
+function IntervalField({
+  label,
+  hours,
+  disabled,
+  onChange,
+  hint,
+}: {
+  label: string;
+  hours: number;
+  disabled?: boolean;
+  onChange: (hoursValue: number) => void;
+  hint?: string;
+}) {
+  // Decide a unidade de exibicao baseada no valor inicial: < 1h vira minutos
+  const initialUnit: 'minutos' | 'horas' = hours < 1 ? 'minutos' : 'horas';
+  const initialValue = String(initialUnit === 'minutos' ? Math.round(hours * 60) : hours);
+
+  const [unit, setUnit] = useState<'minutos' | 'horas'>(initialUnit);
+  const [local, setLocal] = useState<string>(initialValue);
+
+  // Re-sync se valor externo mudar (ex: outro patch resolveu)
+  if (
+    document.activeElement?.tagName !== 'INPUT' &&
+    !Number.isNaN(Number(local)) &&
+    Math.abs((unit === 'minutos' ? Number(local) / 60 : Number(local)) - hours) > 0.001
+  ) {
+    const nextUnit: 'minutos' | 'horas' = hours < 1 ? 'minutos' : 'horas';
+    setUnit(nextUnit);
+    setLocal(String(nextUnit === 'minutos' ? Math.round(hours * 60) : hours));
+  }
+
+  function commit() {
+    const n = Number(local);
+    if (!Number.isFinite(n) || n <= 0) {
+      // Reverte pra valor original
+      setLocal(initialValue);
+      setUnit(initialUnit);
+      return;
+    }
+    const inHours = unit === 'minutos' ? n / 60 : n;
+    // Clamp em 0.5h (30min) pra evitar erro de validacao no backend
+    const finalHours = Math.max(0.5, Math.min(72, inHours));
+    if (Math.abs(finalHours - hours) > 0.001) {
+      onChange(finalHours);
+    }
+  }
+
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-fg text-xs font-medium">{label}</span>
+      <div className="flex items-stretch gap-2">
+        <input
+          type="number"
+          value={local}
+          min={1}
+          step={1}
+          disabled={disabled}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          className="border-border bg-bg focus-visible:ring-primary flex-1 rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+        />
+        <select
+          value={unit}
+          onChange={(e) => {
+            // Troca de unidade sem reenviar — proximo blur converte e salva.
+            setUnit(e.target.value as 'minutos' | 'horas');
+          }}
+          onBlur={commit}
+          disabled={disabled}
+          className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+        >
+          <option value="minutos">minutos</option>
+          <option value="horas">horas</option>
+        </select>
+      </div>
+      {hint && <span className="text-fg-subtle text-[11px]">{hint}</span>}
+    </label>
   );
 }
 

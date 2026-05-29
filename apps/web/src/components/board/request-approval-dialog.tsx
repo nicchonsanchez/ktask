@@ -57,10 +57,12 @@ export function RequestApprovalDialog({
   const [onRejectRemoveTagIds, setOnRejectRemoveTagIds] = useState<string[]>([]);
   const [notifyOnWhatsApp, setNotifyOnWhatsApp] = useState(true);
   // Override per-approval do lembrete automatico. Default: usar setting da org.
-  // `reminderDisabled = true` desliga so essa approval. `reminderInterval` vazio
-  // = usa intervalo da org (default 4h). Section "Opcoes avancadas" colapsada.
+  // `reminderDisabled = true` desliga so essa approval. `reminderValue` vazio
+  // = usa intervalo da org (default 4h). UI separa valor + unidade ('m'/'h');
+  // backend sempre recebe em horas (minutos / 60).
   const [reminderDisabled, setReminderDisabled] = useState(false);
-  const [reminderInterval, setReminderInterval] = useState<string>(''); // '' = usa org
+  const [reminderValue, setReminderValue] = useState<string>(''); // '' = usa org
+  const [reminderUnit, setReminderUnit] = useState<'minutos' | 'horas'>('horas');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +81,8 @@ export function RequestApprovalDialog({
       setOnRejectRemoveTagIds([]);
       setNotifyOnWhatsApp(true);
       setReminderDisabled(false);
-      setReminderInterval('');
+      setReminderValue('');
+      setReminderUnit('horas');
       setShowAdvanced(false);
       setError(null);
     }
@@ -138,9 +141,18 @@ export function RequestApprovalDialog({
         if (t.approve) approveTargets.push({ boardId: bId, listId: t.approve });
         if (t.reject) rejectTargets.push({ boardId: bId, listId: t.reject });
       }
-      const intervalNum = reminderInterval.trim() ? Number(reminderInterval) : undefined;
+      // UI separa valor + unidade; backend recebe sempre em horas. Min 0.5h
+      // (30min) — values menores que isso sao silenciosamente clampados pra
+      // 0.5 pra evitar erro de validacao (cron roda a cada 30min de qualquer jeito).
+      const rawNum = reminderValue.trim() ? Number(reminderValue) : NaN;
+      const valueInHours =
+        Number.isFinite(rawNum) && rawNum > 0
+          ? reminderUnit === 'minutos'
+            ? rawNum / 60
+            : rawNum
+          : undefined;
       const reminderIntervalHoursOverride =
-        intervalNum && Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : undefined;
+        valueInHours !== undefined ? Math.max(0.5, valueInHours) : undefined;
       return requestApproval(cardId, {
         reviewers: reviewers.map((r) => r.data),
         message: message.trim() || undefined,
@@ -459,24 +471,36 @@ export function RequestApprovalDialog({
                 </span>
               </label>
 
-              <label
+              <div
                 className={`flex flex-col gap-1 text-xs ${reminderDisabled ? 'opacity-40' : ''}`}
               >
-                <span className="font-medium">Intervalo personalizado (horas)</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={72}
-                  value={reminderInterval}
-                  onChange={(e) => setReminderInterval(e.target.value)}
-                  disabled={reminderDisabled}
-                  placeholder="vazio = usa padrão da organização"
-                  className="border-border bg-bg focus-visible:ring-primary w-48 rounded-md border px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-                />
+                <span className="font-medium">Intervalo personalizado</span>
+                <div className="flex items-stretch gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={reminderValue}
+                    onChange={(e) => setReminderValue(e.target.value)}
+                    disabled={reminderDisabled}
+                    placeholder="vazio = usa padrão da organização"
+                    className="border-border bg-bg focus-visible:ring-primary w-56 rounded-md border px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                  />
+                  <select
+                    value={reminderUnit}
+                    onChange={(e) => setReminderUnit(e.target.value as 'minutos' | 'horas')}
+                    disabled={reminderDisabled}
+                    className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                  >
+                    <option value="minutos">minutos</option>
+                    <option value="horas">horas</option>
+                  </select>
+                </div>
                 <span className="text-fg-subtle leading-relaxed">
-                  Sobrescreve o intervalo padrão da organização (ex: 2h pra cobrar mais rápido).
+                  Sobrescreve o padrão da organização. Mínimo prático: 30 minutos (o cron roda a
+                  cada 30min). Só conta horas úteis (seg-sex, dentro da janela configurada).
                 </span>
-              </label>
+              </div>
             </div>
           </details>
 

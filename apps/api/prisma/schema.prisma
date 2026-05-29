@@ -325,7 +325,9 @@ model Organization {
   /// (seg-sex, hourStart-hourEnd). Cada lembrete incrementa
   /// `CardApproval.reminderCount`; para após `maxAttempts`.
   approvalReminderEnabled       Boolean  @default(false)
-  approvalReminderIntervalHours Int      @default(4)
+  /// Intervalo em horas. Aceita decimal (0.5 = 30min). Cron roda a cada
+  /// 30min, entao 0.5 eh o piso pratico.
+  approvalReminderIntervalHours Float    @default(4)
   /// Hora de início da janela útil (0-23, BRT). Default 8h.
   approvalReminderHourStart     Int      @default(8)
   /// Hora de fim da janela útil (0-23, BRT). Default 18h.
@@ -736,8 +738,8 @@ model CardApproval {
   /// aprovacoes onde o requester decidiu cobrar manualmente.
   reminderDisabled        Boolean        @default(false)
   /// Override do intervalo em horas (somente esta approval). Null = usa
-  /// Organization.approvalReminderIntervalHours.
-  reminderIntervalHoursOverride Int?
+  /// Organization.approvalReminderIntervalHours. Aceita decimal (0.5 = 30min).
+  reminderIntervalHoursOverride Float?
   /// Quantos lembretes automaticos ja foram enviados pra esta approval.
   /// Quando atinge Organization.approvalReminderMaxAttempts, para.
   reminderCount           Int            @default(0)

@@ -43,7 +43,11 @@ export const UpdateOrganizationRequestSchema = CreateOrganizationRequestSchema.p
    * respeitando a janela horária. Cap por approval em maxAttempts.
    */
   approvalReminderEnabled: z.boolean().optional(),
-  approvalReminderIntervalHours: z.number().int().min(1).max(72).optional(),
+  /**
+   * Intervalo em horas. Aceita decimal (0.5 = 30min). Min 0.5 porque o
+   * cron roda a cada 30min; max 72 (3 dias).
+   */
+  approvalReminderIntervalHours: z.number().min(0.5).max(72).optional(),
   approvalReminderHourStart: z.number().int().min(0).max(23).optional(),
   approvalReminderHourEnd: z.number().int().min(1).max(24).optional(),
   approvalReminderMaxAttempts: z.number().int().min(1).max(20).optional(),

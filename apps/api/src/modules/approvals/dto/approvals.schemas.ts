@@ -75,9 +75,10 @@ export const RequestApprovalSchema = z.object({
   reminderDisabled: z.boolean().optional(),
   /**
    * Override per-approval do intervalo (em horas). Null/undefined = usa
-   * setting da org (`approvalReminderIntervalHours`). Aceita 1-72h.
+   * setting da org. Aceita decimal: 0.5 = 30min, 1 = 1h, 1.5 = 1h30, etc.
+   * Min 0.5 porque o cron roda a cada 30min.
    */
-  reminderIntervalHoursOverride: z.number().int().min(1).max(72).optional(),
+  reminderIntervalHoursOverride: z.number().min(0.5).max(72).optional(),
 });
 export type RequestApprovalRequest = z.infer<typeof RequestApprovalSchema>;
 
