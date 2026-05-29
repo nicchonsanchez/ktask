@@ -69,9 +69,11 @@ export default function AprovacoesPage() {
   const [ageFilter, setAgeFilter] = useState<ManagementApprovalsFilters['ageFilter']>('all');
 
   const myQ = useQuery({ ...approvalsQueries.myPending() });
+  // Habilitada sempre que for gestor (não só na aba ativa) — assim o
+  // contador "Todas (N)" mostra antes de clicar na aba.
   const allQ = useQuery({
     ...managementQueries.approvals({ reviewerId, ageFilter }),
-    enabled: isPrivileged && view === 'todas',
+    enabled: isPrivileged,
   });
 
   const myItems = myQ.data ?? [];
