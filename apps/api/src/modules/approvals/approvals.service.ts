@@ -20,6 +20,7 @@ import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { StorageService } from '@/modules/storage/storage.service';
+import { AutomationsOutboxService } from '@/modules/automations/automations.outbox.service';
 
 import type {
   RequestApprovalRequest,
@@ -90,6 +91,7 @@ export class ApprovalsService {
     private readonly events: EventEmitter2,
     private readonly storage: StorageService,
     private readonly statusSync: CardStatusSyncService,
+    private readonly automationsOutbox: AutomationsOutboxService,
   ) {}
 
   // ============================================================
@@ -832,6 +834,7 @@ export class ApprovalsService {
         where: { cardId_boardId: { cardId: updated.approval.cardId, boardId: move.boardId } },
         select: { position: true },
       });
+      // Realtime: notifica frontend pro Kanban animar a transição.
       this.events.emit(EVENT_NAMES.CARD_MOVED, {
         boardId: move.boardId,
         organizationId: updated.approval.organizationId,
@@ -841,6 +844,19 @@ export class ApprovalsService {
         toListId: move.toListId,
         position: presence?.position ?? 0,
       });
+      // Enfileira CARD_LEFT/CARD_ENTERED pra automação rodar na nova lista
+      // (ex: aprovação aprovada moveu pra "Em produção" e essa lista tem
+      // CARD_ENTERED configurado). Fora da TXN do approval — o move já foi
+      // commitado anteriormente, esse enqueue é só pra disparar a cascata.
+      const ids = await this.automationsOutbox.enqueueCardMoved(this.prisma, {
+        organizationId: updated.approval.organizationId,
+        cardId: updated.approval.cardId,
+        fromListId: move.fromListId,
+        toListId: move.toListId,
+      });
+      // Push: processa JÁ pra latência ~ms.
+      void this.automationsOutbox.processOne(ids.leftId);
+      void this.automationsOutbox.processOne(ids.enteredId);
     }
 
     // Notifica o requester com contexto: quem decidiu + titulo do card +

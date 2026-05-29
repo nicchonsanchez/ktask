@@ -4,6 +4,7 @@ import type { Automation } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { AutomationsEngine } from './automations.engine';
+import { AutomationsOutboxService } from './automations.outbox.service';
 
 /**
  * Scheduler de triggers temporais — Fase D.
@@ -30,10 +31,63 @@ import { AutomationsEngine } from './automations.engine';
 export class AutomationsScheduler {
   private readonly logger = new Logger(AutomationsScheduler.name);
 
+  /**
+   * Flag in-memory pra evitar re-entrada do processador da outbox.
+   * `@Cron` pode disparar enquanto a execução anterior ainda está rodando
+   * (5s pode não bastar pra um batch grande). Em multi-instância, o
+   * `FOR UPDATE SKIP LOCKED` da query cobre o isolamento; essa flag é só
+   * pra evitar overlap dentro do mesmo processo.
+   */
+  private outboxProcessing = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly engine: AutomationsEngine,
+    private readonly outbox: AutomationsOutboxService,
   ) {}
+
+  /**
+   * Pull worker do AutomationOutbox. Roda a cada 5s; busca rows com
+   * `processedAt IS NULL` e `nextAttemptAt <= now()` em batch de 50,
+   * usando `FOR UPDATE SKIP LOCKED` pra suportar multi-worker.
+   *
+   * É a rede de proteção: o caminho "push" (chamado fire-and-forget logo
+   * após o COMMIT do caller) cobre o caso feliz. Quando o push falha
+   * (processo sobrecarregado, race) ou a row precisa de retry (erro
+   * transitório com backoff), esse cron é quem garante eventual delivery.
+   */
+  @Cron(CronExpression.EVERY_5_SECONDS)
+  async runOutboxPoll() {
+    if (this.outboxProcessing) return; // skip se anterior ainda rola
+    this.outboxProcessing = true;
+    try {
+      const result = await this.outbox.processPending();
+      if (result.processed > 0 || result.failed > 0) {
+        this.logger.log(`Outbox poll: ${result.processed} processadas, ${result.failed} falharam`);
+      }
+    } catch (err) {
+      this.logger.error(`Outbox poll erro global: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.outboxProcessing = false;
+    }
+  }
+
+  /**
+   * Sweeper de runs travados em RUNNING. Roda a cada 5min. Marca como
+   * ABANDONED qualquer run em RUNNING há mais de 5min — sinaliza que o
+   * processo morreu durante a execução. NÃO reprocessa automaticamente:
+   * pra triggers via outbox, a row dela permanece pendente e o poll
+   * acima retoma; pra triggers temporais, o próximo tick do scheduler
+   * temporal já lida via idempotência (alreadyRan).
+   */
+  @Cron('0 */5 * * * *') // a cada 5 minutos
+  async runAbandonedSweeper() {
+    try {
+      await this.outbox.sweepAbandonedRuns();
+    } catch (err) {
+      this.logger.error(`Sweeper erro: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async runTimeInList() {

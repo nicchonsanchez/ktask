@@ -9,6 +9,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { AutomationsOutboxService } from '@/modules/automations/automations.outbox.service';
 
 @Injectable()
 export class ChecklistsService {
@@ -17,6 +18,7 @@ export class ChecklistsService {
     private readonly access: BoardAccessService,
     private readonly events: EventEmitter2,
     private readonly notifications: NotificationsService,
+    private readonly automationsOutbox: AutomationsOutboxService,
   ) {}
 
   /**
@@ -336,32 +338,34 @@ export class ChecklistsService {
         },
       });
 
-      // Doc 48: dispara eventos pra automation engine. Só na transição
-      // false → true (input.isDone === true). Re-marcar como undone não
-      // dispara nada (evita loops e disparos espurios).
+      // Doc 48: enfileira triggers pra automation engine via outbox. Só na
+      // transição false → true. Re-marcar como undone não dispara (evita
+      // loops). Outbox em vez de events.emit: sobrevive a crash do processo
+      // entre o update e a execução da automação.
       if (input.isDone === true) {
-        this.events.emit('checklist.item.done', {
-          itemId,
-          checklistId: item.checklistId,
-          cardId: card.id,
-          listId: card.listId,
+        const itemDoneEntry = await this.automationsOutbox.enqueue(this.prisma, {
           organizationId: tenant.organizationId,
-          actorId: userId,
+          trigger: 'CHECKLIST_ITEM_DONE',
+          cardId: card.id,
+          scopeKind: 'CHECKLIST_ITEM',
+          scopeId: itemId,
         });
+        void this.automationsOutbox.processOne(itemDoneEntry.id);
 
-        // Se este foi o último item pendente do checklist, dispara
+        // Se este foi o último item pendente do checklist, enfileira
         // CHECKLIST_COMPLETED também.
         const remaining = await this.prisma.checklistItem.count({
           where: { checklistId: item.checklistId, isDone: false },
         });
         if (remaining === 0) {
-          this.events.emit('checklist.completed', {
-            checklistId: item.checklistId,
-            cardId: card.id,
-            listId: card.listId,
+          const completedEntry = await this.automationsOutbox.enqueue(this.prisma, {
             organizationId: tenant.organizationId,
-            actorId: userId,
+            trigger: 'CHECKLIST_COMPLETED',
+            cardId: card.id,
+            scopeKind: 'CHECKLIST',
+            scopeId: item.checklistId,
           });
+          void this.automationsOutbox.processOne(completedEntry.id);
         }
       }
     }

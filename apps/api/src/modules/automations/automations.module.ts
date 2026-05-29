@@ -9,6 +9,7 @@ import { AutomationsService } from './automations.service';
 import { AutomationsController } from './automations.controller';
 import { AutomationsEngine } from './automations.engine';
 import { AutomationsScheduler } from './automations.scheduler';
+import { AutomationsOutboxService } from './automations.outbox.service';
 
 @Module({
   imports: [BoardsModule, NotificationsModule],
@@ -17,9 +18,12 @@ import { AutomationsScheduler } from './automations.scheduler';
     AutomationsService,
     AutomationsEngine,
     AutomationsScheduler,
+    AutomationsOutboxService,
     CardStatusSyncService,
     TenantGuard,
   ],
-  exports: [AutomationsService, AutomationsEngine],
+  // Outbox precisa ser exportado pra cards/approvals/checklists fazerem
+  // enqueue dentro da TXN deles.
+  exports: [AutomationsService, AutomationsEngine, AutomationsOutboxService],
 })
 export class AutomationsModule {}

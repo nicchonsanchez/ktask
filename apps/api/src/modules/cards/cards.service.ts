@@ -15,6 +15,7 @@ import { BoardAccessService } from '@/modules/boards/board-access.service';
 import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { StorageService } from '@/modules/storage/storage.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { AutomationsOutboxService } from '@/modules/automations/automations.outbox.service';
 
 import { createCardWithPresence } from './helpers/create-card-with-presence';
 import { CardStatusSyncService } from './card-status-sync';
@@ -59,6 +60,7 @@ export class CardsService {
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
     private readonly statusSync: CardStatusSyncService,
+    private readonly automationsOutbox: AutomationsOutboxService,
   ) {}
 
   async create(userId: string, tenant: TenantContext, input: CreateCardInput) {
@@ -78,7 +80,7 @@ export class CardsService {
       select: { inheritTeamOnNewCards: true, members: { select: { userId: true } } },
     });
 
-    const card = await this.prisma.$transaction(async (tx) => {
+    const { card, outboxId } = await this.prisma.$transaction(async (tx) => {
       const created = await createCardWithPresence(tx, {
         organizationId: tenant.organizationId,
         boardId: list.boardId,
@@ -101,7 +103,17 @@ export class CardsService {
         skipDuplicates: true,
       });
 
-      return created;
+      // Enfileira CARD_ENTERED na MESMA TXN — atomicidade garante que o
+      // trigger só persiste se o card foi mesmo criado.
+      const outbox = await this.automationsOutbox.enqueue(tx, {
+        organizationId: tenant.organizationId,
+        trigger: 'CARD_ENTERED',
+        cardId: created.id,
+        scopeKind: 'LIST',
+        scopeId: list.id,
+      });
+
+      return { card: created, outboxId: outbox.id };
     });
 
     await this.prisma.activity.create({
@@ -115,6 +127,7 @@ export class CardsService {
       },
     });
 
+    // Realtime: notifica frontend (RealtimeGateway escuta esse canal).
     this.events.emit(EVENT_NAMES.CARD_CREATED, {
       boardId: list.boardId,
       organizationId: tenant.organizationId,
@@ -123,6 +136,11 @@ export class CardsService {
       listId: list.id,
       title: card.title,
     });
+
+    // Push: processa outbox JÁ pra latência ~ms. Fire-and-forget — se
+    // falhar (Redis down, processo sobrecarregado), o cron pull pega no
+    // próximo ciclo de 5s.
+    void this.automationsOutbox.processOne(outboxId);
 
     return card;
   }
@@ -547,30 +565,57 @@ export class CardsService {
     const position = computeInsertPosition(beforePos, afterPos);
 
     const listChanged = card.listId !== input.toListId;
-    const updated = await this.prisma.card.update({
-      where: { id: cardId },
-      data: {
-        listId: input.toListId,
-        position,
-        ...(listChanged ? { enteredListAt: new Date() } : {}),
-      },
+
+    // TXN: atualiza Card + CardPresence + limpa flagColor + enfileira
+    // triggers de automação (CARD_LEFT origem + CARD_ENTERED destino).
+    // Atomicidade garante que automação só dispara se o move commitou —
+    // resolve o bug histórico de evento perdido (EventEmitter2 fire-and-forget).
+    const { updated, outboxIds } = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.card.update({
+        where: { id: cardId },
+        data: {
+          listId: input.toListId,
+          position,
+          ...(listChanged ? { enteredListAt: new Date() } : {}),
+          // Doc 47: limpa flag visual ao mudar de coluna — alerta não deve
+          // "vazar" pra nova coluna. Antes ficava em onCardMoved listener.
+          ...(listChanged ? { flagColor: null, flagAt: null } : {}),
+        },
+      });
+
+      // Espelha presence pra manter CardPresence consistente com campos
+      // legacy do Card. Defensivo: cards pré-backfill podem não ter presence.
+      await tx.cardPresence
+        .updateMany({
+          where: { cardId, boardId: card.boardId },
+          data: { listId: input.toListId, position },
+        })
+        .catch(() => undefined);
+
+      const ids: string[] = [];
+      if (listChanged) {
+        const left = await this.automationsOutbox.enqueue(tx, {
+          organizationId: tenant.organizationId,
+          trigger: 'CARD_LEFT',
+          cardId,
+          scopeKind: 'LIST',
+          scopeId: card.listId,
+        });
+        const entered = await this.automationsOutbox.enqueue(tx, {
+          organizationId: tenant.organizationId,
+          trigger: 'CARD_ENTERED',
+          cardId,
+          scopeKind: 'LIST',
+          scopeId: input.toListId,
+        });
+        ids.push(left.id, entered.id);
+      }
+
+      return { updated: u, outboxIds: ids };
     });
 
-    // Espelha a primary presence pra manter CardPresence consistente com
-    // os campos legacy do Card. Iteração 2 vai inverter — Card lê de
-    // CardPresence — mas por enquanto Card é a fonte e CardPresence é
-    // espelho. Erro silencioso pra não quebrar move se a presença não
-    // existir (cards anteriores ao backfill devem ter, mas defensivo).
-    await this.prisma.cardPresence
-      .updateMany({
-        where: { cardId, boardId: card.boardId },
-        data: { listId: input.toListId, position },
-      })
-      .catch(() => undefined);
-
     // Só registra activity quando lista mudou (reorder dentro da mesma coluna
-    // não interessa pro feed). Inclui nome das listas no payload pra a UI
-    // renderizar "moveu de A pra B" sem precisar resolver IDs.
+    // não interessa pro feed). Fora da TXN porque é diagnóstico, não correção.
     if (listChanged) {
       const fromList = await this.prisma.list.findUnique({
         where: { id: card.listId },
@@ -600,6 +645,7 @@ export class CardsService {
       });
     }
 
+    // Realtime: notifica frontend (RealtimeGateway escuta esse canal).
     this.events.emit(EVENT_NAMES.CARD_MOVED, {
       boardId: card.boardId,
       organizationId: tenant.organizationId,
@@ -609,6 +655,10 @@ export class CardsService {
       toListId: input.toListId,
       position,
     });
+
+    // Push: processa cada outbox JÁ pra latência ~ms. Fire-and-forget — se
+    // falhar, o cron pull pega no próximo ciclo de 5s.
+    for (const id of outboxIds) void this.automationsOutbox.processOne(id);
 
     return updated;
   }
@@ -870,17 +920,31 @@ export class CardsService {
           });
         }
 
-        return newCard;
+        // Enfileira CARD_ENTERED na mesma TXN — garante que automação
+        // dispara somente se a cópia commitou.
+        const outbox = await this.automationsOutbox.enqueue(tx, {
+          organizationId: source.organizationId,
+          trigger: 'CARD_ENTERED',
+          cardId: newCard.id,
+          scopeKind: 'LIST',
+          scopeId: destListId,
+        });
+
+        return { newCard, outboxId: outbox.id };
       });
 
       await this.prisma.activity.create({
         data: {
           organizationId: source.organizationId,
           boardId: destBoardId,
-          cardId: copy.id,
+          cardId: copy.newCard.id,
           actorId: userId,
           type: 'CARD_CREATED',
-          payload: { cardId: copy.id, duplicatedFromId: source.id, title: copy.title },
+          payload: {
+            cardId: copy.newCard.id,
+            duplicatedFromId: source.id,
+            title: copy.newCard.title,
+          },
         },
       });
 
@@ -888,12 +952,14 @@ export class CardsService {
         boardId: destBoardId,
         organizationId: source.organizationId,
         actorId: userId,
-        cardId: copy.id,
+        cardId: copy.newCard.id,
         listId: destListId,
-        title: copy.title,
+        title: copy.newCard.title,
       });
 
-      created.push({ id: copy.id, title: copy.title });
+      void this.automationsOutbox.processOne(copy.outboxId);
+
+      created.push({ id: copy.newCard.id, title: copy.newCard.title });
     }
 
     return { count: created.length, cards: created };
@@ -1120,17 +1186,27 @@ export class CardsService {
         });
       }
 
-      return newCard;
+      // Enfileira CARD_ENTERED na mesma TXN — atomicidade garante que
+      // automação dispara somente se o sub-card commitou.
+      const outbox = await this.automationsOutbox.enqueue(tx, {
+        organizationId: parent.organizationId,
+        trigger: 'CARD_ENTERED',
+        cardId: newCard.id,
+        scopeKind: 'LIST',
+        scopeId: destListId,
+      });
+
+      return { newCard, outboxId: outbox.id };
     });
 
     await this.prisma.activity.create({
       data: {
         organizationId: parent.organizationId,
         boardId: destBoardId,
-        cardId: child.id,
+        cardId: child.newCard.id,
         actorId: userId,
         type: 'CARD_PARENT_LINKED',
-        payload: { cardId: child.id, parentCardId: parentId, title: child.title },
+        payload: { cardId: child.newCard.id, parentCardId: parentId, title: child.newCard.title },
       },
     });
 
@@ -1138,12 +1214,14 @@ export class CardsService {
       boardId: destBoardId,
       organizationId: parent.organizationId,
       actorId: userId,
-      cardId: child.id,
+      cardId: child.newCard.id,
       listId: destListId,
-      title: child.title,
+      title: child.newCard.title,
     });
 
-    return child;
+    void this.automationsOutbox.processOne(child.outboxId);
+
+    return child.newCard;
   }
 
   /**
@@ -1793,25 +1871,53 @@ export class CardsService {
       position = computeInsertPosition(last?.position ?? null, null);
     }
 
-    const updated = await this.prisma.cardPresence.update({
-      where: { cardId_boardId: { cardId, boardId } },
-      data: { listId: input.toListId, position },
+    const listChanged = presence.listId !== input.toListId;
+
+    // TXN: presence + sync legacy + flagColor + enqueue automation triggers.
+    const { updated, outboxIds } = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.cardPresence.update({
+        where: { cardId_boardId: { cardId, boardId } },
+        data: { listId: input.toListId, position },
+      });
+
+      if (card.boardId === boardId) {
+        await tx.card.update({
+          where: { id: cardId },
+          data: {
+            listId: input.toListId,
+            position,
+            ...(listChanged ? { enteredListAt: new Date() } : {}),
+            // Doc 47: limpa flag visual ao mudar de coluna (só no primário —
+            // flag é por card, não por presence).
+            ...(listChanged ? { flagColor: null, flagAt: null } : {}),
+          },
+        });
+      }
+
+      const ids: string[] = [];
+      if (listChanged) {
+        const left = await this.automationsOutbox.enqueue(tx, {
+          organizationId: tenant.organizationId,
+          trigger: 'CARD_LEFT',
+          cardId,
+          scopeKind: 'LIST',
+          scopeId: presence.listId,
+        });
+        const entered = await this.automationsOutbox.enqueue(tx, {
+          organizationId: tenant.organizationId,
+          trigger: 'CARD_ENTERED',
+          cardId,
+          scopeKind: 'LIST',
+          scopeId: input.toListId,
+        });
+        ids.push(left.id, entered.id);
+      }
+
+      return { updated: u, outboxIds: ids };
     });
 
-    // Espelha legacy se for o fluxo primário (Card.boardId == boardId)
-    if (card.boardId === boardId) {
-      await this.prisma.card.update({
-        where: { id: cardId },
-        data: {
-          listId: input.toListId,
-          position,
-          enteredListAt: presence.listId !== input.toListId ? new Date() : undefined,
-        },
-      });
-    }
-
     // Activity log no contexto do board onde rolou a movimentação
-    if (presence.listId !== input.toListId) {
+    if (listChanged) {
       const fromList = await this.prisma.list.findUnique({
         where: { id: presence.listId },
         select: { name: true },
@@ -1835,6 +1941,7 @@ export class CardsService {
         },
       });
 
+      // Realtime: notifica frontend pra Kanban animar a transição.
       this.events.emit(EVENT_NAMES.CARD_MOVED, {
         boardId,
         organizationId: tenant.organizationId,
@@ -1844,6 +1951,9 @@ export class CardsService {
         toListId: input.toListId,
         position,
       });
+
+      // Push: dispara processamento imediato. Cron pull pega se falhar.
+      for (const id of outboxIds) void this.automationsOutbox.processOne(id);
     }
 
     // Auto-status sync: avalia se card deve virar COMPLETED (todas as

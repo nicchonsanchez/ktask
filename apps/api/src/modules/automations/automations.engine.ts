@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import type {
@@ -14,13 +14,10 @@ import { computeInsertPosition } from '@/common/util/position';
 import { createCardWithPresence } from '@/modules/cards/helpers/create-card-with-presence';
 import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
-import {
-  EVENT_NAMES,
-  type CardCreatedPayload,
-  type CardMovedPayload,
-} from '@/modules/realtime/events.types';
+import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 import { evaluateConditions, type AutomationCondition } from './condition.types';
+import { AutomationsOutboxService } from './automations.outbox.service';
 
 /**
  * Event emitido por ApprovalsService quando uma aprovação é decidida.
@@ -40,21 +37,23 @@ interface ApprovalDecidedPayload {
 }
 
 /**
- * Engine de automações — Fase B (síncrona, em-process).
+ * Engine de automações — Fase C (outbox-driven).
  *
- * Escuta eventos do EventEmitter2 e executa automações ativas que casam
- * com o trigger. Ainda não usa BullMQ — execução acontece no mesmo
- * processo, fire-and-forget pra não bloquear a request HTTP que originou
- * o evento.
+ * **Mudança 2026-05**: deixou de escutar `@OnEvent` pra eventos de
+ * automação (CARD_CREATED, CARD_MOVED, checklist.*). O trigger agora é
+ * persistido na MESMA transação que altera o card/checklist, via
+ * AutomationsOutboxService. Worker (cron @5s) processa a outbox com
+ * retry+backoff. Resolve a perda de evento que acontecia quando o
+ * processo morria entre `events.emit` e o handler async.
  *
- * Anti-loop: cada AutomationRun tem `chainDepth`. Se uma action dispara
- * outro evento (ex: mover card pra outra coluna que tem automação), o
- * próximo run herda chainDepth+1. Aborta acima de 5.
+ * Único `@OnEvent` que sobrou: `APPROVAL_DECIDED` — segue síncrono
+ * porque depende de anexar runIds em CardApproval.sideEffects pro undo
+ * (correlação que ficaria feia via outbox). Risco aceitável: aprovação
+ * decidida é raro o suficiente pra crash mid-flight ser desprezível.
  *
- * Handlers implementados nesta fase:
- *   - INSERT_TAGS — adiciona tags ao card (idempotente: não duplica)
- *
- * Os outros 17 handlers entram em commits subsequentes.
+ * Anti-loop: cada AutomationRun tem `chainDepth`. Handlers que disparam
+ * eventos novos (MOVE_CARD, CREATE_CHILD_CARD) enfileiram na outbox com
+ * chainDepth+1. Aborta acima de MAX_CHAIN_DEPTH.
  */
 @Injectable()
 export class AutomationsEngine {
@@ -67,53 +66,10 @@ export class AutomationsEngine {
     private readonly whatsapp: WhatsAppHelper,
     private readonly statusSync: CardStatusSyncService,
     private readonly notifications: NotificationsService,
+    // forwardRef pra quebrar ciclo Engine ↔ Outbox.
+    @Inject(forwardRef(() => AutomationsOutboxService))
+    private readonly outbox: AutomationsOutboxService,
   ) {}
-
-  /**
-   * Card recem-nascido conta como "entrou na lista". Sem isso, automacoes
-   * com trigger CARD_ENTERED so rodavam quando o card chegava via MOVE —
-   * criar direto na coluna (manual, copy, child, automation handler) nao
-   * disparava nenhuma. Importer NAO emite CARD_CREATED de proposito (seria
-   * desastre disparar N×M automacoes em import massivo).
-   */
-  @OnEvent(EVENT_NAMES.CARD_CREATED, { async: true })
-  async onCardCreated(payload: CardCreatedPayload) {
-    await this.dispatchTrigger({
-      listId: payload.listId,
-      trigger: 'CARD_ENTERED',
-      cardId: payload.cardId,
-      organizationId: payload.organizationId,
-      chainDepth: 0,
-    });
-  }
-
-  @OnEvent(EVENT_NAMES.CARD_MOVED, { async: true })
-  async onCardMoved(payload: CardMovedPayload) {
-    // Doc 47: limpa flag visual ao mudar de coluna — alerta nao deve
-    // "vazar" pra nova coluna. Idempotente: noop se flagColor ja null.
-    await this.prisma.card.updateMany({
-      where: { id: payload.cardId, flagColor: { not: null } },
-      data: { flagColor: null, flagAt: null },
-    });
-
-    // Dispara automações dos dois lados: CARD_LEFT na origem + CARD_ENTERED no destino
-    await Promise.all([
-      this.dispatchTrigger({
-        listId: payload.fromListId,
-        trigger: 'CARD_LEFT',
-        cardId: payload.cardId,
-        organizationId: payload.organizationId,
-        chainDepth: 0,
-      }),
-      this.dispatchTrigger({
-        listId: payload.toListId,
-        trigger: 'CARD_ENTERED',
-        cardId: payload.cardId,
-        organizationId: payload.organizationId,
-        chainDepth: 0,
-      }),
-    ]);
-  }
 
   /**
    * Listener pra aprovações decididas. Dispara CARD_APPROVED ou
@@ -159,50 +115,9 @@ export class AutomationsEngine {
     });
   }
 
-  /**
-   * Doc 48: dispara automacoes do tipo CHECKLIST_ITEM_DONE escopadas
-   * a um item especifico. Acionado por ChecklistsService quando um
-   * item é marcado como done (transicao false → true).
-   */
-  @OnEvent('checklist.item.done', { async: true })
-  async onChecklistItemDone(payload: {
-    itemId: string;
-    checklistId: string;
-    cardId: string;
-    listId: string;
-    organizationId: string;
-    actorId: string;
-  }) {
-    await this.dispatchTrigger({
-      scope: { kind: 'checklistItem', id: payload.itemId },
-      trigger: 'CHECKLIST_ITEM_DONE',
-      cardId: payload.cardId,
-      organizationId: payload.organizationId,
-      chainDepth: 0,
-    });
-  }
-
-  /**
-   * Doc 48: dispara automacoes do tipo CHECKLIST_COMPLETED escopadas
-   * a um checklist especifico. Acionado quando o ultimo item pendente
-   * vira done (checklist 100% concluido).
-   */
-  @OnEvent('checklist.completed', { async: true })
-  async onChecklistCompleted(payload: {
-    checklistId: string;
-    cardId: string;
-    listId: string;
-    organizationId: string;
-    actorId: string;
-  }) {
-    await this.dispatchTrigger({
-      scope: { kind: 'checklist', id: payload.checklistId },
-      trigger: 'CHECKLIST_COMPLETED',
-      cardId: payload.cardId,
-      organizationId: payload.organizationId,
-      chainDepth: 0,
-    });
-  }
+  // checklist.item.done e checklist.completed agora enfileiram direto no
+  // outbox via ChecklistsService.updateChecklistItem (mesma TXN da
+  // mudança). Listeners @OnEvent foram removidos em 2026-05.
 
   /**
    * Busca automações ativas pra (escopo, trigger) e dispara cada uma.
@@ -268,6 +183,24 @@ export class AutomationsEngine {
   }
 
   /**
+   * Versão pública usada pelo AutomationsOutboxService. Diferença vs
+   * `executeAutomationDirect`: LANÇA exceção se o run terminar em
+   * FAILED — assim a outbox sabe que precisa reagendar pra retry.
+   * `SUCCESS` e `SKIPPED` retornam normal (sucesso final, não retentar).
+   */
+  async executeFromOutbox(
+    automation: Automation,
+    cardId: string,
+    chainDepth: number,
+  ): Promise<AutomationRun> {
+    const run = await this.executeAutomation(automation, cardId, chainDepth);
+    if (run.status === 'FAILED') {
+      throw new Error(run.error ?? 'Automação falhou sem mensagem de erro.');
+    }
+    return run;
+  }
+
+  /**
    * Cria uma AutomationRun, dispatcha pro handler certo, atualiza status
    * com base no resultado. Erros não propagam (engine é fire-and-forget).
    */
@@ -321,7 +254,7 @@ export class AutomationsEngine {
     }
 
     try {
-      const result = await this.routeAction(automation, cardId);
+      const result = await this.routeAction(automation, cardId, chainDepth);
       return await this.prisma.automationRun.update({
         where: { id: run.id },
         data: {
@@ -347,6 +280,7 @@ export class AutomationsEngine {
   private async routeAction(
     automation: Automation,
     cardId: string,
+    chainDepth: number,
   ): Promise<Record<string, unknown> | null> {
     switch (automation.actionType) {
       case 'INSERT_TAGS':
@@ -364,13 +298,13 @@ export class AutomationsEngine {
       case 'SET_CARD_STATUS':
         return this.handleSetCardStatus(automation, cardId);
       case 'CREATE_CHILD_CARD':
-        return this.handleCreateChildCard(automation, cardId);
+        return this.handleCreateChildCard(automation, cardId, chainDepth);
       case 'INSERT_CHECKLIST_GROUP':
         return this.handleInsertChecklistGroup(automation, cardId);
       case 'UPDATE_FLOW_POSITION':
         return this.handleUpdateFlowPosition(automation, cardId);
       case 'MOVE_CARD':
-        return this.handleMoveCard(automation, cardId);
+        return this.handleMoveCard(automation, cardId, chainDepth);
       case 'SEND_WHATSAPP':
         return this.handleSendWhatsApp(automation, cardId);
       case 'SET_PRIVACY':
@@ -1197,6 +1131,7 @@ export class AutomationsEngine {
   private async handleCreateChildCard(
     automation: Automation,
     cardId: string,
+    chainDepth: number,
   ): Promise<{ childId: string }> {
     const config = automation.actionConfig as {
       titleTemplate?: string;
@@ -1282,6 +1217,7 @@ export class AutomationsEngine {
       },
     });
 
+    // Realtime: notifica frontend (RealtimeGateway escuta esse canal).
     this.events.emit(EVENT_NAMES.CARD_CREATED, {
       boardId: targetList.boardId,
       organizationId: targetList.organizationId,
@@ -1289,6 +1225,19 @@ export class AutomationsEngine {
       cardId: child.id,
       listId: targetListId,
       title,
+    });
+
+    // Enfileira CARD_ENTERED na lista de destino com chainDepth+1 pra
+    // cascata de automações (ex: child entrou em "Aprovação" e essa lista
+    // tem outra automação configurada). Sem outbox aqui, a child criada
+    // automaticamente nunca dispararia automação da nova coluna.
+    await this.outbox.enqueue(this.prisma, {
+      organizationId: targetList.organizationId,
+      trigger: 'CARD_ENTERED',
+      cardId: child.id,
+      scopeKind: 'LIST',
+      scopeId: targetListId,
+      chainDepth: chainDepth + 1,
     });
 
     return { childId: child.id };
@@ -1481,6 +1430,7 @@ export class AutomationsEngine {
   private async handleMoveCard(
     automation: Automation,
     cardId: string,
+    chainDepth: number,
   ): Promise<{ movedToListId: string | null; skipped?: boolean; reason?: string }> {
     const config = automation.actionConfig as {
       targetListId?: string;
@@ -1582,6 +1532,7 @@ export class AutomationsEngine {
       },
     });
 
+    // Realtime: notifica frontend pro Kanban animar a transição.
     this.events.emit(EVENT_NAMES.CARD_MOVED, {
       boardId: card.boardId,
       organizationId: card.organizationId,
@@ -1590,6 +1541,25 @@ export class AutomationsEngine {
       fromListId,
       toListId: target.id,
       position: newPos,
+    });
+
+    // Doc 47: limpa flag visual ao mudar de coluna — alerta não deve
+    // "vazar" pra nova coluna. Antes ficava em onCardMoved; agora que o
+    // listener foi removido, faz aqui também (mesmo motivo, mesma regra).
+    await this.prisma.card.updateMany({
+      where: { id: cardId, flagColor: { not: null } },
+      data: { flagColor: null, flagAt: null },
+    });
+
+    // Enfileira CARD_LEFT (origem) + CARD_ENTERED (destino) na outbox com
+    // chainDepth+1 pra cascata de automações. Sem isso, mover via
+    // automation nunca dispararia automação encadeada da nova lista.
+    await this.outbox.enqueueCardMoved(this.prisma, {
+      organizationId: card.organizationId,
+      cardId,
+      fromListId,
+      toListId: target.id,
+      chainDepth: chainDepth + 1,
     });
 
     // Auto-status sync: move via automacao tambem pode levar o card pra

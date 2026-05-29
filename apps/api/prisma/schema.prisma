@@ -184,6 +184,17 @@ enum AutomationRunStatus {
   SUCCESS
   FAILED
   SKIPPED
+  /// Sweeper marcou após run ficar em RUNNING por mais que o teto.
+  /// Indica que o processo morreu/timeoutou durante a execução.
+  ABANDONED
+}
+
+/// Escopo do trigger persistido na outbox: identifica em qual entidade
+/// o evento foi disparado. Mapeia 1:1 com os triggers da Automation.
+enum AutomationOutboxScope {
+  LIST            // CARD_ENTERED / CARD_LEFT / CARD_APPROVED / CARD_REJECTED → escopo = list
+  CHECKLIST       // CHECKLIST_COMPLETED → escopo = checklist
+  CHECKLIST_ITEM  // CHECKLIST_ITEM_DONE → escopo = checklistItem
 }
 
 // ==================== Tenant / Auth ====================
@@ -1175,6 +1186,7 @@ model Automation {
   scopeChecklistItem ChecklistItem?  @relation(fields: [scopeChecklistItemId], references: [id], onDelete: Cascade)
   createdBy          User            @relation("AutomationCreator", fields: [createdById], references: [id])
   runs               AutomationRun[]
+  failures           AutomationFailure[]
 
   @@index([organizationId])
   @@index([listId, isActive])
@@ -1205,6 +1217,87 @@ model AutomationRun {
   activities Activity[]
 
   @@index([automationId, createdAt])
+  @@index([cardId])
+}
+
+/// Outbox transacional de triggers de automação. Persistida na mesma
+/// transação que altera o card/checklist garante que o evento NÃO se
+/// perde mesmo que o processo morra/reinicie entre o COMMIT e a
+/// execução da automação (problema antigo do EventEmitter2 in-process).
+///
+/// Processada por:
+///   - Push: fire-and-forget logo após o COMMIT (latência baixa).
+///   - Pull: cron a cada 5s lê pendentes cujo nextAttemptAt <= now()
+///     com `SELECT ... FOR UPDATE SKIP LOCKED` (cobre push perdido +
+///     escala pra multi-worker).
+///
+/// Idempotência:
+///   - `processedAt` setado = sucesso ou esgotou retries (dead-letter).
+///   - Retry backoff: 30s → 2min → 10min. Após `MAX_ATTEMPTS`, cria
+///     AutomationFailure e marca processedAt pra sair do polling.
+model AutomationOutbox {
+  id             String                @id @default(cuid())
+  organizationId String
+  /// Trigger semântico que casa com Automation.trigger durante o dispatch.
+  trigger        AutomationTrigger
+  cardId         String
+  /// Tipo do escopo onde o trigger nasceu (lista, checklist ou item).
+  scopeKind      AutomationOutboxScope
+  /// FK lógica pra List/Checklist/ChecklistItem conforme scopeKind.
+  /// Não usa @relation pra evitar cascade quando a entidade some — se a
+  /// lista for deletada antes do processamento, a row vira no-op silencioso.
+  scopeId        String
+  /// Herdado da automação-pai pra anti-loop (engine aborta acima de 5).
+  chainDepth     Int                   @default(0)
+  /// Tentativas já executadas. Incrementa a cada erro; quando atinge o
+  /// teto, vira AutomationFailure e processedAt é setado.
+  attempts       Int                   @default(0)
+  /// Quando rodar de novo (now() pra nova entry; futuro pra backoff).
+  nextAttemptAt  DateTime              @default(now())
+  /// Último erro encontrado (truncado se muito longo). Diagnóstico.
+  lastError      String?
+  /// Setado = processado (sucesso OU esgotou retries). Cron filtra por null.
+  processedAt    DateTime?
+  createdAt      DateTime              @default(now())
+
+  /// Polling do cron: where processedAt IS NULL and nextAttemptAt <= now()
+  /// ordenado por createdAt (FIFO). Índice parcial seria ideal mas o
+  /// Prisma não suporta — composto cobre o suficiente.
+  @@index([processedAt, nextAttemptAt])
+  @@index([organizationId, createdAt])
+  @@index([cardId])
+}
+
+/// Dead-letter consolidada: 1 entry por evento de automação que falhou
+/// definitivamente (após retries esgotados). Mantém payload pra
+/// reprocessamento manual via painel admin.
+model AutomationFailure {
+  id              String               @id @default(cuid())
+  organizationId  String
+  automationId    String
+  cardId          String
+  /// FK pro AutomationRun da última tentativa. Pode ser null se nem
+  /// chegou a criar o run (ex: automation foi deletada entre enqueue
+  /// e processamento).
+  runId           String?
+  trigger         AutomationTrigger
+  actionType      AutomationActionType
+  attempts        Int
+  errorMessage    String
+  errorStack      String?
+  /// Snapshot do outbox row (trigger/scope/chainDepth) pra reprocessar
+  /// sem depender do estado atual do banco.
+  payloadSnapshot Json
+  createdAt       DateTime             @default(now())
+  /// Setado quando admin marca como resolvido (manual ou após reprocesso
+  /// bem-sucedido). Filtro do painel exclui já-resolvidos por default.
+  resolvedAt      DateTime?
+  resolvedById    String?
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, resolvedAt, createdAt])
+  @@index([automationId])
   @@index([cardId])
 }
 
