@@ -131,7 +131,95 @@ export const managementQueries = {
       );
     },
   }),
+  approvalDispatches: (filters: ManagementDispatchesFilters = {}) => ({
+    queryKey: ['management', 'approval-dispatches', filters] as const,
+    queryFn: () => {
+      const sp = new URLSearchParams();
+      if (filters.status?.length) sp.set('status', filters.status.join(','));
+      if (filters.reviewerId) sp.set('reviewerId', filters.reviewerId);
+      if (filters.boardId) sp.set('boardId', filters.boardId);
+      if (filters.period && filters.period !== 'all') sp.set('period', filters.period);
+      if (filters.onlyFailures) sp.set('onlyFailures', 'true');
+      if (filters.page) sp.set('page', String(filters.page));
+      if (filters.pageSize) sp.set('pageSize', String(filters.pageSize));
+      const qs = sp.toString();
+      return api.get<ManagementDispatchesResponse>(
+        `/api/v1/management/approval-dispatches${qs ? `?${qs}` : ''}`,
+      );
+    },
+  }),
+  approvalDispatchTimeline: (approvalId: string) => ({
+    queryKey: ['management', 'approval-dispatches', 'timeline', approvalId] as const,
+    queryFn: () =>
+      api.get<{ items: DispatchTimelineEntry[] }>(
+        `/api/v1/management/approval-dispatches/${approvalId}/timeline`,
+      ),
+  }),
 };
+
+// ---- Aprovacoes: historico de envios (aba "Historico") ----
+
+export type DispatchStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'REVERTED';
+export type DispatchChannel = 'WHATSAPP' | 'IN_APP';
+export type DispatchKind = 'INITIAL' | 'RESEND' | 'REMINDER';
+
+export interface ManagementDispatchesFilters {
+  status?: DispatchStatus[];
+  reviewerId?: string;
+  boardId?: string;
+  period?: '7d' | '30d' | '90d' | 'all';
+  onlyFailures?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ManagementDispatchRow {
+  approvalId: string;
+  cardId: string;
+  cardTitle: string;
+  board: { id: string; name: string; color: string | null };
+  requestedAt: string;
+  decidedAt: string | null;
+  status: DispatchStatus;
+  reviewerUserId: string | null;
+  phone: string | null;
+  recipientName: string;
+  totalDispatches: number;
+  autoDispatches: number;
+  manualDispatches: number;
+  failures: number;
+  lastDispatchAt: string;
+  lastChannel: DispatchChannel;
+  lastSuccess: boolean;
+}
+
+export interface ManagementDispatchesResponse {
+  items: ManagementDispatchRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  reviewers: Array<{ id: string; name: string }>;
+  summary: {
+    totalDispatches: number;
+    successCount: number;
+    failureCount: number;
+    whatsappCount: number;
+    inAppCount: number;
+  };
+}
+
+export interface DispatchTimelineEntry {
+  id: string;
+  reviewerUserId: string | null;
+  phone: string | null;
+  recipientName: string;
+  kind: DispatchKind;
+  channel: DispatchChannel;
+  success: boolean;
+  errorMessage: string | null;
+  preview: string | null;
+  createdAt: string;
+}
 
 // ---- Aprovacoes (visao gerencial) ----
 

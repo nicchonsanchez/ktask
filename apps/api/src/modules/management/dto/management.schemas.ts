@@ -64,6 +64,24 @@ export type AddSourceRequest = z.infer<typeof AddSourceSchema>;
 
 // ---- Aprovacoes (visao gerencial) ----
 
+export const ManagementApprovalDispatchesQuerySchema = z.object({
+  /** Status do CardApproval (multiselect). Default: tudo. */
+  status: z.string().optional(),
+  /** ID do reviewer (User) pra filtrar. */
+  reviewerId: z.string().cuid().optional(),
+  /** ID do board pra filtrar. */
+  boardId: z.string().cuid().optional(),
+  /** Periodo de criacao do approval. */
+  period: z.enum(['7d', '30d', '90d', 'all']).default('all'),
+  /** Quando true, soh approvals com pelo menos 1 envio falho. */
+  onlyFailures: z.coerce.boolean().optional().default(false),
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type ManagementApprovalDispatchesQuery = z.infer<
+  typeof ManagementApprovalDispatchesQuerySchema
+>;
+
 export const ManagementApprovalsQuerySchema = z.object({
   /** ID de User reviewer pra filtrar (opcional). Approval onde algum
    * CardApprovalReviewer.userId == reviewerId. */

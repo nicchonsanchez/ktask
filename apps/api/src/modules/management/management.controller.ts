@@ -22,12 +22,14 @@ import { ManagementService } from './management.service';
 import {
   AddSourceSchema,
   CreateColumnSchema,
+  ManagementApprovalDispatchesQuerySchema,
   ManagementApprovalsQuerySchema,
   ManagementArchivedQuerySchema,
   ManagementListQuerySchema,
   UpdateColumnSchema,
   type AddSourceRequest,
   type CreateColumnRequest,
+  type ManagementApprovalDispatchesQuery,
   type ManagementApprovalsQuery,
   type ManagementArchivedQuery,
   type ManagementListQuery,
@@ -90,6 +92,33 @@ export class ManagementController {
     query: ManagementApprovalsQuery,
   ) {
     return this.mgmt.listApprovals(user.userId, org, query);
+  }
+
+  @Get('approval-dispatches')
+  @ApiOperation({
+    summary: 'Visão Gerencial: histórico agregado de envios de cobrança',
+    description:
+      '1 linha por (approval × reviewer) com count + breakdown auto/manual + último canal/sucesso. Filtros: status, reviewer, board, período, só falhas.',
+  })
+  listApprovalDispatches(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query(new ZodValidationPipe(ManagementApprovalDispatchesQuerySchema))
+    query: ManagementApprovalDispatchesQuery,
+  ) {
+    return this.mgmt.listApprovalDispatches(user.userId, org, query);
+  }
+
+  @Get('approval-dispatches/:approvalId/timeline')
+  @ApiOperation({
+    summary: 'Timeline detalhada de envios de uma aprovação (drill-down)',
+  })
+  getApprovalDispatchTimeline(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('approvalId') approvalId: string,
+  ) {
+    return this.mgmt.getApprovalDispatchTimeline(user.userId, org, approvalId);
   }
 
   // ---- Kanban gerencial (colunas virtuais) ----

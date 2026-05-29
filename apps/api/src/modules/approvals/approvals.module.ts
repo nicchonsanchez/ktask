@@ -11,11 +11,18 @@ import { ApprovalsService } from './approvals.service';
 import { ApprovalsController } from './approvals.controller';
 import { ApprovalsPublicController } from './approvals-public.controller';
 import { ApprovalRemindersService } from './approval-reminders.service';
+import { ApprovalDispatchLogService } from './approval-dispatch-log.service';
 
 @Module({
   imports: [BoardsModule, NotificationsModule, StorageModule, AutomationsModule],
   controllers: [ApprovalsController, ApprovalsPublicController],
-  providers: [ApprovalsService, ApprovalRemindersService, CardStatusSyncService, TenantGuard],
-  exports: [ApprovalsService],
+  providers: [
+    ApprovalsService,
+    ApprovalRemindersService,
+    ApprovalDispatchLogService,
+    CardStatusSyncService,
+    TenantGuard,
+  ],
+  exports: [ApprovalsService, ApprovalDispatchLogService],
 })
 export class ApprovalsModule {}

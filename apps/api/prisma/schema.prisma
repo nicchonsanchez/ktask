@@ -200,6 +200,23 @@ enum AutomationOutboxScope {
   CHECKLIST_ITEM  // CHECKLIST_ITEM_DONE → escopo = checklistItem
 }
 
+/// Tipo do envio de uma cobranca de aprovacao. Distingue o que foi
+/// disparado automaticamente (cron) do que veio de acao humana.
+enum ApprovalDispatchKind {
+  /// Envio inicial — quando a approval foi criada (request).
+  INITIAL
+  /// Resend manual — alguem clicou "Reenviar" no card.
+  RESEND
+  /// Lembrete automatico — cron de ApprovalRemindersService.
+  REMINDER
+}
+
+/// Canal pelo qual a cobranca foi enviada.
+enum ApprovalDispatchChannel {
+  WHATSAPP
+  IN_APP
+}
+
 // ==================== Tenant / Auth ====================
 
 model User {
@@ -250,6 +267,7 @@ model User {
   attachmentsUploaded       Attachment[]
   activities                Activity[]             @relation("ActivityActor")
   notifications             Notification[]
+  approvalDispatches        ApprovalDispatchLog[]
   timeEntries               TimeEntry[]
   checklistItemsAssigned    ChecklistItem[]        @relation("ChecklistItemAssignee")
   checklistItemsDone        ChecklistItem[]        @relation("ChecklistItemDoneBy")
@@ -762,6 +780,7 @@ model CardApproval {
   defaultApproveList List?                  @relation("ApprovalDefaultApproveList", fields: [defaultOnApproveListId], references: [id], onDelete: SetNull)
   defaultRejectList  List?                  @relation("ApprovalDefaultRejectList", fields: [defaultOnRejectListId], references: [id], onDelete: SetNull)
   reviewers          CardApprovalReviewer[]
+  dispatches         ApprovalDispatchLog[]
 
   @@index([cardId])
   @@index([organizationId, status, requestedAt])
@@ -1338,6 +1357,52 @@ model AutomationFailure {
   @@index([organizationId, resolvedAt, createdAt])
   @@index([automationId])
   @@index([cardId])
+}
+
+/// Auditoria de cada envio de cobranca de aprovacao. 1 linha por
+/// (envio, reviewer) — quando o cron manda lembrete consolidado pra 3
+/// reviewers, gera 3 logs. Permite responder:
+///   - Quantas vezes esse card foi cobrado? (count por approvalId)
+///   - Anna recebeu quantos lembretes do card X? (filter por approval+reviewer)
+///   - WhatsApp tá falhando? (filter por channel + success=false)
+///
+/// Sem retencao automatica — admin limpa manualmente se quiser. Volume
+/// esperado eh baixo (~20 envios/dia em uso normal).
+model ApprovalDispatchLog {
+  id             String                  @id @default(cuid())
+  organizationId String
+  approvalId     String
+  /// Reviewer destinatario. Pode ser null quando o envio foi pra phone
+  /// externo (sem User cadastrado).
+  reviewerUserId String?
+  /// Telefone destino (E.164 sem '+'). Preenchido pra WhatsApp; null pra in-app.
+  phone          String?
+  /// Nome display do destinatario no momento do envio (snapshot).
+  /// Pra interno = User.name; pra externo = externalName ou phone.
+  recipientName  String
+  kind           ApprovalDispatchKind
+  channel        ApprovalDispatchChannel
+  /// true = aceito pela Evolution / criado o Notification.
+  /// false = erro (timeout, 5xx Evolution, NotificationsService throw).
+  success        Boolean
+  /// Mensagem de erro quando success=false. Truncada a 500 chars.
+  errorMessage   String?
+  /// Quando relevante: snapshot do texto/título enviado (trunc 1000 chars).
+  /// Util pra auditar conteudo posterior. Null se nao guardamos.
+  preview        String?
+  createdAt      DateTime                @default(now())
+
+  approval CardApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  reviewer User?        @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  /// Indice principal: painel de historico por org, mais recente primeiro.
+  @@index([organizationId, createdAt])
+  /// Drill-down por approval (timeline do card).
+  @@index([approvalId, createdAt])
+  /// Drill-down por reviewer ("quantas cobrancas a Anna recebeu?").
+  @@index([reviewerUserId, createdAt])
+  /// Filtro de falhas (success=false + canal).
+  @@index([organizationId, success, channel])
 }
 
 // ==================== Import mappings ====================

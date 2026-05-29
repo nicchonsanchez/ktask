@@ -7,6 +7,8 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { WhatsAppHelper } from '@/modules/whatsapp/whatsapp.helper';
 
+import { ApprovalDispatchLogService } from './approval-dispatch-log.service';
+
 /**
  * Cap de seguranca: nao mandar lembrete pra approval mais antiga que isto.
  * Aprovacao parada ha 30 dias provavelmente foi esquecida; quem precisar
@@ -52,6 +54,7 @@ export class ApprovalRemindersService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly whatsapp: WhatsAppHelper,
+    private readonly dispatchLog: ApprovalDispatchLogService,
   ) {}
 
   @Cron(CRON_INTERVAL)
@@ -274,12 +277,18 @@ export class ApprovalRemindersService {
       }
     }
 
+    // Envia WhatsApp (se aplicavel) e loga resultado pra cada approval coberta.
+    let waSuccess: boolean | null = null;
+    let waPreview: string | null = null;
     if (phoneToSend) {
       const text = this.composeMessage(firstName, count, reminder.approvals);
-      await this.whatsapp.sendText(phoneToSend, text).catch(() => undefined);
+      waPreview = text;
+      waSuccess = await this.whatsapp.sendText(phoneToSend, text).catch(() => false);
     }
 
     // In-app notification: so faz sentido pra User interno.
+    let inAppSuccess: boolean | null = null;
+    let inAppPreview: string | null = null;
     if (reminder.userId) {
       const title =
         count === 1
@@ -292,7 +301,8 @@ export class ApprovalRemindersService {
               .slice(0, 3)
               .map((a) => `"${a.cardTitle}"`)
               .join(', ')}${count > 3 ? ` e mais ${count - 3}` : ''}`;
-      await this.notifications
+      inAppPreview = `${title}\n${body}`;
+      inAppSuccess = await this.notifications
         .create({
           userId: reminder.userId,
           organizationId: org.id,
@@ -303,12 +313,58 @@ export class ApprovalRemindersService {
           // pra inbox global de aprovacoes.
           url: '/aprovacoes',
         })
+        .then(() => true)
         .catch((err) => {
           this.logger.warn(
             `notification create falhou pra user ${reminder.userId}: ${err instanceof Error ? err.message : err}`,
           );
+          return false;
         });
     }
+
+    // Loga 1 entry por (approval × canal usado). Consolidacao no envio
+    // explode em N logs aqui — historico fica granular ("Anna recebeu
+    // lembrete do card X via WhatsApp" — n "Anna recebeu 1 lembrete").
+    const logs: Array<{
+      organizationId: string;
+      approvalId: string;
+      reviewerUserId: string | null;
+      phone: string | null;
+      recipientName: string;
+      kind: 'INITIAL' | 'RESEND' | 'REMINDER';
+      channel: 'WHATSAPP' | 'IN_APP';
+      success: boolean;
+      preview?: string | null;
+    }> = [];
+    for (const a of reminder.approvals) {
+      if (waSuccess !== null) {
+        logs.push({
+          organizationId: org.id,
+          approvalId: a.id,
+          reviewerUserId: reminder.userId,
+          phone: phoneToSend,
+          recipientName: reminder.displayName,
+          kind: 'REMINDER',
+          channel: 'WHATSAPP',
+          success: waSuccess,
+          preview: waPreview,
+        });
+      }
+      if (inAppSuccess !== null) {
+        logs.push({
+          organizationId: org.id,
+          approvalId: a.id,
+          reviewerUserId: reminder.userId,
+          phone: null,
+          recipientName: reminder.displayName,
+          kind: 'REMINDER',
+          channel: 'IN_APP',
+          success: inAppSuccess,
+          preview: inAppPreview,
+        });
+      }
+    }
+    await this.dispatchLog.logMany(logs);
   }
 
   /**

@@ -22,6 +22,8 @@ import { EVENT_NAMES } from '@/modules/realtime/events.types';
 import { StorageService } from '@/modules/storage/storage.service';
 import { AutomationsOutboxService } from '@/modules/automations/automations.outbox.service';
 
+import { ApprovalDispatchLogService } from './approval-dispatch-log.service';
+
 import type {
   RequestApprovalRequest,
   DecideApprovalRequest,
@@ -92,6 +94,7 @@ export class ApprovalsService {
     private readonly storage: StorageService,
     private readonly statusSync: CardStatusSyncService,
     private readonly automationsOutbox: AutomationsOutboxService,
+    private readonly dispatchLog: ApprovalDispatchLogService,
   ) {}
 
   // ============================================================
@@ -393,22 +396,37 @@ export class ApprovalsService {
 
       // Reviewer interno: notification in-app + push
       if (reviewer.userId) {
-        await this.notifications
+        const inAppTitle = 'Pedido de aprovação';
+        const inAppBody = `${requesterName} pediu sua aprovação no card "${card.title}"`;
+        const inAppOk = await this.notifications
           .create({
             userId: reviewer.userId,
             organizationId: card.organizationId,
             type: 'CUSTOM',
-            title: 'Pedido de aprovação',
-            body: `${requesterName} pediu sua aprovação no card "${card.title}"`,
+            title: inAppTitle,
+            body: inAppBody,
             entityType: 'CardApproval',
             entityId: approval.id,
             url: `/aprovacoes`,
           })
+          .then(() => true)
           .catch((err) => {
             this.logger.warn(
               `Falha ao notificar reviewer ${reviewer.userId}: ${err instanceof Error ? err.message : err}`,
             );
+            return false;
           });
+        await this.dispatchLog.log({
+          organizationId: card.organizationId,
+          approvalId: approval.id,
+          reviewerUserId: reviewer.userId,
+          phone: null,
+          recipientName: reviewerName || 'Reviewer',
+          kind: 'INITIAL',
+          channel: 'IN_APP',
+          success: inAppOk,
+          preview: `${inAppTitle}\n${inAppBody}`,
+        });
       }
 
       // WhatsApp: tanto pra phone-only quanto pra interno com opt-in.
@@ -431,6 +449,17 @@ export class ApprovalsService {
             });
             dispatched += 1;
           }
+          await this.dispatchLog.log({
+            organizationId: card.organizationId,
+            approvalId: approval.id,
+            reviewerUserId: reviewer.userId,
+            phone,
+            recipientName: reviewerName || reviewer.externalName || phone,
+            kind: 'INITIAL',
+            channel: 'WHATSAPP',
+            success: ok,
+            preview: text,
+          });
         }
       }
     }
@@ -1370,22 +1399,37 @@ export class ApprovalsService {
 
       // In-app pros internos (toast "pedido ainda pendente"-style)
       if (reviewer.userId) {
-        await this.notifications
+        const inAppTitle = 'Lembrete: aprovação pendente';
+        const inAppBody = `Você tem um pedido de aprovação pendente no card "${approval.card.title}".`;
+        const inAppOk = await this.notifications
           .create({
             userId: reviewer.userId,
             organizationId: approval.organizationId,
             type: 'CUSTOM',
-            title: 'Lembrete: aprovação pendente',
-            body: `Você tem um pedido de aprovação pendente no card "${approval.card.title}".`,
+            title: inAppTitle,
+            body: inAppBody,
             entityType: 'CardApproval',
             entityId: approval.id,
             url: `/aprovacoes`,
           })
+          .then(() => true)
           .catch((err) => {
             this.logger.warn(
               `Falha lembrete in-app ${reviewer.userId}: ${err instanceof Error ? err.message : err}`,
             );
+            return false;
           });
+        await this.dispatchLog.log({
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          reviewerUserId: reviewer.userId,
+          phone: null,
+          recipientName: reviewerName || 'Reviewer',
+          kind: 'RESEND',
+          channel: 'IN_APP',
+          success: inAppOk,
+          preview: `${inAppTitle}\n${inAppBody}`,
+        });
       }
 
       // WhatsApp
@@ -1400,6 +1444,17 @@ export class ApprovalsService {
           });
           dispatched += 1;
         }
+        await this.dispatchLog.log({
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          reviewerUserId: reviewer.userId,
+          phone,
+          recipientName: reviewerName || reviewer.externalName || phone,
+          kind: 'RESEND',
+          channel: 'WHATSAPP',
+          success: ok,
+          preview: text,
+        });
       }
     }
 

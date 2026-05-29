@@ -7,6 +7,7 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { BoardAccessService } from '@/modules/boards/board-access.service';
 
 import type {
+  ManagementApprovalDispatchesQuery,
   ManagementApprovalsQuery,
   ManagementArchivedQuery,
   ManagementListQuery,
@@ -204,6 +205,281 @@ export class ManagementService {
       items,
       reviewers: Array.from(reviewerMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
       total: approvals.length,
+    };
+  }
+
+  // ============================================================
+  // Historico de envios de cobranca (aba "Historico" em /aprovacoes)
+  // ============================================================
+
+  /**
+   * Lista agregada por (approval × reviewer): 1 linha por par com
+   * count + breakdown auto/manual + ultimo canal/sucesso. Drill-down
+   * vem via `getApprovalDispatches(approvalId)` que retorna timeline crua.
+   *
+   * Reusa restricao de gestor (assertManagementAccess) + escopo de boards
+   * acessiveis. Suporta filtros: status, reviewer, board, periodo, falhas.
+   */
+  async listApprovalDispatches(
+    userId: string,
+    tenant: TenantContext,
+    query: ManagementApprovalDispatchesQuery,
+  ) {
+    this.assertManagementAccess(tenant);
+
+    const boardIds = await this.access.listAccessibleBoardIds(userId, tenant);
+    if (boardIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        reviewers: [],
+        summary: emptyDispatchSummary(),
+      };
+    }
+
+    const statuses = query.status
+      ? (query.status
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) as Prisma.CardApprovalWhereInput['status'][])
+      : undefined;
+
+    const approvalWhere: Prisma.CardApprovalWhereInput = {
+      organizationId: tenant.organizationId,
+      card: { boardId: { in: boardIds } },
+      ...(statuses && statuses.length > 0
+        ? {
+            status: {
+              in: statuses as Array<'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'REVERTED'>,
+            },
+          }
+        : {}),
+      ...(query.boardId ? { card: { boardId: query.boardId } } : {}),
+    };
+
+    if (query.period !== 'all') {
+      const days = { '7d': 7, '30d': 30, '90d': 90 }[query.period];
+      approvalWhere.requestedAt = {
+        gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
+      };
+    }
+
+    // Carrega approvals que ESTAO no escopo. Pra filtros de reviewer e
+    // falhas, restringimos depois (precisa olhar dispatches).
+    const approvals = await this.prisma.cardApproval.findMany({
+      where: approvalWhere,
+      orderBy: [{ status: 'asc' }, { requestedAt: 'asc' }], // pendentes primeiro, atrasados no topo
+      select: {
+        id: true,
+        cardId: true,
+        status: true,
+        requestedAt: true,
+        decidedAt: true,
+        canceledAt: true,
+        revertedAt: true,
+        card: {
+          select: {
+            id: true,
+            title: true,
+            board: { select: { id: true, name: true, color: true } },
+          },
+        },
+      },
+    });
+
+    if (approvals.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        reviewers: [],
+        summary: emptyDispatchSummary(),
+      };
+    }
+
+    const approvalIds = approvals.map((a) => a.id);
+
+    // Busca todos os dispatches dessas approvals em 1 query — agregamos no app.
+    // Pega so o que precisa pra agregar; drill-down detalhado eh outro endpoint.
+    const dispatches = await this.prisma.approvalDispatchLog.findMany({
+      where: {
+        approvalId: { in: approvalIds },
+        ...(query.reviewerId ? { reviewerUserId: query.reviewerId } : {}),
+      },
+      select: {
+        approvalId: true,
+        reviewerUserId: true,
+        phone: true,
+        recipientName: true,
+        kind: true,
+        channel: true,
+        success: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Agrega por (approval, reviewerKey). Key = userId OU phone (externos).
+    type RowAgg = {
+      approvalId: string;
+      reviewerUserId: string | null;
+      phone: string | null;
+      recipientName: string;
+      total: number;
+      auto: number; // REMINDER
+      manual: number; // INITIAL + RESEND
+      failures: number;
+      lastAt: Date;
+      lastChannel: 'WHATSAPP' | 'IN_APP';
+      lastSuccess: boolean;
+    };
+    const aggMap = new Map<string, RowAgg>();
+
+    for (const d of dispatches) {
+      const reviewerKey = d.reviewerUserId ?? `phone:${d.phone ?? '?'}`;
+      const key = `${d.approvalId}|${reviewerKey}`;
+      const existing = aggMap.get(key);
+      if (existing) {
+        existing.total++;
+        if (d.kind === 'REMINDER') existing.auto++;
+        else existing.manual++;
+        if (!d.success) existing.failures++;
+        // dispatches vem ordenado por createdAt asc — sempre sobrescreve com mais novo
+        existing.lastAt = d.createdAt;
+        existing.lastChannel = d.channel;
+        existing.lastSuccess = d.success;
+      } else {
+        aggMap.set(key, {
+          approvalId: d.approvalId,
+          reviewerUserId: d.reviewerUserId,
+          phone: d.phone,
+          recipientName: d.recipientName,
+          total: 1,
+          auto: d.kind === 'REMINDER' ? 1 : 0,
+          manual: d.kind !== 'REMINDER' ? 1 : 0,
+          failures: d.success ? 0 : 1,
+          lastAt: d.createdAt,
+          lastChannel: d.channel,
+          lastSuccess: d.success,
+        });
+      }
+    }
+
+    // Filtro de "soh falhas": exclui rows sem nenhuma falha.
+    let rows = Array.from(aggMap.values());
+    if (query.onlyFailures) {
+      rows = rows.filter((r) => r.failures > 0);
+    }
+
+    // Mapa de approval pra enrich
+    const approvalById = new Map(approvals.map((a) => [a.id, a]));
+
+    // Linhas finais: pendentes primeiro, depois decididas. Dentro do grupo,
+    // mais antigas (maior atraso) primeiro.
+    const items = rows
+      .map((r) => {
+        const a = approvalById.get(r.approvalId)!;
+        const decidedAt = a.decidedAt ?? a.canceledAt ?? a.revertedAt;
+        return {
+          approvalId: r.approvalId,
+          cardId: a.cardId,
+          cardTitle: a.card.title,
+          board: a.card.board,
+          requestedAt: a.requestedAt.toISOString(),
+          decidedAt: decidedAt ? decidedAt.toISOString() : null,
+          status: a.status,
+          reviewerUserId: r.reviewerUserId,
+          phone: r.phone,
+          recipientName: r.recipientName,
+          totalDispatches: r.total,
+          autoDispatches: r.auto,
+          manualDispatches: r.manual,
+          failures: r.failures,
+          lastDispatchAt: r.lastAt.toISOString(),
+          lastChannel: r.lastChannel,
+          lastSuccess: r.lastSuccess,
+        };
+      })
+      .sort((a, b) => {
+        // PENDING primeiro, depois resto. Dentro do grupo: requestedAt asc (mais antigos = topo).
+        const aPending = a.status === 'PENDING' ? 0 : 1;
+        const bPending = b.status === 'PENDING' ? 0 : 1;
+        if (aPending !== bPending) return aPending - bPending;
+        return a.requestedAt.localeCompare(b.requestedAt);
+      });
+
+    const total = items.length;
+    const start = (query.page - 1) * query.pageSize;
+    const paged = items.slice(start, start + query.pageSize);
+
+    // Lista deduplicada de reviewers (internos) pra dropdown de filtro.
+    const reviewerMap = new Map<string, { id: string; name: string }>();
+    for (const d of dispatches) {
+      if (d.reviewerUserId && !reviewerMap.has(d.reviewerUserId)) {
+        reviewerMap.set(d.reviewerUserId, { id: d.reviewerUserId, name: d.recipientName });
+      }
+    }
+
+    // Resumo agregado (cards no topo da aba)
+    const summary = {
+      totalDispatches: dispatches.length,
+      successCount: dispatches.filter((d) => d.success).length,
+      failureCount: dispatches.filter((d) => !d.success).length,
+      whatsappCount: dispatches.filter((d) => d.channel === 'WHATSAPP').length,
+      inAppCount: dispatches.filter((d) => d.channel === 'IN_APP').length,
+    };
+
+    return {
+      items: paged,
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      reviewers: Array.from(reviewerMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      summary,
+    };
+  }
+
+  /**
+   * Timeline detalhada de envios de 1 approval (drill-down ao expandir
+   * linha). Retorna todos os logs em ordem cronologica ascendente.
+   */
+  async getApprovalDispatchTimeline(userId: string, tenant: TenantContext, approvalId: string) {
+    this.assertManagementAccess(tenant);
+
+    // Valida que a approval pertence a um board acessivel pelo user.
+    const approval = await this.prisma.cardApproval.findFirst({
+      where: { id: approvalId, organizationId: tenant.organizationId },
+      select: { card: { select: { boardId: true } } },
+    });
+    if (!approval) return { items: [] };
+    const boardIds = await this.access.listAccessibleBoardIds(userId, tenant);
+    if (!boardIds.includes(approval.card.boardId)) return { items: [] };
+
+    const dispatches = await this.prisma.approvalDispatchLog.findMany({
+      where: { approvalId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        reviewerUserId: true,
+        phone: true,
+        recipientName: true,
+        kind: true,
+        channel: true,
+        success: true,
+        errorMessage: true,
+        preview: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      items: dispatches.map((d) => ({
+        ...d,
+        createdAt: d.createdAt.toISOString(),
+      })),
     };
   }
 
@@ -665,6 +941,16 @@ export class ManagementService {
 
 function emptyMetrics() {
   return { total: 0, overdue: 0, collaborators: 0, clients: 0 };
+}
+
+function emptyDispatchSummary() {
+  return {
+    totalDispatches: 0,
+    successCount: 0,
+    failureCount: 0,
+    whatsappCount: 0,
+    inAppCount: 0,
+  };
 }
 
 function parseCsv(s: string | undefined): string[] {
