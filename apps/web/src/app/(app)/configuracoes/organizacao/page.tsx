@@ -19,6 +19,7 @@ interface CurrentOrg {
   approvalReminderHourStart: number;
   approvalReminderHourEnd: number;
   approvalReminderMaxAttempts: number;
+  approvalReminderUnlimited: boolean;
 }
 
 type OrgPatch = Partial<{
@@ -28,6 +29,7 @@ type OrgPatch = Partial<{
   approvalReminderHourStart: number;
   approvalReminderHourEnd: number;
   approvalReminderMaxAttempts: number;
+  approvalReminderUnlimited: boolean;
 }>;
 
 const ADMIN_ROLES: OrgRole[] = ['OWNER', 'ADMIN'];
@@ -158,6 +160,29 @@ export default function ConfiguracoesOrganizacaoPage() {
           </div>
         </label>
 
+        {/* Checkbox "sem limite" — desabilita o cap de tentativas e o cap
+            de 30 dias. Quando ligado, lembrete vai eternamente ate decidir. */}
+        <label
+          className={`ml-7 flex cursor-pointer items-start gap-2 text-xs ${
+            org.approvalReminderEnabled ? '' : 'opacity-50'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={org.approvalReminderUnlimited}
+            onChange={(e) => patchMut.mutate({ approvalReminderUnlimited: e.target.checked })}
+            disabled={!org.approvalReminderEnabled || patchMut.isPending}
+            className="mt-0.5"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">Enviar enquanto estiver pendente (sem limite)</span>
+            <span className="text-fg-muted leading-relaxed">
+              Ignora "máximo de lembretes" e o limite de 30 dias. Para só quando alguém
+              aprovar/reprovar ou cancelar o pedido.
+            </span>
+          </span>
+        </label>
+
         {/* Sub-config — só faz sentido editar quando habilitado, mas mantém
             visível pra deixar claro o que entra em vigor quando ligar. */}
         <div
@@ -177,9 +202,15 @@ export default function ConfiguracoesOrganizacaoPage() {
             value={org.approvalReminderMaxAttempts}
             min={1}
             max={20}
-            disabled={!org.approvalReminderEnabled || patchMut.isPending}
+            disabled={
+              !org.approvalReminderEnabled || org.approvalReminderUnlimited || patchMut.isPending
+            }
             onChange={(v) => patchMut.mutate({ approvalReminderMaxAttempts: v })}
-            hint="Após atingir, para de cobrar. Cobrança manual continua possível."
+            hint={
+              org.approvalReminderUnlimited
+                ? 'Desabilitado: "Enquanto estiver pendente" ignora este limite.'
+                : 'Após atingir, para de cobrar. Cobrança manual continua possível.'
+            }
           />
           <NumberField
             label="Início da janela (hora BRT)"

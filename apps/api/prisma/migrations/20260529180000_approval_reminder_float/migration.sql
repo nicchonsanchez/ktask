@@ -7,3 +7,8 @@ ALTER TABLE "Organization"
 
 ALTER TABLE "CardApproval"
   ALTER COLUMN "reminderIntervalHoursOverride" TYPE DOUBLE PRECISION;
+
+-- Flag "sem limite": ignora maxAttempts E o cap de 30 dias. Quando true,
+-- continua mandando lembrete enquanto a approval estiver PENDING.
+ALTER TABLE "Organization"
+  ADD COLUMN "approvalReminderUnlimited" BOOLEAN NOT NULL DEFAULT false;

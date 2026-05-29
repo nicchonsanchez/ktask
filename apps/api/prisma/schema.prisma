@@ -334,6 +334,10 @@ model Organization {
   approvalReminderHourEnd       Int      @default(18)
   /// Cap de lembretes por approval — após atingir, para. Default 5.
   approvalReminderMaxAttempts   Int      @default(5)
+  /// Quando true, ignora `maxAttempts` E o cap de idade (30 dias) —
+  /// envia eternamente até alguem decidir/cancelar. Usar com cautela:
+  /// approval esquecida pra sempre vira spam pro reviewer.
+  approvalReminderUnlimited     Boolean  @default(false)
 
   createdAt                    DateTime  @default(now())
   updatedAt                    DateTime  @updatedAt

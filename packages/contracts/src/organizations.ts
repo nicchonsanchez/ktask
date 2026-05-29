@@ -51,6 +51,11 @@ export const UpdateOrganizationRequestSchema = CreateOrganizationRequestSchema.p
   approvalReminderHourStart: z.number().int().min(0).max(23).optional(),
   approvalReminderHourEnd: z.number().int().min(1).max(24).optional(),
   approvalReminderMaxAttempts: z.number().int().min(1).max(20).optional(),
+  /**
+   * Quando true, ignora `maxAttempts` E o cap de 30 dias — manda lembrete
+   * enquanto a approval estiver PENDING. Para apenas quando decidir ou cancelar.
+   */
+  approvalReminderUnlimited: z.boolean().optional(),
 });
 export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>;
 

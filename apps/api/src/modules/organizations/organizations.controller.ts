@@ -53,6 +53,7 @@ export class OrganizationsController {
       approvalReminderHourStart: data.approvalReminderHourStart,
       approvalReminderHourEnd: data.approvalReminderHourEnd,
       approvalReminderMaxAttempts: data.approvalReminderMaxAttempts,
+      approvalReminderUnlimited: data.approvalReminderUnlimited,
       myRole: org.role,
     };
   }
@@ -75,6 +76,7 @@ export class OrganizationsController {
       approvalReminderHourStart: body.approvalReminderHourStart,
       approvalReminderHourEnd: body.approvalReminderHourEnd,
       approvalReminderMaxAttempts: body.approvalReminderMaxAttempts,
+      approvalReminderUnlimited: body.approvalReminderUnlimited,
     });
   }
 

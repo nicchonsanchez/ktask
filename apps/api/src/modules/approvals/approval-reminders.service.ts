@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import type { Organization } from '@prisma/client';
+import type { Organization, Prisma } from '@prisma/client';
 
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -97,19 +97,27 @@ export class ApprovalRemindersService {
     if (!this.isWithinBusinessHours(org)) return 0;
 
     const now = new Date();
-    const maxAge = new Date(now.getTime() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+
+    // Quando "unlimited" esta ativo, ignora maxAttempts E o cap de idade:
+    // a approval recebe lembrete enquanto estiver PENDING (so para se
+    // alguem decidir ou cancelar).
+    const where: Prisma.CardApprovalWhereInput = {
+      organizationId: org.id,
+      status: 'PENDING',
+      reminderDisabled: false,
+    };
+    if (!org.approvalReminderUnlimited) {
+      where.reminderCount = { lt: org.approvalReminderMaxAttempts };
+      where.requestedAt = {
+        gte: new Date(now.getTime() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000),
+      };
+    }
 
     // Busca approvals PENDING que ainda podem receber lembrete. Filtros
     // de tempo (base + interval <= now) sao feitos no app pra suportar
     // override per-approval.
     const candidates = await this.prisma.cardApproval.findMany({
-      where: {
-        organizationId: org.id,
-        status: 'PENDING',
-        reminderDisabled: false,
-        reminderCount: { lt: org.approvalReminderMaxAttempts },
-        requestedAt: { gte: maxAge },
-      },
+      where,
       include: {
         card: {
           select: {

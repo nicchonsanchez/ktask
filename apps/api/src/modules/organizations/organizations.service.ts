@@ -55,6 +55,7 @@ export class OrganizationsService {
         | 'approvalReminderHourStart'
         | 'approvalReminderHourEnd'
         | 'approvalReminderMaxAttempts'
+        | 'approvalReminderUnlimited'
       >
     >,
   ) {
