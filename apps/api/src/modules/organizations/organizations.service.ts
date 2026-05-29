@@ -45,7 +45,16 @@ export class OrganizationsService {
     data: Partial<
       Pick<
         Organization,
-        'name' | 'logoUrl' | 'timezone' | 'locale' | 'autoCompleteCardWhenAllFinal'
+        | 'name'
+        | 'logoUrl'
+        | 'timezone'
+        | 'locale'
+        | 'autoCompleteCardWhenAllFinal'
+        | 'approvalReminderEnabled'
+        | 'approvalReminderIntervalHours'
+        | 'approvalReminderHourStart'
+        | 'approvalReminderHourEnd'
+        | 'approvalReminderMaxAttempts'
       >
     >,
   ) {

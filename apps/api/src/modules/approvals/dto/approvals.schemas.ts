@@ -66,6 +66,18 @@ export const RequestApprovalSchema = z.object({
   onRejectActions: DefaultActionsSchema.optional(),
   /** Quando true, dispara WhatsApp pros reviewers que tiverem phone configurado. */
   notifyOnWhatsApp: z.boolean().default(true),
+  /**
+   * Override per-approval do lembrete automatico. Quando true, NENHUM
+   * lembrete automatico sera enviado pra essa approval (mesmo que a org
+   * tenha `approvalReminderEnabled = true`). Util pra aprovacoes urgentes
+   * que o requester vai cobrar manualmente, ou silenciosas (low priority).
+   */
+  reminderDisabled: z.boolean().optional(),
+  /**
+   * Override per-approval do intervalo (em horas). Null/undefined = usa
+   * setting da org (`approvalReminderIntervalHours`). Aceita 1-72h.
+   */
+  reminderIntervalHoursOverride: z.number().int().min(1).max(72).optional(),
 });
 export type RequestApprovalRequest = z.infer<typeof RequestApprovalSchema>;
 

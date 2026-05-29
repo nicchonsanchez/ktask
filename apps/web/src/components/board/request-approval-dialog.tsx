@@ -56,6 +56,12 @@ export function RequestApprovalDialog({
   const [onRejectAddTagIds, setOnRejectAddTagIds] = useState<string[]>([]);
   const [onRejectRemoveTagIds, setOnRejectRemoveTagIds] = useState<string[]>([]);
   const [notifyOnWhatsApp, setNotifyOnWhatsApp] = useState(true);
+  // Override per-approval do lembrete automatico. Default: usar setting da org.
+  // `reminderDisabled = true` desliga so essa approval. `reminderInterval` vazio
+  // = usa intervalo da org (default 4h). Section "Opcoes avancadas" colapsada.
+  const [reminderDisabled, setReminderDisabled] = useState(false);
+  const [reminderInterval, setReminderInterval] = useState<string>(''); // '' = usa org
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const boardQ = useQuery({ ...boardsQueries.detail(boardId) });
@@ -72,6 +78,9 @@ export function RequestApprovalDialog({
       setOnRejectAddTagIds([]);
       setOnRejectRemoveTagIds([]);
       setNotifyOnWhatsApp(true);
+      setReminderDisabled(false);
+      setReminderInterval('');
+      setShowAdvanced(false);
       setError(null);
     }
   }, [open]);
@@ -129,6 +138,9 @@ export function RequestApprovalDialog({
         if (t.approve) approveTargets.push({ boardId: bId, listId: t.approve });
         if (t.reject) rejectTargets.push({ boardId: bId, listId: t.reject });
       }
+      const intervalNum = reminderInterval.trim() ? Number(reminderInterval) : undefined;
+      const reminderIntervalHoursOverride =
+        intervalNum && Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : undefined;
       return requestApproval(cardId, {
         reviewers: reviewers.map((r) => r.data),
         message: message.trim() || undefined,
@@ -137,6 +149,8 @@ export function RequestApprovalDialog({
         onApproveActions,
         onRejectActions,
         notifyOnWhatsApp,
+        reminderDisabled: reminderDisabled || undefined,
+        reminderIntervalHoursOverride,
       });
     },
     onSuccess: () => {
@@ -417,6 +431,54 @@ export function RequestApprovalDialog({
               </span>
             </span>
           </label>
+
+          {/* Opcoes avancadas: override de lembrete (default usa setting da org).
+              Colapsado por default pra nao poluir o popup — quem precisa abre. */}
+          <details
+            open={showAdvanced}
+            onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+            className="border-border rounded-md border"
+          >
+            <summary className="text-fg-muted hover:text-fg cursor-pointer select-none px-3 py-2 text-xs font-medium">
+              Opções avançadas (lembrete automático)
+            </summary>
+            <div className="border-border flex flex-col gap-3 border-t p-3">
+              <label className="flex cursor-pointer items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={reminderDisabled}
+                  onChange={(e) => setReminderDisabled(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-medium">Sem lembrete automático para este pedido</span>
+                  <span className="text-fg-muted leading-relaxed">
+                    Útil quando você vai cobrar manualmente ou a aprovação é silenciosa. O lembrete
+                    da organização não vai disparar nesta aprovação.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                className={`flex flex-col gap-1 text-xs ${reminderDisabled ? 'opacity-40' : ''}`}
+              >
+                <span className="font-medium">Intervalo personalizado (horas)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={72}
+                  value={reminderInterval}
+                  onChange={(e) => setReminderInterval(e.target.value)}
+                  disabled={reminderDisabled}
+                  placeholder="vazio = usa padrão da organização"
+                  className="border-border bg-bg focus-visible:ring-primary w-48 rounded-md border px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                />
+                <span className="text-fg-subtle leading-relaxed">
+                  Sobrescreve o intervalo padrão da organização (ex: 2h pra cobrar mais rápido).
+                </span>
+              </label>
+            </div>
+          </details>
 
           {error && (
             <p className="bg-danger-subtle text-danger rounded-md px-3 py-2 text-xs">{error}</p>

@@ -37,6 +37,16 @@ export const UpdateOrganizationRequestSchema = CreateOrganizationRequestSchema.p
    * final → COMPLETED; alguma fora de final → ACTIVE. CANCELED imutável.
    */
   autoCompleteCardWhenAllFinal: z.boolean().optional(),
+  /**
+   * Settings de lembretes automáticos de aprovação pendente. Cron a cada
+   * 30min envia 1 msg consolidada por reviewer (WhatsApp + in-app),
+   * respeitando a janela horária. Cap por approval em maxAttempts.
+   */
+  approvalReminderEnabled: z.boolean().optional(),
+  approvalReminderIntervalHours: z.number().int().min(1).max(72).optional(),
+  approvalReminderHourStart: z.number().int().min(0).max(23).optional(),
+  approvalReminderHourEnd: z.number().int().min(1).max(24).optional(),
+  approvalReminderMaxAttempts: z.number().int().min(1).max(20).optional(),
 });
 export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>;
 

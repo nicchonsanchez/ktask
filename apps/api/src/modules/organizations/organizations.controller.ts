@@ -48,6 +48,11 @@ export class OrganizationsController {
       locale: data.locale,
       plan: data.plan,
       autoCompleteCardWhenAllFinal: data.autoCompleteCardWhenAllFinal,
+      approvalReminderEnabled: data.approvalReminderEnabled,
+      approvalReminderIntervalHours: data.approvalReminderIntervalHours,
+      approvalReminderHourStart: data.approvalReminderHourStart,
+      approvalReminderHourEnd: data.approvalReminderHourEnd,
+      approvalReminderMaxAttempts: data.approvalReminderMaxAttempts,
       myRole: org.role,
     };
   }
@@ -65,6 +70,11 @@ export class OrganizationsController {
       timezone: body.timezone,
       locale: body.locale,
       autoCompleteCardWhenAllFinal: body.autoCompleteCardWhenAllFinal,
+      approvalReminderEnabled: body.approvalReminderEnabled,
+      approvalReminderIntervalHours: body.approvalReminderIntervalHours,
+      approvalReminderHourStart: body.approvalReminderHourStart,
+      approvalReminderHourEnd: body.approvalReminderHourEnd,
+      approvalReminderMaxAttempts: body.approvalReminderMaxAttempts,
     });
   }
 

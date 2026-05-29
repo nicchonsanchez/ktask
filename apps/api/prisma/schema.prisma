@@ -78,6 +78,9 @@ enum NotificationType {
   COMMENT
   SLA_BREACH
   AUTOMATION
+  /// Lembrete automatico ou inicial de aprovacao pendente (cron de
+  /// ApprovalRemindersService ou request inicial).
+  APPROVAL_REQUEST
   CUSTOM
 }
 
@@ -313,6 +316,23 @@ model Organization {
   ///     COMPLETED) → volta pra ACTIVE.
   /// Mantem CANCELED imutavel. Default false (opt-in por Org).
   autoCompleteCardWhenAllFinal Boolean   @default(false)
+
+  /// Settings de lembretes automáticos de aprovação pendente. Quando
+  /// `approvalReminderEnabled = false` (default), cron pula a org.
+  /// Quando ativo, cron a cada 30min envia lembretes consolidados
+  /// (1 msg/reviewer com lista de approvals pendentes dele) via
+  /// WhatsApp + notificação in-app, respeitando janela horária BRT
+  /// (seg-sex, hourStart-hourEnd). Cada lembrete incrementa
+  /// `CardApproval.reminderCount`; para após `maxAttempts`.
+  approvalReminderEnabled       Boolean  @default(false)
+  approvalReminderIntervalHours Int      @default(4)
+  /// Hora de início da janela útil (0-23, BRT). Default 8h.
+  approvalReminderHourStart     Int      @default(8)
+  /// Hora de fim da janela útil (0-23, BRT). Default 18h.
+  approvalReminderHourEnd       Int      @default(18)
+  /// Cap de lembretes por approval — após atingir, para. Default 5.
+  approvalReminderMaxAttempts   Int      @default(5)
+
   createdAt                    DateTime  @default(now())
   updatedAt                    DateTime  @updatedAt
   deletedAt                    DateTime?
@@ -711,6 +731,19 @@ model CardApproval {
   lastNotifiedAt          DateTime?
   /// Contador de envios (initial + N resends). Usado pra cap diario do resend.
   notifyCount             Int            @default(0)
+  /// Override: desabilita lembrete automatico SOMENTE pra esta approval.
+  /// Default false = usa setting da org. Util pra aprovacoes urgentes ou
+  /// aprovacoes onde o requester decidiu cobrar manualmente.
+  reminderDisabled        Boolean        @default(false)
+  /// Override do intervalo em horas (somente esta approval). Null = usa
+  /// Organization.approvalReminderIntervalHours.
+  reminderIntervalHoursOverride Int?
+  /// Quantos lembretes automaticos ja foram enviados pra esta approval.
+  /// Quando atinge Organization.approvalReminderMaxAttempts, para.
+  reminderCount           Int            @default(0)
+  /// Quando o ultimo lembrete automatico foi enviado (diferente de
+  /// lastNotifiedAt, que conta initial + resends manuais).
+  lastReminderAt          DateTime?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 

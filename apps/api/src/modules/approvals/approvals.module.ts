@@ -10,11 +10,12 @@ import { AutomationsModule } from '@/modules/automations/automations.module';
 import { ApprovalsService } from './approvals.service';
 import { ApprovalsController } from './approvals.controller';
 import { ApprovalsPublicController } from './approvals-public.controller';
+import { ApprovalRemindersService } from './approval-reminders.service';
 
 @Module({
   imports: [BoardsModule, NotificationsModule, StorageModule, AutomationsModule],
   controllers: [ApprovalsController, ApprovalsPublicController],
-  providers: [ApprovalsService, CardStatusSyncService, TenantGuard],
+  providers: [ApprovalsService, ApprovalRemindersService, CardStatusSyncService, TenantGuard],
   exports: [ApprovalsService],
 })
 export class ApprovalsModule {}

@@ -215,6 +215,10 @@ export class ApprovalsService {
           onRejectActions: body.onRejectActions
             ? (body.onRejectActions as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
+          // Override per-approval do lembrete automatico (settings da org
+          // mandam o resto: enabled, janela, max attempts).
+          reminderDisabled: body.reminderDisabled ?? false,
+          reminderIntervalHoursOverride: body.reminderIntervalHoursOverride ?? null,
         },
       });
 

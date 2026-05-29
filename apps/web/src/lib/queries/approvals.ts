@@ -88,6 +88,10 @@ export interface RequestApprovalInput {
   onApproveActions?: ApprovalActionsDTO;
   onRejectActions?: ApprovalActionsDTO;
   notifyOnWhatsApp?: boolean;
+  /** Desliga lembrete automatico SO pra essa approval (default usa setting da org). */
+  reminderDisabled?: boolean;
+  /** Sobrescreve intervalo (h) do lembrete pra essa approval. Vazio = usa org. */
+  reminderIntervalHoursOverride?: number;
 }
 
 export interface DecideApprovalInput {
