@@ -1,4 +1,12 @@
-import { BadRequestException, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { TenantGuard } from '@/common/tenant/tenant.guard';
@@ -94,5 +102,31 @@ export class AdminController {
       throw new BadRequestException('from precisa ser anterior a to.');
     }
     return this.service.companiesStats(org, { from, to, boardId: boardId || undefined });
+  }
+
+  // ---- Saude das Automacoes ----
+
+  @Get('automations/health')
+  @ApiOperation({
+    summary: 'Painel admin: saúde das automações (contadores + falhas + runs + outbox)',
+  })
+  automationsHealth(@CurrentOrg() org: TenantContext) {
+    return this.service.automationsHealth(org);
+  }
+
+  @Post('automations/failures/:id/reprocess')
+  @ApiOperation({
+    summary: 'Reprocessa uma falha dead-letter: cria nova entry no outbox + marca resolved',
+  })
+  reprocessFailure(@CurrentOrg() org: TenantContext, @Param('id') failureId: string) {
+    return this.service.reprocessFailure(org, failureId);
+  }
+
+  @Post('automations/failures/:id/resolve')
+  @ApiOperation({
+    summary: 'Marca falha como resolvida (sem reprocessar). Pra falhas sem cabimento técnico.',
+  })
+  resolveFailure(@CurrentOrg() org: TenantContext, @Param('id') failureId: string) {
+    return this.service.resolveFailure(org, failureId);
   }
 }

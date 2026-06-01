@@ -1,8 +1,10 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { AutomationOutboxScope, AutomationTrigger } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
+import { AutomationsOutboxService } from '@/modules/automations/automations.outbox.service';
 
 /**
  * Stats agregados da Org pra dashboards de operacao / debug.
@@ -11,7 +13,10 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
  */
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbox: AutomationsOutboxService,
+  ) {}
 
   /**
    * Estatisticas de Time Tracking da Org logada.
@@ -858,5 +863,182 @@ export class AdminService {
       backlogCreated: results.filter((r) => r.backlogCreated).length,
       details: results,
     };
+  }
+
+  // ========================================================
+  // Saude das Automacoes (painel /configuracoes/automacoes)
+  // ========================================================
+
+  /**
+   * Snapshot consolidado pro painel admin. Retorna:
+   *   - 3 contadores (failures 7d, runs RUNNING travados, outbox backlog)
+   *   - Lista de AutomationFailure nao-resolvidas (max 50)
+   *   - Lista de runs FAILED/ABANDONED recentes (max 50)
+   *   - Lista de outbox entries pendentes ha mais tempo (max 20)
+   *
+   * Tudo em 1 endpoint pra simplificar o frontend — payload total ~50KB.
+   */
+  async automationsHealth(tenant: TenantContext) {
+    this.assertAdmin(tenant);
+    const orgId = tenant.organizationId;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    const [failuresCount, stuckRunsCount, outboxBacklog, failures, recentRuns, outboxPending] =
+      await Promise.all([
+        this.prisma.automationFailure.count({
+          where: { organizationId: orgId, resolvedAt: null, createdAt: { gte: sevenDaysAgo } },
+        }),
+        this.prisma.automationRun.count({
+          where: {
+            automation: { organizationId: orgId },
+            status: 'RUNNING',
+            startedAt: { lt: fiveMinAgo },
+          },
+        }),
+        this.prisma.automationOutbox.count({
+          where: { organizationId: orgId, processedAt: null },
+        }),
+        this.prisma.automationFailure.findMany({
+          where: { organizationId: orgId, resolvedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          include: {
+            automation: { select: { id: true, label: true, actionType: true, trigger: true } },
+          },
+        }),
+        this.prisma.automationRun.findMany({
+          where: {
+            automation: { organizationId: orgId },
+            status: { in: ['FAILED', 'ABANDONED'] },
+            startedAt: { gte: sevenDaysAgo },
+          },
+          orderBy: { startedAt: 'desc' },
+          take: 50,
+          include: {
+            automation: { select: { id: true, label: true, actionType: true, trigger: true } },
+          },
+        }),
+        this.prisma.automationOutbox.findMany({
+          where: { organizationId: orgId, processedAt: null },
+          orderBy: { createdAt: 'asc' }, // mais antigos primeiro (problemas reais)
+          take: 20,
+        }),
+      ]);
+
+    return {
+      counters: {
+        failures7d: failuresCount,
+        stuckRuns: stuckRunsCount,
+        outboxBacklog,
+      },
+      failures: failures.map((f) => ({
+        id: f.id,
+        automationId: f.automationId,
+        automationLabel: f.automation.label,
+        automationActionType: f.automation.actionType,
+        cardId: f.cardId,
+        trigger: f.trigger,
+        actionType: f.actionType,
+        attempts: f.attempts,
+        errorMessage: f.errorMessage,
+        createdAt: f.createdAt.toISOString(),
+      })),
+      recentRuns: recentRuns.map((r) => ({
+        id: r.id,
+        automationId: r.automationId,
+        automationLabel: r.automation.label,
+        automationActionType: r.automation.actionType,
+        cardId: r.cardId,
+        status: r.status,
+        error: r.error,
+        startedAt: r.startedAt?.toISOString() ?? null,
+        finishedAt: r.finishedAt?.toISOString() ?? null,
+        chainDepth: r.chainDepth,
+      })),
+      outboxPending: outboxPending.map((o) => ({
+        id: o.id,
+        trigger: o.trigger,
+        cardId: o.cardId,
+        scopeKind: o.scopeKind,
+        attempts: o.attempts,
+        lastError: o.lastError,
+        nextAttemptAt: o.nextAttemptAt.toISOString(),
+        createdAt: o.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Reprocessa uma AutomationFailure: cria nova entry na outbox com o
+   * payloadSnapshot original (trigger, scopeKind, scopeId, chainDepth)
+   * e marca a failure como resolved. Outbox cron pega na proxima rodada.
+   *
+   * Retorna o ID do novo outbox row pra rastreabilidade.
+   */
+  async reprocessFailure(tenant: TenantContext, failureId: string) {
+    this.assertAdmin(tenant);
+    const failure = await this.prisma.automationFailure.findUnique({
+      where: { id: failureId },
+    });
+    if (!failure || failure.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Falha não encontrada.');
+    }
+    if (failure.resolvedAt) {
+      throw new ForbiddenException('Esta falha já foi resolvida.');
+    }
+    const snap = failure.payloadSnapshot as {
+      trigger?: string;
+      scopeKind?: string;
+      scopeId?: string;
+      cardId?: string;
+      chainDepth?: number;
+    } | null;
+    if (!snap || !snap.trigger || !snap.scopeKind || !snap.scopeId || !snap.cardId) {
+      throw new ForbiddenException('Snapshot incompleto — não dá pra reprocessar automaticamente.');
+    }
+
+    const outbox = await this.outbox.enqueue(this.prisma, {
+      organizationId: failure.organizationId,
+      trigger: snap.trigger as AutomationTrigger,
+      cardId: snap.cardId,
+      scopeKind: snap.scopeKind as AutomationOutboxScope,
+      scopeId: snap.scopeId,
+      chainDepth: snap.chainDepth ?? 0,
+    });
+
+    await this.prisma.automationFailure.update({
+      where: { id: failureId },
+      data: { resolvedAt: new Date() },
+    });
+
+    // Push imediato pra latencia baixa — cron pega se falhar.
+    void this.outbox.processOne(outbox.id);
+
+    return { ok: true, outboxId: outbox.id };
+  }
+
+  /**
+   * Marca AutomationFailure como resolvida manualmente (sem reprocessar).
+   * Útil pra falhas onde o problema foi corrigido externamente (ex: card
+   * foi deletado e a automação não faz mais sentido).
+   */
+  async resolveFailure(tenant: TenantContext, failureId: string) {
+    this.assertAdmin(tenant);
+    const failure = await this.prisma.automationFailure.findUnique({
+      where: { id: failureId },
+      select: { id: true, organizationId: true, resolvedAt: true },
+    });
+    if (!failure || failure.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Falha não encontrada.');
+    }
+    if (failure.resolvedAt) {
+      return { ok: true, alreadyResolved: true };
+    }
+    await this.prisma.automationFailure.update({
+      where: { id: failureId },
+      data: { resolvedAt: new Date() },
+    });
+    return { ok: true };
   }
 }
