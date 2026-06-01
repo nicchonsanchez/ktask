@@ -177,10 +177,8 @@ enum AutomationRunStatus {
 11. **Detector** — no fim do `worker.process`, depois de gravar
     `AutomationFailure`: query `count(*) from AutomationFailure where
 createdAt > now - 1h and organizationId = X`. Se > 5 E último alerta
-    pra essa org foi há mais de 1h:
-    - Envia mensagem pelo `WhatsAppHelper` pro `OPERATOR_PHONE` (já no .env).
-    - Marca `lastAlertAt` em algum lugar — sugiro `OrganizationSettings`
-      ou tabela simples `AutomationAlertState(organizationId, lastAlertAt)`.
+    pra essa org foi há mais de 1h: - Envia mensagem pelo `WhatsAppHelper` pro `OPERATOR_PHONE` (já no .env). - Marca `lastAlertAt` em algum lugar — sugiro `OrganizationSettings`
+    ou tabela simples `AutomationAlertState(organizationId, lastAlertAt)`.
 12. **Mensagem**: link pro painel admin + count + top 3 automation IDs
     afetadas.
 
