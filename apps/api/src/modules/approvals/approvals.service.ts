@@ -7,7 +7,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import type { ApprovalStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
@@ -96,6 +96,40 @@ export class ApprovalsService {
     private readonly automationsOutbox: AutomationsOutboxService,
     private readonly dispatchLog: ApprovalDispatchLogService,
   ) {}
+
+  /**
+   * Listener pra `user.phone.changed`: re-vincula reviewers phone-only
+   * legacy que casam com o novo phone do User. Sem isso, approval criada
+   * ANTES do User ter phone fica externa pra sempre — mesmo problema que
+   * o defensive match em `request()` resolve pro caminho de criação.
+   *
+   * Idempotente: UPDATE só onde `userId IS NULL` E phone bate E user é
+   * member da org da approval. Best-effort — erro só loga, não propaga.
+   */
+  @OnEvent('user.phone.changed', { async: true })
+  async onUserPhoneChanged(payload: { userId: string; newPhone: string }) {
+    try {
+      const result = await this.prisma.$executeRaw`
+        UPDATE "CardApprovalReviewer" r
+        SET "userId" = ${payload.userId}
+        FROM "CardApproval" a, "Membership" m
+        WHERE r."approvalId" = a.id
+          AND m."userId" = ${payload.userId}
+          AND m."organizationId" = a."organizationId"
+          AND r."userId" IS NULL
+          AND r.phone = ${payload.newPhone}
+      `;
+      if (result > 0) {
+        this.logger.log(
+          `[phone-changed] Vinculou ${result} reviewer(s) phone-only ao userId=${payload.userId}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[phone-changed] Falha ao re-vincular reviewers: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 
   // ============================================================
   // Request approval

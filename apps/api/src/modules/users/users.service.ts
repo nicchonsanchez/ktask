@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { User } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
 
@@ -31,7 +32,10 @@ const PUBLIC_SELECT = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({
@@ -70,6 +74,19 @@ export class UsersService {
       timezone?: string;
     },
   ): Promise<PublicUser> {
+    // Capta phone anterior pra detectar mudança e emitir evento depois.
+    // Outros módulos (ex: Approvals) usam isso pra vincular reviewers
+    // phone-only órfãos: pessoa cadastra phone X → approvals antigas com
+    // mesmo X passam a aparecer na aba "Minhas" dela.
+    let previousPhone: string | null | undefined;
+    if (input.phone !== undefined) {
+      const current = await this.prisma.user.findUnique({
+        where: { id },
+        select: { phone: true },
+      });
+      previousPhone = current?.phone ?? null;
+    }
+
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
@@ -84,6 +101,12 @@ export class UsersService {
       },
       select: PUBLIC_SELECT,
     });
+
+    // Emite só se phone realmente mudou e novo phone não é null.
+    if (input.phone !== undefined && input.phone && input.phone !== previousPhone) {
+      this.events.emit('user.phone.changed', { userId: id, newPhone: input.phone });
+    }
+
     return updated;
   }
 }

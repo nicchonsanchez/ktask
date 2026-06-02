@@ -9,6 +9,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -34,6 +35,7 @@ export class MembersAdminService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => AuthService))
     private readonly auth: AuthService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -221,6 +223,17 @@ export class MembersAdminService {
 
     await this.prisma.user.update({ where: { id: targetUserId }, data });
     await Promise.all(activities);
+
+    // Phone mudou: emite evento pra Approvals re-vincular reviewers
+    // phone-only legacy que casam com o novo phone. Listener faz o
+    // backfill de forma idempotente (UPDATE só onde userId IS NULL).
+    if (data.phone) {
+      this.events.emit('user.phone.changed', {
+        userId: targetUserId,
+        newPhone: data.phone as string,
+      });
+    }
+
     return { ok: true, changed: true };
   }
 
