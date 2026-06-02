@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  Activity,
   Building2,
   ChevronRight,
   FileUp,
@@ -53,6 +54,14 @@ const SECTIONS: Array<{
     label: 'Importar fluxo do Ummense',
     description: 'Upload do .csv exportado do Ummense pra criar boards/cards no KTask.',
     icon: FileUp,
+    adminOnly: true,
+  },
+  {
+    href: '/configuracoes/automacoes',
+    label: 'Saúde das automações',
+    description:
+      'Dead-letter, runs travados, backlog do outbox. Reprocessar falhas e diagnosticar erros.',
+    icon: Activity,
     adminOnly: true,
   },
 ];
