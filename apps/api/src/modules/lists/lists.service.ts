@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
 
@@ -434,6 +439,186 @@ export class ListsService {
   }
 
   /**
+   * Move a lista pra lixeira (soft delete). Todos os cards ativos da lista
+   * vao junto pra lixeira em cascata — restaurar a lista NAO ressuscita
+   * eles (cada card tem ciclo proprio, restaure pela tela de lixeira).
+   *
+   * Bloqueia se for a unica isFinalList/isBacklog do board — mesma
+   * invariante do archive.
+   */
+  async trash(userId: string, tenant: TenantContext, listId: string) {
+    const list = await this.getOneOrThrow(listId);
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
+
+    if (list.isFinalList) {
+      const otherFinal = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isFinalList: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherFinal === 0) {
+        throw new BadRequestException(
+          'Esta é a coluna Finalizado do fluxo. Marque outra coluna como Finalizado antes de mandar pra lixeira.',
+        );
+      }
+    }
+    if (list.isBacklog) {
+      const otherBacklog = await this.prisma.list.count({
+        where: {
+          boardId: list.boardId,
+          isBacklog: true,
+          isArchived: false,
+          id: { not: listId },
+        },
+      });
+      if (otherBacklog === 0) {
+        throw new BadRequestException(
+          'Esta é a única coluna Backlog do fluxo. Marque outra coluna como Backlog antes de mandar pra lixeira.',
+        );
+      }
+    }
+
+    const now = new Date();
+    const cardsAffected = await this.prisma.card.updateMany({
+      where: { listId, deletedAt: null },
+      data: { deletedAt: now, deletedById: userId },
+    });
+
+    const updated = await this.prisma.list.update({
+      where: { id: listId },
+      data: { deletedAt: now, deletedById: userId },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: list.boardId,
+        actorId: userId,
+        type: 'LIST_TRASHED',
+        payload: { listId, cardsCascaded: cardsAffected.count },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+      boardId: list.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      listId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Restaura uma lista da lixeira. Cards que foram cascateados pra lixeira
+   * NAO sao restaurados aqui — usuario decide individualmente pela tela de
+   * lixeira. Posiciona ao final do board.
+   */
+  async restoreFromTrash(userId: string, tenant: TenantContext, listId: string) {
+    const raw = this.prisma.raw;
+    const list = await raw.list.findUnique({ where: { id: listId } });
+    if (!list || list.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Lista não encontrada.');
+    }
+    if (list.deletedAt === null) {
+      return list; // idempotente
+    }
+    await this.access.assertAccess(userId, list.boardId, tenant, 'ADMIN');
+
+    const last = await this.prisma.list.findFirst({
+      where: { boardId: list.boardId, isArchived: false },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    });
+    const newPosition = (last?.position ?? 0) + 1;
+
+    const updated = await raw.list.update({
+      where: { id: listId },
+      data: { deletedAt: null, deletedById: null, position: newPosition },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: list.boardId,
+        actorId: userId,
+        type: 'LIST_RESTORED_FROM_TRASH',
+        payload: { listId },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+      boardId: list.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      listId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Exclusao permanente da lista. Requer:
+   *   1. Lista ja na lixeira (deletedAt != null).
+   *   2. Ator OWNER/ADMIN da org.
+   *   3. Nenhum card vivo na lista — todos cascados pra lixeira ou ja
+   *      excluidos permanentemente. Garantia contra perda acidental se
+   *      alguem moveu cards pra ca depois do trash da lista (cenario raro
+   *      mas possivel se a UI bugar).
+   */
+  async deletePermanent(userId: string, tenant: TenantContext, listId: string) {
+    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Apenas OWNER ou ADMIN da organização podem excluir permanentemente.',
+      );
+    }
+
+    const raw = this.prisma.raw;
+    const list = await raw.list.findUnique({ where: { id: listId } });
+    if (!list || list.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Lista não encontrada.');
+    }
+    if (list.deletedAt === null) {
+      throw new BadRequestException(
+        'Lista precisa estar na lixeira antes de ser excluída permanentemente.',
+      );
+    }
+
+    const liveCards = await raw.card.count({
+      where: { listId, deletedAt: null },
+    });
+    if (liveCards > 0) {
+      throw new BadRequestException(
+        `Lista tem ${liveCards} card(s) ativos. Mande-os pra lixeira antes de excluir.`,
+      );
+    }
+
+    await raw.list.delete({ where: { id: listId } });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: list.boardId,
+        actorId: userId,
+        type: 'LIST_DELETED_PERMANENTLY',
+        payload: { listId, deletedAt: list.deletedAt.toISOString() },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+      boardId: list.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      listId,
+    });
+
+    return { ok: true };
+  }
+
+  /**
    * Lista cards e listas arquivados de um board pra tela "Arquivados".
    */
   async listArchived(userId: string, tenant: TenantContext, boardId: string) {
@@ -444,7 +629,7 @@ export class ListsService {
         where: { boardId, organizationId: tenant.organizationId, isArchived: true },
         orderBy: { updatedAt: 'desc' },
         include: {
-          _count: { select: { cards: true } },
+          _count: { select: { cards: { where: { deletedAt: null } } } },
         },
       }),
       this.prisma.card.findMany({

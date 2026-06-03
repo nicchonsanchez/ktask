@@ -5,13 +5,23 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, Users, X } from 'lucide-react';
+import {
+  ChevronDown,
+  LogOut,
+  Menu,
+  Settings,
+  Trash2,
+  User as UserIcon,
+  Users,
+  X,
+} from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationsBell } from '@/components/notifications-bell';
 import { SearchTrigger } from '@/components/search-host';
 import { UserAvatar } from '@/components/user-avatar';
 import { TimerWidget } from '@/components/time-tracking/timer-widget';
 import { approvalsQueries } from '@/lib/queries/approvals';
+import { trashCountsQuery } from '@/lib/queries/trash';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { logout } from '@/lib/auth';
@@ -72,6 +82,16 @@ export function Topbar() {
     staleTime: 30_000,
   });
   const pendingCount = pendingApprovalsQ.data?.length ?? 0;
+
+  // Contagem da lixeira pra badge no dropdown da conta. Refresh leve a cada
+  // 2min — itens da lixeira nao mudam tao rapido quanto aprovacoes.
+  const trashCountQ = useQuery({
+    ...trashCountsQuery(),
+    enabled: !!user,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+  const trashCount = trashCountQ.data?.total ?? 0;
 
   // Role do user na Org pra mostrar/esconder "Visao Gerencial" no nav.
   // Reusa o mesmo endpoint que /empresa ja chama — fica em cache do RQ.
@@ -192,7 +212,7 @@ export function Topbar() {
             <ThemeToggle />
           </span>
           <div className="bg-border/70 mx-0.5 hidden h-5 w-px sm:mx-1 sm:block" aria-hidden />
-          {user && <UserMenu onLogout={handleLogout} />}
+          {user && <UserMenu onLogout={handleLogout} trashCount={trashCount} />}
         </div>
       </div>
 
@@ -236,6 +256,12 @@ export function Topbar() {
               {NAV_ACCOUNT.map((item) => (
                 <DrawerLink key={item.href} item={item} pathname={pathname} indent />
               ))}
+              <DrawerLink
+                item={{ href: '/lixeira', label: 'Lixeira' }}
+                pathname={pathname}
+                indent
+                badge={trashCount > 0 ? trashCount : undefined}
+              />
             </nav>
             {user && (
               <div className="border-border/60 flex items-center gap-3 border-t p-3">
@@ -308,7 +334,7 @@ function DrawerLink({
   );
 }
 
-function UserMenu({ onLogout }: { onLogout: () => void }) {
+function UserMenu({ onLogout, trashCount }: { onLogout: () => void; trashCount: number }) {
   const user = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -364,6 +390,14 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
             onClick={() => setOpen(false)}
           />
           <div className="border-border/70 my-1 border-t" />
+          <UserMenuLink
+            href="/lixeira"
+            icon={<Trash2 size={14} />}
+            label="Lixeira"
+            onClick={() => setOpen(false)}
+            badge={trashCount}
+          />
+          <div className="border-border/70 my-1 border-t" />
           <button
             type="button"
             onClick={() => {
@@ -386,20 +420,32 @@ function UserMenuLink({
   icon,
   label,
   onClick,
+  badge,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  badge?: number;
 }) {
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5"
+      className="text-fg hover:bg-bg-muted flex items-center justify-between gap-2 rounded-sm px-2 py-1.5"
     >
-      {icon}
-      {label}
+      <span className="flex items-center gap-2">
+        {icon}
+        {label}
+      </span>
+      {badge !== undefined && badge > 0 && (
+        <span
+          aria-label={`${badge} item${badge === 1 ? '' : 'ns'} na lixeira`}
+          className="bg-bg-muted text-fg-muted inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold leading-none"
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </Link>
   );
 }

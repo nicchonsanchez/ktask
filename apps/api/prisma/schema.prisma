@@ -90,6 +90,12 @@ enum ActivityType {
   CARD_MOVED
   CARD_ARCHIVED
   CARD_RESTORED
+  CARD_TRASHED
+  CARD_RESTORED_FROM_TRASH
+  CARD_DELETED_PERMANENTLY
+  LIST_TRASHED
+  LIST_RESTORED_FROM_TRASH
+  LIST_DELETED_PERMANENTLY
   CARD_COMPLETED
   CARD_UNCOMPLETED
   CARD_ASSIGNED
@@ -261,6 +267,8 @@ model User {
   cardsCreated              Card[]                 @relation("CardCreator")
   cardsCompleted            Card[]                 @relation("CardCompletedBy")
   cardsLeading              Card[]                 @relation("CardLead")
+  cardsDeleted              Card[]                 @relation("CardDeletedBy")
+  listsDeleted              List[]                 @relation("ListDeletedBy")
   cardAssignments           CardMember[]
   commentsAuthored          Comment[]
   commentReactions          CommentReaction[]
@@ -519,11 +527,16 @@ model List {
   /// — caso de uso "INFORMAÇÕES" + "Backlog" coexistindo.
   isBacklog      Boolean  @default(false)
   isArchived     Boolean  @default(false)
+  /// Soft delete (lixeira). Mesma semantica de Card.deletedAt. Restaurar
+  /// uma lista NAO ressuscita os cards dela — cada card tem ciclo proprio.
+  deletedAt      DateTime?
+  deletedById    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization               Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   board                      Board                    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  deletedBy                  User?                    @relation("ListDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   cards                      Card[]
   automations                Automation[]
   cardPresences              CardPresence[]
@@ -533,6 +546,7 @@ model List {
 
   @@index([organizationId])
   @@index([boardId, position])
+  @@index([organizationId, deletedAt])
 }
 
 // ==================== Cards ====================
@@ -601,6 +615,13 @@ model Card {
   completedById     String?
   estimateMinutes   Int?
   isArchived        Boolean     @default(false)
+  /// Soft delete (lixeira). Quando != null, card esta na lixeira e fica
+  /// invisivel pra todos os listings normais (filtro deletedAt: null em
+  /// todas as queries). Auto-purge fisico apos 90 dias via cron BullMQ.
+  /// Restaurar = setar deletedAt = null. Hard delete via deletePermanent
+  /// agora exige deletedAt != null e role OWNER/ADMIN.
+  deletedAt         DateTime?
+  deletedById       String?
   parentCardId      String?
   createdById       String
   leadId            String? // Líder do card: default = createdBy, pode trocar manualmente ou via automação
@@ -612,6 +633,7 @@ model Card {
   list           List            @relation(fields: [listId], references: [id], onDelete: Cascade)
   createdBy      User            @relation("CardCreator", fields: [createdById], references: [id])
   completedBy    User?           @relation("CardCompletedBy", fields: [completedById], references: [id])
+  deletedBy      User?           @relation("CardDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   lead           User?           @relation("CardLead", fields: [leadId], references: [id], onDelete: SetNull)
   parent         Card?           @relation("Subtasks", fields: [parentCardId], references: [id], onDelete: SetNull)
   children       Card[]          @relation("Subtasks")
@@ -635,6 +657,8 @@ model Card {
   @@index([boardId, completedAt])
   @@index([listId, position])
   @@index([dueDate])
+  /// Index pra TrashService listar/contar + cron de auto-purge.
+  @@index([organizationId, deletedAt])
 }
 
 /// Presença de um card em um fluxo (board). Card pode estar em N fluxos

@@ -158,8 +158,30 @@ export class CardsController {
     return this.cards.duplicate(user.userId, org, cardId, body);
   }
 
+  @Post(':cardId/trash')
+  @ApiOperation({ summary: 'Mover card pra lixeira (soft delete, recuperável 90 dias)' })
+  trash(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+  ) {
+    return this.cards.trash(user.userId, org, cardId);
+  }
+
+  @Post(':cardId/restore-from-trash')
+  @ApiOperation({ summary: 'Restaurar card da lixeira' })
+  restoreFromTrash(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+  ) {
+    return this.cards.restoreFromTrash(user.userId, org, cardId);
+  }
+
   @Delete(':cardId/permanent')
-  @ApiOperation({ summary: 'Excluir card permanentemente (irreversível)' })
+  @ApiOperation({
+    summary: 'Excluir card permanentemente (exige lixeira + OWNER/ADMIN)',
+  })
   deletePermanent(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,

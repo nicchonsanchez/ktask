@@ -43,8 +43,8 @@ export class ContactsService {
       deletedAt: null,
       ...(query.type ? { type: query.type } : {}),
       ...(query.parentId ? { parentId: query.parentId } : {}),
-      ...(query.hasCards === true ? { cards: { some: {} } } : {}),
-      ...(query.hasCards === false ? { cards: { none: {} } } : {}),
+      ...(query.hasCards === true ? { cards: { some: { card: { deletedAt: null } } } } : {}),
+      ...(query.hasCards === false ? { cards: { none: { card: { deletedAt: null } } } } : {}),
       ...(query.linkStatus === 'linked' ? { userId: { not: null } } : {}),
       ...(query.linkStatus === 'unlinked' ? { userId: null } : {}),
       ...(query.q
@@ -64,7 +64,12 @@ export class ContactsService {
       include: {
         parent: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
-        _count: { select: { cards: true, children: true } },
+        _count: {
+          select: {
+            cards: { where: { card: { deletedAt: null } } },
+            children: true,
+          },
+        },
       },
     });
   }
@@ -130,6 +135,7 @@ export class ContactsService {
           orderBy: { name: 'asc' },
         },
         cards: {
+          where: { card: { deletedAt: null } },
           take: 50,
           orderBy: { createdAt: 'desc' },
           include: {

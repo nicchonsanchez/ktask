@@ -703,17 +703,126 @@ export class CardsService {
   }
 
   /**
-   * Exclusão permanente. Apaga card + tudo que tem cascata (CardMember,
-   * CardLabel, Checklist+Items, Attachments, Comments, Activities).
-   * Requer confirmação dupla no client (não tem lixeira).
+   * Move o card pra lixeira (soft delete). Card some de todos os listings
+   * normais (filtro automatico via PrismaService extension). Pode ser
+   * restaurado em ate 90 dias via `restoreFromTrash`; depois disso o cron
+   * de auto-purge apaga fisicamente.
    */
-  async deletePermanent(userId: string, tenant: TenantContext, cardId: string) {
+  async trash(userId: string, tenant: TenantContext, cardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
     await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
-    await this.prisma.card.delete({ where: { id: cardId } });
+    const updated = await this.prisma.card.update({
+      where: { id: cardId },
+      data: { deletedAt: new Date(), deletedById: userId },
+    });
 
-    // emit CARD_ARCHIVED pra a UI sair do estado "aberto" (trata como saída)
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: userId,
+        type: 'CARD_TRASHED',
+        payload: { cardId },
+      },
+    });
+
+    // UI trata trash como "saida" do card aberto — reusa CARD_ARCHIVED
+    // pra fechar modais/listas sem inventar um evento novo de realtime.
+    this.events.emit(EVENT_NAMES.CARD_ARCHIVED, {
+      boardId: card.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      cardId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Restaura um card da lixeira (deletedAt = null). Precisa acessar o raw
+   * client porque a extension de soft-delete filtra deletedAt: null por
+   * default e o card em questao tem deletedAt != null.
+   */
+  async restoreFromTrash(userId: string, tenant: TenantContext, cardId: string) {
+    const raw = this.prisma.raw;
+    const card = await raw.card.findUnique({ where: { id: cardId } });
+    if (!card || card.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Card não encontrado.');
+    }
+    if (card.deletedAt === null) {
+      return card; // idempotente
+    }
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
+
+    const updated = await raw.card.update({
+      where: { id: cardId },
+      data: { deletedAt: null, deletedById: null },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: userId,
+        type: 'CARD_RESTORED_FROM_TRASH',
+        payload: { cardId },
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      cardId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Exclusao permanente. Apaga card + cascata (CardMember, CardLabel,
+   * Checklist+Items, Attachments, Comments, Activities).
+   *
+   * Requisitos:
+   *   1. Card ja precisa estar na lixeira (deletedAt != null). Quem quiser
+   *      excluir direto deve primeiro chamar `trash` — duas etapas evitam
+   *      perda acidental.
+   *   2. Ator precisa ser OWNER ou ADMIN da org. Operacao irreversivel
+   *      nao deve ficar disponivel pra MEMBER/GESTOR.
+   */
+  async deletePermanent(userId: string, tenant: TenantContext, cardId: string) {
+    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Apenas OWNER ou ADMIN da organização podem excluir permanentemente.',
+      );
+    }
+
+    const raw = this.prisma.raw;
+    const card = await raw.card.findUnique({ where: { id: cardId } });
+    if (!card || card.organizationId !== tenant.organizationId) {
+      throw new NotFoundException('Card não encontrado.');
+    }
+    if (card.deletedAt === null) {
+      throw new BadRequestException(
+        'Card precisa estar na lixeira antes de ser excluído permanentemente.',
+      );
+    }
+
+    await raw.card.delete({ where: { id: cardId } });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId: card.boardId,
+        actorId: userId,
+        type: 'CARD_DELETED_PERMANENTLY',
+        payload: { cardId, deletedAt: card.deletedAt.toISOString() },
+      },
+    });
+
     this.events.emit(EVENT_NAMES.CARD_ARCHIVED, {
       boardId: card.boardId,
       organizationId: tenant.organizationId,

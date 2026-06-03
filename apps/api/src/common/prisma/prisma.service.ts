@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+import { applySoftDelete, getRawClient } from './soft-delete.extension';
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
@@ -13,6 +15,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         { emit: 'stdout', level: 'error' },
       ],
     });
+    // Proxy substitui `this` na DI do Nest. Reads de Card/List ganham
+    // filtro `deletedAt: null` automatico; raw client fica acessivel via
+    // `this.raw` (TrashService, cron de purge).
+    return applySoftDelete(this);
+  }
+
+  /**
+   * Cliente Prisma sem o filtro de soft-delete. Use APENAS quando precisa
+   * enxergar registros na lixeira (TrashService.list, cron de auto-purge).
+   * Qualquer outro caso deve usar `this` direto pra evitar vazamento de
+   * cards/listas excluidos em listings publicos.
+   */
+  get raw(): PrismaClient {
+    return getRawClient(this);
   }
 
   /**

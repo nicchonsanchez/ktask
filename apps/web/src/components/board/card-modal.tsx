@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogTitle } from '@ktask/ui';
 import {
   archiveCard,
   cardsQueries,
-  deleteCardPermanent,
+  trashCard,
   unassignMember,
   updateCard,
   uploadAttachment,
@@ -53,7 +53,7 @@ import { CardFamilyTab } from './card-family-tab';
 import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
 import { ContactsBlock } from './contacts-block';
-import { useConfirm, useNotify, usePrompt } from '@/components/ui/dialogs';
+import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import {
   CARD_COLOR_LABEL,
   CARD_COLOR_ORDER,
@@ -111,7 +111,6 @@ export function CardModalContent({
 }) {
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
-  const promptDialog = usePrompt();
   const notify = useNotify();
   const isCompleted = Boolean(card.completedAt);
 
@@ -301,10 +300,12 @@ export function CardModalContent({
     return () => mql.removeEventListener('change', handler);
   }, [tab]);
 
-  const deleteMut = useMutation({
-    mutationFn: () => deleteCardPermanent(card.id),
+  const trashMut = useMutation({
+    mutationFn: () => trashCard(card.id),
+    onError: (e) => notify.error(errorMessage(e, 'Erro ao mover pra lixeira.')),
     onSuccess: () => {
       invalidate();
+      notify.success('Card movido pra lixeira. Você pode restaurar em até 90 dias.');
       onClose();
     },
   });
@@ -344,7 +345,7 @@ export function CardModalContent({
             cardId={card.id}
             boardId={boardId}
             shortCode={card.shortCode}
-            busy={deleteMut.isPending}
+            busy={trashMut.isPending}
             onArchive={async () => {
               const ok = await confirmDialog({
                 title: 'Arquivar card?',
@@ -357,17 +358,15 @@ export function CardModalContent({
             onDuplicate={() => setDuplicateOpen(true)}
             onCreateChild={() => setCreateChildOpen(true)}
             onSetParent={() => setSetParentOpen(true)}
-            onDelete={async () => {
-              const confirmation = await promptDialog({
-                title: `Excluir "${card.title}" permanentemente?`,
+            onTrash={async () => {
+              const ok = await confirmDialog({
+                title: `Mover "${card.title}" pra lixeira?`,
                 description:
-                  'Esta ação é IRREVERSÍVEL — o card, comentários, checklists e anexos serão apagados.',
-                requiredText: 'EXCLUIR',
-                placeholder: 'Digite EXCLUIR',
-                confirmLabel: 'Excluir definitivamente',
+                  'O card será removido do fluxo. Você pode restaurar pela página da Lixeira em até 90 dias — depois disso é apagado automaticamente.',
+                confirmLabel: 'Mover pra lixeira',
                 danger: true,
               });
-              if (confirmation === 'EXCLUIR') deleteMut.mutate();
+              if (ok) trashMut.mutate();
             }}
           />
           <button
@@ -812,7 +811,7 @@ function CardMenu({
   shortCode,
   onArchive,
   onDuplicate,
-  onDelete,
+  onTrash,
   onCreateChild,
   onSetParent,
   busy,
@@ -822,7 +821,7 @@ function CardMenu({
   shortCode: string | null;
   onArchive: () => void;
   onDuplicate: () => void;
-  onDelete: () => void;
+  onTrash: () => void;
   onCreateChild: () => void;
   onSetParent: () => void;
   busy: boolean;
@@ -917,12 +916,12 @@ function CardMenu({
               }}
             />
             <MenuItem
-              label="Excluir card..."
+              label="Mover pra lixeira"
               icon={<Trash2 size={14} />}
               danger
               onClick={() => {
                 setOpen(false);
-                onDelete();
+                onTrash();
               }}
             />
           </div>

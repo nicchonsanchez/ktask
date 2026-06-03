@@ -82,6 +82,42 @@ export class ListsController {
     return this.lists.restore(user.userId, org, listId);
   }
 
+  @Post(':listId/trash')
+  @ApiOperation({
+    summary: 'Mover lista pra lixeira (cards ativos vão junto em cascata)',
+  })
+  trash(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('listId') listId: string,
+  ) {
+    return this.lists.trash(user.userId, org, listId);
+  }
+
+  @Post(':listId/restore-from-trash')
+  @ApiOperation({
+    summary: 'Restaurar lista da lixeira (cards cascateados não são restaurados)',
+  })
+  restoreFromTrash(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('listId') listId: string,
+  ) {
+    return this.lists.restoreFromTrash(user.userId, org, listId);
+  }
+
+  @Delete(':listId/permanent')
+  @ApiOperation({
+    summary: 'Excluir lista permanentemente (exige lixeira + OWNER/ADMIN + sem cards vivos)',
+  })
+  deletePermanent(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('listId') listId: string,
+  ) {
+    return this.lists.deletePermanent(user.userId, org, listId);
+  }
+
   @Get('archived/:boardId')
   @ApiOperation({ summary: 'Lista cards e colunas arquivados de um quadro' })
   listArchived(

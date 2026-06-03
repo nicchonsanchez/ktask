@@ -279,6 +279,18 @@ export function restoreList(listId: string) {
   return api.post(`/api/v1/lists/${listId}/restore`, {});
 }
 
+export function trashList(listId: string) {
+  return api.post(`/api/v1/lists/${listId}/trash`, {});
+}
+
+export function restoreListFromTrash(listId: string) {
+  return api.post(`/api/v1/lists/${listId}/restore-from-trash`, {});
+}
+
+export function deleteListPermanent(listId: string) {
+  return api.delete(`/api/v1/lists/${listId}/permanent`);
+}
+
 export function restoreCard(cardId: string) {
   return api.post(`/api/v1/cards/${cardId}/restore`, {});
 }

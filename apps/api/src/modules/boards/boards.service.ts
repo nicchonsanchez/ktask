@@ -154,7 +154,12 @@ export class BoardsService {
         where,
         orderBy: [{ updatedAt: 'desc' }],
         include: {
-          _count: { select: { cards: true, members: true } },
+          _count: {
+            select: {
+              cards: { where: { deletedAt: null } },
+              members: true,
+            },
+          },
         },
       }),
       // Doc 36: favoritos do user atual. Usado pra injetar isFavorite no

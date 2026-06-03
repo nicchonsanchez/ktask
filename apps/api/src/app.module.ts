@@ -43,6 +43,7 @@ import { SupportModule } from './modules/support/support.module';
 import { ManagementModule } from './modules/management/management.module';
 import { ServiceProvidersModule } from './modules/service-providers/service-providers.module';
 import { WebhooksOutboundModule } from './modules/webhooks-outbound/webhooks-outbound.module';
+import { TrashModule } from './modules/trash/trash.module';
 
 @Module({
   imports: [
@@ -124,6 +125,7 @@ import { WebhooksOutboundModule } from './modules/webhooks-outbound/webhooks-out
     ManagementModule,
     ServiceProvidersModule,
     WebhooksOutboundModule,
+    TrashModule,
     HealthModule,
   ],
   providers: [

@@ -195,6 +195,14 @@ export function deleteCardPermanent(cardId: string) {
   return api.delete(`/api/v1/cards/${cardId}/permanent`);
 }
 
+export function trashCard(cardId: string) {
+  return api.post(`/api/v1/cards/${cardId}/trash`);
+}
+
+export function restoreCardFromTrash(cardId: string) {
+  return api.post(`/api/v1/cards/${cardId}/restore-from-trash`);
+}
+
 /* ----------------- Família (pai/filho) ----------------- */
 
 export interface FamilyCard {

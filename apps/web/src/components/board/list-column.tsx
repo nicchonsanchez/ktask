@@ -15,11 +15,13 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Trash2,
 } from 'lucide-react';
 
 import { Button } from '@ktask/ui';
 import {
   archiveList,
+  trashList,
   boardsQueries,
   createCard,
   updateList,
@@ -95,6 +97,11 @@ export function ListColumn({
       invalidate();
       setArchiveDialogOpen(false);
     },
+  });
+
+  const trashMut = useMutation({
+    mutationFn: () => trashList(list.id),
+    onSuccess: invalidate,
   });
 
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -228,6 +235,18 @@ export function ListColumn({
                 setArchiveDialogOpen(true);
               }
             }}
+            onTrash={async () => {
+              const ok = await confirm({
+                title: `Mover coluna "${list.name}" pra lixeira?`,
+                description:
+                  list.cards.length > 0
+                    ? `Os ${list.cards.length} card(s) ativos vão junto pra lixeira. Restaurar a coluna não restaura os cards — cada um precisa ser restaurado individualmente. Após 90 dias na lixeira, tudo é apagado automaticamente.`
+                    : 'A coluna pode ser restaurada em até 90 dias pela página da Lixeira.',
+                confirmLabel: 'Mover pra lixeira',
+                danger: true,
+              });
+              if (ok) trashMut.mutate();
+            }}
           />
         )}
       </div>
@@ -320,6 +339,7 @@ export function ListColumn({
 function ListMenu({
   onRename,
   onArchive,
+  onTrash,
   onToggleBacklog,
   onToggleFinal,
   isBacklog,
@@ -327,6 +347,7 @@ function ListMenu({
 }: {
   onRename: () => void;
   onArchive: () => void;
+  onTrash: () => void;
   onToggleBacklog: () => void;
   onToggleFinal: () => void;
   isBacklog: boolean;
@@ -411,6 +432,17 @@ function ListMenu({
           >
             <Archive size={13} />
             Arquivar coluna
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onTrash();
+            }}
+            className="text-danger hover:bg-danger-subtle flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+          >
+            <Trash2 size={13} />
+            Mover pra lixeira
           </button>
         </div>
       )}
