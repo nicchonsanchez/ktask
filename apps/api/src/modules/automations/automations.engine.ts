@@ -390,13 +390,12 @@ export class AutomationsEngine {
    * card não tiver checklist com o título passado, cria. Senão, anexa
    * os items novos no fim do checklist existente.
    *
-   * Idempotência: itens com texto que já existe no mesmo checklist
-   * (case-insensitive, trimmed) são pulados. Isso evita duplicação
-   * quando:
-   *   - A automation re-roda (card sai e volta na coluna)
-   *   - O card já tinha os items via import do Ummense e a automation
-   *     também tenta criar
-   *   - Multiplas automations da mesma coluna criam items sobrepostos
+   * Sem idempotência de texto: cada execução SEMPRE cria todos os items
+   * configurados, mesmo se já houver item com mesmo texto no checklist
+   * (criado por execução anterior, manualmente ou via import). Decisão
+   * tomada após relato de items pulados silenciosamente confundindo o
+   * usuário ("tarefa não criou"). Trade-off: aceitar duplicatas visíveis
+   * em vez de pulos silenciosos.
    *
    * Suporta atribuir responsavel/prazo/prioridade a TODOS os items
    * criados nessa execucao (1 valor por automacao, nao por item — match
@@ -413,13 +412,9 @@ export class AutomationsEngine {
     const title = config.checklistTitle?.trim() || 'Tarefas';
 
     // Procura checklist com mesmo título no card. Se não existir, cria.
-    // Carrega items com ID + text + isDone — precisamos do ID pra anexar
-    // sub-automation em items pre-existentes (idempotente) e do isDone
-    // pra decidir se "ressuscita" items concluidos quando o card volta
-    // pra coluna (ver bloco mais abaixo).
     let checklist = await this.prisma.checklist.findFirst({
       where: { cardId, title },
-      include: { items: { select: { id: true, text: true, isDone: true } } },
+      select: { id: true, position: true },
     });
     if (!checklist) {
       const last = await this.prisma.checklist.findFirst({
@@ -427,14 +422,14 @@ export class AutomationsEngine {
         orderBy: { position: 'desc' },
         select: { position: true },
       });
-      const created = await this.prisma.checklist.create({
+      checklist = await this.prisma.checklist.create({
         data: {
           cardId,
           title,
           position: computeInsertPosition(last?.position ?? null, null),
         },
+        select: { id: true, position: true },
       });
-      checklist = { ...created, items: [] };
     }
 
     const cardCtx = await this.prisma.card.findUnique({
@@ -465,64 +460,8 @@ export class AutomationsEngine {
       }
     }
 
-    // Idempotência de items: items cujo texto ja existe no checklist nao
-    // sao recriados. MAS — fix bug — sub-automacao do item config eh
-    // anexada ao item ja existente caso ele nao tenha uma ainda.
-    // Resolve cenario "configurei itemAutomation depois e o item ja
-    // estava criado de execucao anterior".
-    const existingItemsByText = new Map<string, { id: string; isDone: boolean }>();
-    for (const it of checklist.items ?? []) {
-      existingItemsByText.set(it.text.trim().toLowerCase(), { id: it.id, isDone: it.isDone });
-    }
-
-    // Anexa sub-automation a items existentes (1x cada)
-    if (cardCtx) {
-      for (const cfgItem of parsedItems) {
-        if (!isValidNestedAutomation(cfgItem.itemAutomation, 'item')) continue;
-        const existing = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
-        if (!existing) continue;
-        const alreadyAttached = await this.prisma.automation.findFirst({
-          where: { scopeChecklistItemId: existing.id },
-          select: { id: true },
-        });
-        if (alreadyAttached) continue;
-        await this.createNestedChecklistAutomation({
-          parent: automation,
-          cfg: cfgItem.itemAutomation,
-          scope: 'item',
-          targetId: existing.id,
-          boardId: cardCtx.boardId,
-          organizationId: cardCtx.organizationId,
-        });
-      }
-    }
-
-    // Ressuscita items existentes que ja estavam concluidos. Caso de uso:
-    // card sai da coluna -> volta. A automacao roda de novo; sem isso, ela
-    // pulava silenciosamente. Limpa doneAt/doneById tambem pra zerar
-    // tracking. Notifica o assignee atual se houver (mesmo padrao de
-    // ASSIGNED do checklists.service).
-    const resurrectedIds: string[] = [];
-    for (const cfgItem of parsedItems) {
-      const existing = existingItemsByText.get(cfgItem.text.trim().toLowerCase());
-      if (!existing || !existing.isDone) continue;
-      await this.prisma.checklistItem.update({
-        where: { id: existing.id },
-        data: { isDone: false, doneAt: null, doneById: null },
-      });
-      resurrectedIds.push(existing.id);
-    }
-    if (resurrectedIds.length > 0) {
-      await this.notifyAssigneesOfActiveItems(automation, cardId, resurrectedIds, 'resurrected');
-    }
-
-    const itemsToCreate = parsedItems.filter(
-      (it) => !existingItemsByText.has(it.text.toLowerCase()),
-    );
-    const itemsSkipped = parsedItems.length - itemsToCreate.length;
-    if (itemsToCreate.length === 0) {
-      return { checklistId: checklist.id, itemsAdded: 0, itemsSkipped };
-    }
+    const itemsToCreate = parsedItems;
+    const itemsSkipped = 0;
 
     // Resolve defaults globais da automacao 1x (usados como fallback per-item).
     const globalDefaults = await this.resolveChecklistItemDefaults(cardId, config);
@@ -589,13 +528,12 @@ export class AutomationsEngine {
     }
 
     if (createdIds.length > 0) {
-      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
+      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds);
     }
 
-    // Emite CARD_UPDATED se o card mudou (items novos OU ressuscitados) pra
-    // RealtimeGateway fazer broadcast Socket.IO. Sem isso o frontend so
-    // ve a mudanca apos F5. cardCtx tem boardId/orgId necessarios.
-    if (cardCtx && (rows.length > 0 || resurrectedIds.length > 0)) {
+    // Emite CARD_UPDATED quando items novos foram criados pra RealtimeGateway
+    // fazer broadcast Socket.IO. Sem isso o frontend so ve a mudanca apos F5.
+    if (cardCtx && rows.length > 0) {
       this.events.emit(EVENT_NAMES.CARD_UPDATED, {
         boardId: cardCtx.boardId,
         organizationId: cardCtx.organizationId,
@@ -608,20 +546,15 @@ export class AutomationsEngine {
   }
 
   /**
-   * Notifica assignees de items de checklist criados/ressuscitados via
-   * automacao. Mesmo padrao do checklists.service.notifyIfOther: pula se o
+   * Notifica assignees de items de checklist criados via automacao.
+   * Mesmo padrao do checklists.service.notifyIfOther: pula se o
    * destinatario eh o proprio createdById da automacao. Fire-and-forget —
    * erro nao bloqueia a execucao.
-   *
-   * `mode='created'`: items recem-criados. `mode='resurrected'`: items que
-   * estavam concluidos e voltaram pra pendente (caso do card que volta pra
-   * coluna da automacao). Texto diferente pra cada caso pro user entender.
    */
   private async notifyAssigneesOfActiveItems(
     automation: Automation,
     cardId: string,
     itemIds: string[],
-    mode: 'created' | 'resurrected',
   ): Promise<void> {
     try {
       const [card, items] = await Promise.all([
@@ -643,10 +576,7 @@ export class AutomationsEngine {
           organizationId: card.organizationId,
           type: 'ASSIGNED' as const,
           title: `Tarefa atribuída: ${it.text}`,
-          body:
-            mode === 'created'
-              ? `Você foi atribuído a uma tarefa no card "${card.title}".`
-              : `Uma tarefa sua voltou a ficar pendente no card "${card.title}".`,
+          body: `Você foi atribuído a uma tarefa no card "${card.title}".`,
           entityType: 'card',
           entityId: cardId,
         }));
@@ -1354,7 +1284,7 @@ export class AutomationsEngine {
     }
 
     if (createdIds.length > 0) {
-      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds, 'created');
+      await this.notifyAssigneesOfActiveItems(automation, cardId, createdIds);
     }
 
     // Emite CARD_UPDATED pra RealtimeGateway fazer broadcast Socket.IO —
