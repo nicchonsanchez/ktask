@@ -25,9 +25,11 @@ const READ_OPERATIONS = new Set([
 
 const SOFT_DELETE_MODELS = new Set(['card', 'list']);
 
-function injectFilter(args: any): any {
-  const next = { ...(args ?? {}) };
-  const where = { ...(next.where ?? {}) };
+type QueryArgs = { where?: Record<string, unknown> } & Record<string, unknown>;
+
+function injectFilter(args: QueryArgs | undefined): QueryArgs {
+  const next: QueryArgs = { ...(args ?? {}) };
+  const where: Record<string, unknown> = { ...(next.where ?? {}) };
   if (where.deletedAt === undefined) {
     where.deletedAt = null;
   }
@@ -43,7 +45,7 @@ function wrapDelegate<T extends object>(delegate: T): T {
       if (typeof prop !== 'string' || !READ_OPERATIONS.has(prop)) {
         return (value as (...a: unknown[]) => unknown).bind(target);
       }
-      return (args?: any) =>
+      return (args?: QueryArgs) =>
         (value as (...a: unknown[]) => unknown).apply(target, [injectFilter(args)]);
     },
   }) as T;
