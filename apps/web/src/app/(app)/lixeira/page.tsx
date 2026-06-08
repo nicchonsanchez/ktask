@@ -70,7 +70,7 @@ export default function LixeiraPage() {
       invalidate();
       notify.success('Card restaurado.');
     },
-    onError: (e: any) => notify.error(e?.message ?? 'Falha ao restaurar.'),
+    onError: (e: Error) => notify.error(e?.message ?? 'Falha ao restaurar.'),
   });
 
   const purgeCard = useMutation({
@@ -79,7 +79,7 @@ export default function LixeiraPage() {
       invalidate();
       notify.success('Card excluído permanentemente.');
     },
-    onError: (e: any) => notify.error(e?.message ?? 'Falha ao excluir.'),
+    onError: (e: Error) => notify.error(e?.message ?? 'Falha ao excluir.'),
   });
 
   const restoreListMut = useMutation({
@@ -88,7 +88,7 @@ export default function LixeiraPage() {
       invalidate();
       notify.success('Coluna restaurada. Cards continuam na lixeira — restaure individualmente.');
     },
-    onError: (e: any) => notify.error(e?.message ?? 'Falha ao restaurar.'),
+    onError: (e: Error) => notify.error(e?.message ?? 'Falha ao restaurar.'),
   });
 
   const purgeListMut = useMutation({
@@ -97,7 +97,7 @@ export default function LixeiraPage() {
       invalidate();
       notify.success('Coluna excluída permanentemente.');
     },
-    onError: (e: any) => notify.error(e?.message ?? 'Falha ao excluir.'),
+    onError: (e: Error) => notify.error(e?.message ?? 'Falha ao excluir.'),
   });
 
   return (
