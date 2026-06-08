@@ -103,6 +103,7 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
           onChange={invalidate}
           list={listStub}
           boardId={boardId}
+          cardId={card.id}
           autoOpenAddItem={cl.id === autoOpenChecklistId}
           onAutoOpenConsumed={() => setAutoOpenChecklistId(null)}
         />
@@ -217,6 +218,7 @@ function ChecklistSection({
   onChange,
   list,
   boardId,
+  cardId,
   autoOpenAddItem,
   onAutoOpenConsumed,
 }: {
@@ -224,6 +226,7 @@ function ChecklistSection({
   onChange: () => void;
   list: ListWithCards;
   boardId: string;
+  cardId: string;
   /** Doc 50: quando true, abre o input de "Adicionar tarefa" automaticamente
    *  (UX: criar lista pula o passo do título e ja foca em adicionar item). */
   autoOpenAddItem?: boolean;
@@ -368,7 +371,7 @@ function ChecklistSection({
           )}
         </button>
         <ChecklistAutomationDialog
-          scope={{ kind: 'checklist', id: checklist.id }}
+          scope={{ kind: 'checklist', id: checklist.id, cardId }}
           scopeLabel={checklist.title}
           list={list}
           boardId={boardId}
@@ -429,7 +432,14 @@ function ChecklistSection({
 
       <ul className="flex flex-col gap-0.5">
         {checklist.items.map((item) => (
-          <ItemRow key={item.id} item={item} onChange={onChange} list={list} boardId={boardId} />
+          <ItemRow
+            key={item.id}
+            item={item}
+            onChange={onChange}
+            list={list}
+            boardId={boardId}
+            cardId={cardId}
+          />
         ))}
       </ul>
 
@@ -502,11 +512,13 @@ function ItemRow({
   onChange,
   list,
   boardId,
+  cardId,
 }: {
   item: ChecklistItem;
   onChange: () => void;
   list: ListWithCards;
   boardId: string;
+  cardId: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
@@ -641,7 +653,7 @@ function ItemRow({
         )}
       </button>
       <ChecklistAutomationDialog
-        scope={{ kind: 'item', id: item.id }}
+        scope={{ kind: 'item', id: item.id, cardId }}
         scopeLabel={item.text}
         list={list}
         boardId={boardId}

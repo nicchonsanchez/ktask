@@ -147,12 +147,19 @@ export class AutomationsService {
     }
     const checklist = await this.getChecklistOrThrow(checklistId, tenant.organizationId);
     await this.access.assertAccess(userId, checklist.boardId, tenant, 'EDITOR');
+    const boardId = await this.resolveAutomationBoardId(
+      userId,
+      tenant,
+      checklist.cardId,
+      checklist.boardId,
+      input.boardId,
+    );
 
     return this.prisma.automation.create({
       data: {
         organizationId: tenant.organizationId,
         scopeChecklistId: checklistId,
-        boardId: checklist.boardId,
+        boardId,
         trigger: input.trigger,
         triggerConfig: (input.triggerConfig ?? {}) as Prisma.InputJsonValue,
         actionType: input.actionType,
@@ -198,12 +205,19 @@ export class AutomationsService {
     }
     const item = await this.getChecklistItemOrThrow(itemId, tenant.organizationId);
     await this.access.assertAccess(userId, item.boardId, tenant, 'EDITOR');
+    const boardId = await this.resolveAutomationBoardId(
+      userId,
+      tenant,
+      item.cardId,
+      item.boardId,
+      input.boardId,
+    );
 
     return this.prisma.automation.create({
       data: {
         organizationId: tenant.organizationId,
         scopeChecklistItemId: itemId,
-        boardId: item.boardId,
+        boardId,
         trigger: input.trigger,
         triggerConfig: (input.triggerConfig ?? {}) as Prisma.InputJsonValue,
         actionType: input.actionType,
@@ -226,25 +240,53 @@ export class AutomationsService {
   private async getChecklistOrThrow(checklistId: string, organizationId: string) {
     const checklist = await this.prisma.checklist.findUnique({
       where: { id: checklistId },
-      include: { card: { select: { boardId: true, organizationId: true } } },
+      include: { card: { select: { id: true, boardId: true, organizationId: true } } },
     });
     if (!checklist || checklist.card.organizationId !== organizationId) {
       throw new NotFoundException('Checklist não encontrado.');
     }
-    return { id: checklist.id, boardId: checklist.card.boardId };
+    return { id: checklist.id, boardId: checklist.card.boardId, cardId: checklist.card.id };
   }
 
   private async getChecklistItemOrThrow(itemId: string, organizationId: string) {
     const item = await this.prisma.checklistItem.findUnique({
       where: { id: itemId },
       include: {
-        checklist: { include: { card: { select: { boardId: true, organizationId: true } } } },
+        checklist: {
+          include: { card: { select: { id: true, boardId: true, organizationId: true } } },
+        },
       },
     });
     if (!item || item.checklist.card.organizationId !== organizationId) {
       throw new NotFoundException('Item de checklist não encontrado.');
     }
-    return { id: item.id, boardId: item.checklist.card.boardId };
+    return { id: item.id, boardId: item.checklist.card.boardId, cardId: item.checklist.card.id };
+  }
+
+  /**
+   * Resolve o board onde a automação de checklist/item vai operar. Se o user
+   * passou `inputBoardId`, exige presença ativa do card nesse board e acesso
+   * EDITOR. Sem override, usa o board do card primário. Permite o user
+   * configurar uma automação que move o card em um fluxo diferente do que
+   * está visualizando.
+   */
+  private async resolveAutomationBoardId(
+    userId: string,
+    tenant: TenantContext,
+    cardId: string,
+    defaultBoardId: string,
+    inputBoardId: string | undefined,
+  ): Promise<string> {
+    if (!inputBoardId || inputBoardId === defaultBoardId) return defaultBoardId;
+    const presence = await this.prisma.cardPresence.findUnique({
+      where: { cardId_boardId: { cardId, boardId: inputBoardId } },
+      select: { removedAt: true },
+    });
+    if (!presence || presence.removedAt) {
+      throw new ForbiddenException('Card não tem presença ativa no fluxo escolhido.');
+    }
+    await this.access.assertAccess(userId, inputBoardId, tenant, 'EDITOR');
+    return inputBoardId;
   }
 
   // ============ /Doc 48 ============

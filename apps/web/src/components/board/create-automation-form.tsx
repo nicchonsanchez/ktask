@@ -18,7 +18,12 @@ import {
   type CreateAutomationInput,
 } from '@/lib/queries/automations';
 import { labelsQueries } from '@/lib/queries/labels';
-import { orgMembersQuery, type TaskRecurrence } from '@/lib/queries/cards';
+import {
+  orgMembersQuery,
+  type TaskRecurrence,
+  cardsQueries,
+  type CardFlow,
+} from '@/lib/queries/cards';
 import { contactsQueries, type ContactRow } from '@/lib/queries/contacts';
 import { UserAvatar } from '@/components/user-avatar';
 import { useNotify } from '@/components/ui/dialogs';
@@ -114,8 +119,8 @@ export function CreateAutomationForm({
    * actionConfig da automação-pai. Trigger fixado por `triggerLock`.
    */
   scope?:
-    | { kind: 'checklist'; id: string }
-    | { kind: 'item'; id: string }
+    | { kind: 'checklist'; id: string; cardId: string }
+    | { kind: 'item'; id: string; cardId: string }
     | {
         kind: 'draft';
         triggerLock: 'CHECKLIST_COMPLETED' | 'CHECKLIST_ITEM_DONE';
@@ -186,6 +191,10 @@ export function CreateAutomationForm({
   const [movePosition, setMovePosition] = useState<'TOP' | 'BOTTOM'>(
     initial?.movePosition ?? 'BOTTOM',
   );
+  // Multi-fluxo: quando scope=checklist/item, o user pode escolher OUTRO board
+  // (fluxo) onde o card tem presença. Default = boardId da prop (board atual).
+  // Editing carrega o board salvo na automation.
+  const [moveBoardId, setMoveBoardId] = useState<string>(editing?.boardId ?? boardId);
   // SEND_WHATSAPP: 3 modos de destinatário (lead do card / member da org / phone literal)
   const [waRecipientMode, setWaRecipientMode] = useState<
     'CARD_LEAD' | 'USER' | 'PHONE' | 'CARD_CONTACTS' | 'CONTACT'
@@ -244,9 +253,18 @@ export function CreateAutomationForm({
   const membersQ = useQuery(orgMembersQuery);
   // Pra MOVE_CARD precisamos das listas do board (excluindo a atual,
   // se houver — automation em coluna nao deve "mover" pra propria).
+  //
+  // Multi-fluxo: scope checklist/item permite escolher entre os fluxos
+  // onde o card tem presença ativa. `flowsQ` traz boards+lists já carregados;
+  // `boardQ` é fallback pros casos sem cardId (column scope, draft).
+  const cardIdInScope = scope?.kind === 'checklist' || scope?.kind === 'item' ? scope.cardId : null;
+  const flowsQ = useQuery({
+    ...cardsQueries.flows(cardIdInScope ?? ''),
+    enabled: actionType === 'MOVE_CARD' && Boolean(cardIdInScope),
+  });
   const boardQ = useQuery({
-    ...boardsQueries.detail(boardId),
-    enabled: actionType === 'MOVE_CARD',
+    ...boardsQueries.detail(moveBoardId),
+    enabled: actionType === 'MOVE_CARD' && !cardIdInScope,
   });
   const contactsQ = useQuery({
     ...contactsQueries.list(),
@@ -312,6 +330,11 @@ export function CreateAutomationForm({
         actionConfig,
         label: label.trim() || undefined,
         conditions: conditionsPayload,
+        // Multi-fluxo: só envia boardId quando user escolheu um fluxo
+        // diferente do default. Backend valida presença ativa.
+        ...(actionType === 'MOVE_CARD' && cardIdInScope && moveBoardId !== boardId
+          ? { boardId: moveBoardId }
+          : {}),
       };
       if (scope?.kind === 'checklist') return createAutomationForChecklist(scope.id, input);
       if (scope?.kind === 'item') return createAutomationForChecklistItem(scope.id, input);
@@ -492,15 +515,39 @@ export function CreateAutomationForm({
             <FlowPositionConfig value={flowPosition} onChange={setFlowPosition} />
           )}
 
-          {actionType === 'MOVE_CARD' && (
-            <MoveCardConfig
-              lists={(boardQ.data?.lists ?? []).filter((l) => l.id !== list.id && !l.isArchived)}
-              targetListId={moveTargetListId}
-              onChangeTarget={setMoveTargetListId}
-              position={movePosition}
-              onChangePosition={setMovePosition}
-            />
-          )}
+          {actionType === 'MOVE_CARD' &&
+            (() => {
+              const selectedFlow = cardIdInScope
+                ? flowsQ.data?.find((f) => f.board.id === moveBoardId)
+                : null;
+              const lists = cardIdInScope
+                ? (selectedFlow?.board.lists ?? [])
+                : (boardQ.data?.lists ?? []).filter((l) => !l.isArchived);
+              // Sem o fluxo atual escolhido na lista de cards (column-scoped),
+              // filtra a "lista atual" pra não permitir mover pra si mesma.
+              const filteredLists = cardIdInScope ? lists : lists.filter((l) => l.id !== list.id);
+              return (
+                <div className="flex flex-col gap-3">
+                  {cardIdInScope && (
+                    <FlowSelector
+                      flows={flowsQ.data ?? []}
+                      value={moveBoardId}
+                      onChange={(b) => {
+                        setMoveBoardId(b);
+                        setMoveTargetListId('');
+                      }}
+                    />
+                  )}
+                  <MoveCardConfig
+                    lists={filteredLists}
+                    targetListId={moveTargetListId}
+                    onChangeTarget={setMoveTargetListId}
+                    position={movePosition}
+                    onChangePosition={setMovePosition}
+                  />
+                </div>
+              );
+            })()}
 
           {actionType === 'SET_LEAD' && (
             <div className="flex flex-col gap-3">
@@ -1748,6 +1795,45 @@ function MoveCardConfig({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Selector de fluxo (board) pra MOVE_CARD em escopo checklist/item — quando
+ * o card tem presença em mais de um board, o user pode escolher em qual deles
+ * a automação roda. Sem isso, a automation usaria o board "atual" implícito
+ * (de onde o card foi aberto), e o user não veria qual fluxo estava
+ * configurando.
+ */
+function FlowSelector({
+  flows,
+  value,
+  onChange,
+}: {
+  flows: CardFlow[];
+  value: string;
+  onChange: (boardId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-fg-muted text-[11px] font-medium">Fluxo</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-2"
+      >
+        {flows.length === 0 && <option value={value}>(carregando…)</option>}
+        {flows.map((f) => (
+          <option key={f.board.id} value={f.board.id}>
+            {f.board.name}
+            {f.isPrimary ? ' · principal' : ''}
+          </option>
+        ))}
+      </select>
+      <p className="text-fg-subtle text-[11px]">
+        A automação roda só no fluxo escolhido. Outros fluxos do card não são afetados.
+      </p>
     </div>
   );
 }

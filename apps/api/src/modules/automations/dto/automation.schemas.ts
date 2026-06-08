@@ -91,6 +91,13 @@ export const CreateAutomationSchema = z.object({
   label: z.string().max(120).trim().optional(),
   isActive: z.boolean().optional(),
   conditions: AutomationConditionsSchema.optional().nullable(),
+  /**
+   * Override do board onde a automação roda. Só faz sentido em scopes
+   * checklist/item (cards multi-fluxo). Quando omitido, usa o board do
+   * checklist/item. Quando informado, exige presença ativa do card no
+   * board escolhido (validado no service).
+   */
+  boardId: z.string().cuid().optional(),
 });
 export type CreateAutomationRequest = z.infer<typeof CreateAutomationSchema>;
 

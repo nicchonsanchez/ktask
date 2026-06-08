@@ -58,8 +58,8 @@ export function ChecklistAutomationDialog({
   onOpenChange,
 }: {
   scope:
-    | { kind: 'checklist'; id: string }
-    | { kind: 'item'; id: string }
+    | { kind: 'checklist'; id: string; cardId: string }
+    | { kind: 'item'; id: string; cardId: string }
     | {
         kind: 'draft';
         triggerLock: 'CHECKLIST_COMPLETED' | 'CHECKLIST_ITEM_DONE';

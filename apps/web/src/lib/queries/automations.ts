@@ -127,6 +127,8 @@ export interface CreateAutomationInput {
   label?: string;
   isActive?: boolean;
   conditions?: AutomationCondition[] | null;
+  /** Override do board onde a automação roda (só vale em scope checklist/item). */
+  boardId?: string;
 }
 
 export function createAutomation(listId: string, input: CreateAutomationInput) {
