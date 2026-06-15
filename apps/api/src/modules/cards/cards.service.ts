@@ -2074,6 +2074,79 @@ export class CardsService {
   }
 
   /**
+   * Promove um fluxo secundário a primário. Atualiza Card.boardId pro board
+   * escolhido. Pré-condicao: presença ativa do card nesse board. Caso de uso
+   * dominante: card foi criado no board errado, vinculado ao certo via
+   * linkToFlow; user precisa "trocar de lado" pra depois desvincular o
+   * antigo (unlinkFromFlow bloqueia desvincular o primário).
+   *
+   * Side effects:
+   *  - Activity CARD_PRIMARY_CHANGED com payload { fromBoardId, toBoardId }
+   *  - Realtime: emite CARD_UPDATED nos 2 boards pra invalidar caches do front
+   *
+   * Não-effects:
+   *  - Attachments S3 antigos seguem no prefixo do board antigo (URLs
+   *    salvas no banco são absolutas, continuam funcionando)
+   *  - Activities passadas não são reescritas
+   *  - Automações com automation.boardId fixo NAO mudam de board; só as
+   *    "globais" (boardId=null) passam a rodar no novo primário
+   */
+  async setPrimaryFlow(userId: string, tenant: TenantContext, cardId: string, boardId: string) {
+    const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    // EDITOR nos DOIS boards: no novo (pra "assumir" como primário) e no
+    // antigo (pra "abrir mão"). Sem isso, user que tem acesso só ao novo
+    // poderia "sequestrar" o card de um board onde nao tem permissao.
+    await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
+    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+
+    if (boardId === card.boardId) {
+      return { ok: true, alreadyPrimary: true };
+    }
+
+    const presence = await this.prisma.cardPresence.findUnique({
+      where: { cardId_boardId: { cardId, boardId } },
+      select: { removedAt: true },
+    });
+    if (!presence || presence.removedAt) {
+      throw new NotFoundException('Card não tem presença ativa nesse fluxo.');
+    }
+
+    const fromBoardId = card.boardId;
+    await this.prisma.card.update({
+      where: { id: cardId },
+      data: { boardId },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: tenant.organizationId,
+        boardId,
+        cardId,
+        actorId: userId,
+        type: 'CARD_PRIMARY_CHANGED',
+        payload: { cardId, fromBoardId, toBoardId: boardId },
+      },
+    });
+
+    // Realtime: invalida cache do card nos 2 boards. CardModal e flowsTab
+    // re-fetcham automaticamente. Sem isso, badge "Primário" fica stale.
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: fromBoardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      cardId,
+    });
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId,
+      organizationId: tenant.organizationId,
+      actorId: userId,
+      cardId,
+    });
+
+    return { ok: true, fromBoardId, toBoardId: boardId };
+  }
+
+  /**
    * Desvincula o card de um fluxo. Soft-delete: marca `removedAt` na presença.
    * Não permite desvincular o fluxo primário (boardId == card.boardId) — pra
    * "remover do todo", use archive/delete do card.

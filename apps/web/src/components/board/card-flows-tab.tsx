@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  Crown,
   Eye,
   History,
   Link as LinkIcon,
@@ -19,6 +20,7 @@ import {
   cardsQueries,
   linkCardToFlow,
   moveCardInFlow,
+  setPrimaryFlow,
   unlinkCardFromFlow,
   type CardDetail,
   type CardFlow,
@@ -122,6 +124,20 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
     },
   });
 
+  // Promove este fluxo a primário (caso de uso dominante: card criado no
+  // board errado → user precisa trocar primário pra desvincular o antigo).
+  const setPrimaryMut = useMutation({
+    mutationFn: () => setPrimaryFlow(card.id, flow.boardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
+      queryClient.invalidateQueries({ queryKey: cardsQueries.flows(card.id).queryKey });
+      notify.success(`"${flow.board.name}" agora é o fluxo principal.`);
+    },
+    onError: (err) => {
+      notify.error(err instanceof ApiError ? err.message : 'Erro ao trocar fluxo principal.');
+    },
+  });
+
   async function handleUnlink() {
     setMenuOpen(false);
     const ok = await confirm({
@@ -131,6 +147,17 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
       danger: true,
     });
     if (ok) unlinkMut.mutate();
+  }
+
+  async function handleSetPrimary() {
+    setMenuOpen(false);
+    const ok = await confirm({
+      title: `Tornar "${flow.board.name}" o fluxo principal?`,
+      description:
+        'Automações "globais" do card passarão a rodar neste fluxo. Anexos antigos continuam acessíveis.',
+      confirmLabel: 'Tornar principal',
+    });
+    if (ok) setPrimaryMut.mutate();
   }
 
   return (
@@ -189,6 +216,17 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
                 {!flow.isPrimary && (
                   <button
                     type="button"
+                    onClick={handleSetPrimary}
+                    disabled={setPrimaryMut.isPending}
+                    className="text-fg hover:bg-bg-muted flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
+                  >
+                    <Crown size={13} />
+                    Tornar fluxo principal
+                  </button>
+                )}
+                {!flow.isPrimary && (
+                  <button
+                    type="button"
                     onClick={handleUnlink}
                     disabled={unlinkMut.isPending}
                     className="text-danger hover:bg-danger-subtle flex items-center gap-2 rounded-sm px-2 py-1.5 text-left"
@@ -199,7 +237,7 @@ function FlowRow({ card, flow }: { card: CardDetail; flow: CardFlow }) {
                 )}
                 {flow.isPrimary && (
                   <span className="text-fg-subtle px-2 py-1.5 text-[10px]">
-                    Primário não pode ser desvinculado.
+                    Principal não pode ser desvinculado. Promova outro fluxo a principal antes.
                   </span>
                 )}
               </div>

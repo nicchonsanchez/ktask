@@ -301,6 +301,19 @@ export class CardsController {
     return this.cards.unlinkFromFlow(user.userId, org, cardId, boardId);
   }
 
+  @Patch(':cardId/flows/:boardId/primary')
+  @ApiOperation({
+    summary: 'Torna esse fluxo o primário do card (caso de uso: card criado no board errado)',
+  })
+  setPrimaryFlow(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('cardId') cardId: string,
+    @Param('boardId') boardId: string,
+  ) {
+    return this.cards.setPrimaryFlow(user.userId, org, cardId, boardId);
+  }
+
   @Patch(':cardId/flows/:boardId/move')
   @ApiOperation({ summary: 'Move o card pra outra coluna dentro de um fluxo específico' })
   moveInFlow(

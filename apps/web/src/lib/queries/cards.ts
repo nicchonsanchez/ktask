@@ -133,6 +133,15 @@ export function unlinkCardFromFlow(cardId: string, boardId: string) {
 }
 
 /**
+ * Promove um fluxo secundário a primário. Usado pra "destravar" desvinculação
+ * do board onde o card foi criado errado — trocar primário e então desvincular
+ * o antigo.
+ */
+export function setPrimaryFlow(cardId: string, boardId: string) {
+  return api.patch(`/api/v1/cards/${cardId}/flows/${boardId}/primary`, {});
+}
+
+/**
  * Move um card pra outra coluna dentro de um fluxo específico (CardPresence).
  * Funciona em qualquer fluxo onde o card tem presença ativa, não só o
  * primário. Quando o boardId é o primário, a Card.* legacy também é
