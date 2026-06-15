@@ -94,7 +94,14 @@ export default function VisaoGerencialTarefasPage() {
     [q, assigneeIds, companyIds, boardIds, dueStatus, doneFilter, unassignedOnly, page],
   );
 
-  const tasksQ = useQuery({ ...managementQueries.tasks(filters), enabled: isPrivileged });
+  const tasksQ = useQuery({
+    ...managementQueries.tasks(filters),
+    enabled: isPrivileged,
+    // Mesmo motivo da page /cards: refetch periodico + ao voltar foco em
+    // vez de socket-por-board (gestor olha varios boards).
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
   const boardsForFilter = useQuery({ ...boardsQueries.all(), enabled: isPrivileged });
   const membersQ = useQuery({ ...membersQueries.all(), enabled: isPrivileged });
   const companiesQ = useQuery({

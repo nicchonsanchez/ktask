@@ -119,6 +119,12 @@ export default function VisaoGerencialPage() {
   const cardsQ = useQuery({
     ...managementQueries.cards(filters),
     enabled: isPrivileged,
+    // Visao gerencial nao escuta socket por board (gestor olha varios boards
+    // ao mesmo tempo). Refetch periodico + ao voltar foco resolve sem precisar
+    // joinar todas as rooms. Janela 60s eh suficiente pra "voce ve atualizar
+    // sem F5" sem martelar API.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const boardsForFilter = useQuery({ ...boardsQueries.all() });
