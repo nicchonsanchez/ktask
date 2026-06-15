@@ -1,9 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Check, MessageSquare, AtSign, Calendar, AlertTriangle } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  MessageSquare,
+  AtSign,
+  Calendar,
+  AlertTriangle,
+  ExternalLink,
+  Settings2,
+} from 'lucide-react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@ktask/ui';
 import {
@@ -133,6 +143,23 @@ export function NotificationsBell() {
               })}
             </ul>
           )}
+        </div>
+
+        <div className="border-border flex items-center justify-between border-t px-3 py-2 text-xs">
+          <Link
+            href="/notificacoes"
+            onClick={() => setOpen(false)}
+            className="text-fg-muted hover:text-primary inline-flex items-center gap-1.5"
+          >
+            <ExternalLink size={12} /> Ver todas
+          </Link>
+          <Link
+            href="/configuracoes/notificacoes"
+            onClick={() => setOpen(false)}
+            className="text-fg-muted hover:text-primary inline-flex items-center gap-1.5"
+          >
+            <Settings2 size={12} /> Gerenciar
+          </Link>
         </div>
       </PopoverContent>
     </Popover>
