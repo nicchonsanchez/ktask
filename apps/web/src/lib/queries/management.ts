@@ -60,12 +60,15 @@ export interface ManagementArchivedResponse {
   pageSize: number;
 }
 
+export type CardStatus = 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
+
 export interface ManagementFilters {
   q?: string;
   companyIds?: string[];
   userIds?: string[];
   labelIds?: string[];
   boardIds?: string[];
+  cardStatuses?: CardStatus[];
   dueStatus?: 'overdue' | 'today' | 'next7' | 'noDate';
   /** Quando true, mostra apenas cards em colunas finais (Finalizado etc). */
   onlyFinalLists?: boolean;
@@ -77,6 +80,60 @@ export interface ManagementArchivedFilters extends ManagementFilters {
   archivedSince?: '7d' | '30d' | '90d' | 'all';
 }
 
+// ---- Tarefas (checklist items) ----
+
+export type TaskPriority = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface ManagementTaskItem {
+  id: string;
+  text: string;
+  isDone: boolean;
+  doneAt: string | null;
+  dueDate: string | null;
+  priority: TaskPriority;
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  checklist: { id: string; title: string };
+  card: {
+    id: string;
+    shortCode: string | null;
+    title: string;
+    cardColor: string | null;
+    status: CardStatus;
+    board: { id: string; name: string; color: string | null };
+    list: { id: string; name: string };
+    companies: ManagementCardCompany[];
+  };
+}
+
+export interface ManagementTaskMetrics {
+  total: number;
+  pending: number;
+  overdue: number;
+  unassigned: number;
+  assignees: number;
+}
+
+export interface ManagementTasksResponse {
+  items: ManagementTaskItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  metrics: ManagementTaskMetrics;
+}
+
+export interface ManagementTasksFilters {
+  q?: string;
+  assigneeIds?: string[];
+  companyIds?: string[];
+  boardIds?: string[];
+  dueStatus?: 'overdue' | 'today' | 'next7' | 'noDate';
+  priorities?: TaskPriority[];
+  doneFilter?: 'pending' | 'done' | 'all';
+  unassignedOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
 function buildQuery(filters: ManagementFilters | ManagementArchivedFilters): string {
   const sp = new URLSearchParams();
   if (filters.q) sp.set('q', filters.q);
@@ -84,6 +141,7 @@ function buildQuery(filters: ManagementFilters | ManagementArchivedFilters): str
   if (filters.userIds?.length) sp.set('userIds', filters.userIds.join(','));
   if (filters.labelIds?.length) sp.set('labelIds', filters.labelIds.join(','));
   if (filters.boardIds?.length) sp.set('boardIds', filters.boardIds.join(','));
+  if (filters.cardStatuses?.length) sp.set('cardStatuses', filters.cardStatuses.join(','));
   if (filters.dueStatus) sp.set('dueStatus', filters.dueStatus);
   if ('onlyFinalLists' in filters && filters.onlyFinalLists) sp.set('onlyFinalLists', 'true');
   if (filters.page) sp.set('page', String(filters.page));
@@ -117,6 +175,25 @@ export const managementQueries = {
       return api.get<ManagementListResponse>(
         `/api/v1/management/cards/finalized${qs ? `?${qs}` : ''}`,
       );
+    },
+  }),
+  tasks: (filters: ManagementTasksFilters = {}) => ({
+    queryKey: ['management', 'tasks', filters] as const,
+    queryFn: () => {
+      const sp = new URLSearchParams();
+      if (filters.q) sp.set('q', filters.q);
+      if (filters.assigneeIds?.length) sp.set('assigneeIds', filters.assigneeIds.join(','));
+      if (filters.companyIds?.length) sp.set('companyIds', filters.companyIds.join(','));
+      if (filters.boardIds?.length) sp.set('boardIds', filters.boardIds.join(','));
+      if (filters.dueStatus) sp.set('dueStatus', filters.dueStatus);
+      if (filters.priorities?.length) sp.set('priorities', filters.priorities.join(','));
+      if (filters.doneFilter && filters.doneFilter !== 'pending')
+        sp.set('doneFilter', filters.doneFilter);
+      if (filters.unassignedOnly) sp.set('unassignedOnly', 'true');
+      if (filters.page) sp.set('page', String(filters.page));
+      if (filters.pageSize) sp.set('pageSize', String(filters.pageSize));
+      const qs = sp.toString();
+      return api.get<ManagementTasksResponse>(`/api/v1/management/tasks${qs ? `?${qs}` : ''}`);
     },
   }),
   approvals: (filters: ManagementApprovalsFilters = {}) => ({

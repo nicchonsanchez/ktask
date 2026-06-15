@@ -10,7 +10,7 @@ import { api } from '@/lib/api-client';
 import { managementQueries, type ManagementFilters } from '@/lib/queries/management';
 import { useAuthStore } from '@/stores/auth-store';
 
-import { CardsTable, PaginationBar } from '../page';
+import { CardsTable, PaginationBar } from '../cards/page';
 
 interface CurrentOrg {
   myRole: OrgRole;
