@@ -308,11 +308,66 @@ model User {
   approvalReviews           CardApprovalReviewer[] @relation("CardApprovalReviewer")
   messageTemplates          MessageTemplate[]
   passwordResetTokens       PasswordResetToken[]
+  whatsappOutbox            WhatsappOutbox[]
   /// Contact vinculado (1:1 via Contact.userId). Quando existe, no CRM
   /// o User aparece como entrada de Contact com identidade vinda do User.
   linkedContact             Contact?               @relation("ContactUser")
 
   @@index([email])
+}
+
+/// Outbox de mensagens WhatsApp pendentes de envio. Cada Notification
+/// que precisa virar WhatsApp grava aqui (em vez de enviar direto). Um
+/// cron pega rows pendentes, agrupa por destinatario, formata em mensagem
+/// unica e dispara via Evolution API. Estrutura permite:
+///   - Batching: 2 ou 15min (urgent vs standard) pra mesclar
+///     notificacoes do mesmo destinatario em 1 mensagem.
+///   - Throttle global: cron limita 1 msg a cada N segundos pra nao
+///     gerar pulso suspeito.
+///   - Caps anti-abuse: max 6 msgs/user/hora, 20/org/hora — protege
+///     o numero do WhatsApp contra bloqueio.
+///   - Quiet hours: msgs geradas entre 22h-7h BRT acumulam ate amanha.
+///   - Retry: se Evolution falha, deixa sentAt=null e tenta no proximo
+///     ciclo (com cap de tentativas em attempts).
+///   - Observabilidade: tudo registrado, query "quantas msgs hoje/user".
+model WhatsappOutbox {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  /// EventKey do preferences.types.ts. String pra evitar enum proprio —
+  /// shape definido em TS pra flexibilidade quando eventos forem
+  /// adicionados/removidos sem migration.
+  eventType      String
+  /// 'urgent' = janela 2min (mention, task_assigned, approval_pending)
+  /// 'standard' = janela 15min (resto)
+  urgency        String    @default("standard")
+  /// JSON com vars pra montar a mensagem:
+  ///   { title, body, cardTitle, cardId, actorName, ... }
+  payload        Json
+  /// Quando o cron deve considerar essa row pra envio. Geralmente
+  /// `createdAt + janela_da_urgencia`. Cron filtra `<= NOW()`.
+  scheduledFor   DateTime
+  /// Timestamp do envio efetivo. Enquanto null, esta pendente.
+  sentAt         DateTime?
+  /// Quando agrupada num envio, todas as rows do mesmo envio
+  /// compartilham esse id. Util pra debug/observabilidade.
+  batchId        String?
+  /// Contagem de falhas de envio. Aborta apos 3 tentativas.
+  attempts       Int       @default(0)
+  /// Mensagem de erro da ultima falha (truncada). null = sem erro.
+  lastError      String?
+
+  createdAt      DateTime  @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Index principal: query do cron filtra (sentAt IS NULL AND scheduledFor <= NOW)
+  @@index([sentAt, scheduledFor])
+  /// Cap por hora: query "quantas msgs sentAt > NOW - 1h pra esse userId"
+  @@index([userId, sentAt])
+  /// Cap por org / hora
+  @@index([organizationId, sentAt])
 }
 
 /// Doc 43: token de recuperacao de senha. Gerado quando user pede
@@ -398,6 +453,7 @@ model Organization {
   messageTemplates   MessageTemplate[]
   importMappings     OrgImportMapping[]
   managementBoards   ManagementBoard[]
+  whatsappOutbox     WhatsappOutbox[]
 
   @@index([slug])
 }
