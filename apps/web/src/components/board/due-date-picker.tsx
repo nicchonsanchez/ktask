@@ -39,14 +39,18 @@ const MESES_FULL = [
 export function DueDatePicker({
   value,
   onChange,
+  isCompleted = false,
 }: {
   value: string | null;
   onChange: (iso: string | null) => void;
+  /** Quando true, badge fica verde (success) em vez de vermelho mesmo com
+   *  data passada — prazo nao importa mais se o card ja foi concluido. */
+  isCompleted?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const currentDate = value ? new Date(value) : null;
-  const isOverdue = !!currentDate && currentDate.getTime() < Date.now() - 86400000;
+  const isOverdue = !isCompleted && !!currentDate && currentDate.getTime() < Date.now() - 86400000;
 
   useEffect(() => {
     if (!open) return;
@@ -91,11 +95,13 @@ export function DueDatePicker({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-          isOverdue
-            ? 'bg-danger-subtle text-danger'
-            : value
-              ? 'bg-primary-subtle text-primary'
-              : 'text-fg-muted hover:bg-bg-muted hover:text-fg'
+          isCompleted && value
+            ? 'bg-success-subtle text-success'
+            : isOverdue
+              ? 'bg-danger-subtle text-danger'
+              : value
+                ? 'bg-primary-subtle text-primary'
+                : 'text-fg-muted hover:bg-bg-muted hover:text-fg'
         }`}
         title="Prazo"
       >

@@ -340,7 +340,11 @@ export function CardModalContent({
             disabled={statusMut.isPending}
           />
           <CardTimerButton cardId={card.id} />
-          <DueDatePicker value={card.dueDate} onChange={(iso) => dueDateMut.mutate(iso)} />
+          <DueDatePicker
+            value={card.dueDate}
+            onChange={(iso) => dueDateMut.mutate(iso)}
+            isCompleted={card.status === 'COMPLETED'}
+          />
           <CardMenu
             cardId={card.id}
             boardId={boardId}
