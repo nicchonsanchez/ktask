@@ -282,6 +282,13 @@ export default function BoardPage() {
       // primário). Permite arrastar cards vinculados em fluxos não-primários
       // sem afetar a posição em outros fluxos.
       await moveCardInFlow(activeId, boardId, { toListId, afterCardId, beforeCardId });
+      // Re-fetch garantido pra pegar mudancas colaterais — principalmente
+      // contadores de checklists/items que cresceram via automacao
+      // (INSERT_CHECKLIST_ITEMS na coluna destino). O CARD_UPDATED via socket
+      // ja invalida, mas confiar so nele deixa janelas onde o socket pode
+      // chegar antes do response do move terminar de hidratar o cache.
+      queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
+      queryClient.invalidateQueries({ queryKey: ['cards', activeId] });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Erro ao mover card.';
       console.error('[board] move failed:', msg);

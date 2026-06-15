@@ -62,8 +62,12 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
       'card.created': () => {
         queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
       },
-      'card.moved': () => {
+      'card.moved': (payload: { cardId: string }) => {
         queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
+        // Move pode cascatear INSERT_CHECKLIST_ITEMS na nova coluna —
+        // contadores e checklists do card mudam. Invalidar o detail tambem
+        // pra modal aberto refletir sem F5.
+        queryClient.invalidateQueries({ queryKey: ['cards', payload.cardId] });
       },
       'card.updated': (payload: { cardId: string }) => {
         queryClient.invalidateQueries({ queryKey: boardsQueries.detail(boardId).queryKey });
