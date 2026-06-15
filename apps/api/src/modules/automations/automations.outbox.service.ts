@@ -203,11 +203,21 @@ export class AutomationsOutboxService {
    */
   private async lockBatch(): Promise<string[]> {
     // $queryRaw com tagged template — Prisma binda parâmetros seguros.
+    //
+    // CUIDADO TZ: `nextAttemptAt` eh `timestamp without time zone`. Prisma
+    // grava ISO UTC ("13:31:19Z"), o Postgres faz STRIP do Z e armazena
+    // como "13:31:19" cru. Quando comparado com NOW() (timestamptz), o
+    // Postgres reinterpreta o sem-tz no TZ da sessao — se a sessao for
+    // America/Sao_Paulo, "13:31:19" vira "13:31:19 BRT" = "16:31:19 UTC",
+    // que parece estar 3h no futuro. Cron silenciosamente nunca achava
+    // nada due. Workaround: comparar contra NOW() AT TIME ZONE 'UTC' pra
+    // forcar a interpretacao no mesmo TZ em que foi gravado. Solucao
+    // estrutural seria migrar todos os datetime pra timestamptz.
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id"
       FROM "AutomationOutbox"
       WHERE "processedAt" IS NULL
-        AND "nextAttemptAt" <= NOW()
+        AND "nextAttemptAt" <= (NOW() AT TIME ZONE 'UTC')
       ORDER BY "createdAt" ASC
       LIMIT ${BATCH_SIZE}
       FOR UPDATE SKIP LOCKED
