@@ -826,16 +826,22 @@ export class ManagementService {
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
     const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60_000);
 
+    // Todos os filtros de prazo sao pra acoes pendentes — excluir COMPLETED.
+    // Cards concluidos com prazo "amanha" nao devem aparecer em "Proximos 7
+    // dias"; cards concluidos sem prazo nao devem aparecer em "Sem data".
+    // Antes so o 'overdue' fazia isso; os outros 3 mostravam cards COMPLETED
+    // confundindo a listagem.
+    const notCompleted: Prisma.CardWhereInput = { status: { not: 'COMPLETED' } };
+
     switch (status) {
       case 'noDate':
-        return { dueDate: null };
+        return { dueDate: null, ...notCompleted };
       case 'overdue':
-        // dueDate < hoje E nao COMPLETED (atrasado de verdade)
-        return { dueDate: { lt: today }, status: { not: 'COMPLETED' } };
+        return { dueDate: { lt: today }, ...notCompleted };
       case 'today':
-        return { dueDate: { gte: today, lt: tomorrow } };
+        return { dueDate: { gte: today, lt: tomorrow }, ...notCompleted };
       case 'next7':
-        return { dueDate: { gte: today, lt: in7 } };
+        return { dueDate: { gte: today, lt: in7 }, ...notCompleted };
     }
   }
 
