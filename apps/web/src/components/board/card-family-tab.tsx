@@ -596,16 +596,21 @@ function Minicolumns({
         <div className="bg-bg-emphasis h-full flex-1 rounded-full" />
       ) : (
         lists.map((l, idx) => {
-          const isFilled = !isCompleted && currentIdx >= 0 && idx <= currentIdx;
+          // 3 estados visuais: completed = verde em tudo; em progresso = roxo
+          // preenchendo até o gomo atual (current escuro, anteriores claros);
+          // pendente = cinza. Antes do fix, completed caia silenciosamente no
+          // ramo cinza porque o `!isCompleted` zerava isFilled/isCurrent — e
+          // nao tinha branch dedicado pro verde.
           const isCurrent = !isCompleted && idx === currentIdx;
-          return (
-            <div
-              key={l.id}
-              className={`h-full flex-1 ${
-                isFilled ? (isCurrent ? 'bg-primary' : 'bg-primary/70') : 'bg-bg-emphasis'
-              }`}
-            />
-          );
+          const isPast = !isCompleted && currentIdx >= 0 && idx < currentIdx;
+          const bg = isCompleted
+            ? 'bg-success'
+            : isCurrent
+              ? 'bg-primary'
+              : isPast
+                ? 'bg-primary/70'
+                : 'bg-bg-emphasis';
+          return <div key={l.id} className={`h-full flex-1 ${bg}`} />;
         })
       )}
     </div>
