@@ -1484,13 +1484,20 @@ export class AutomationsEngine {
     // Enfileira CARD_LEFT (origem) + CARD_ENTERED (destino) na outbox com
     // chainDepth+1 pra cascata de automações. Sem isso, mover via
     // automation nunca dispararia automação encadeada da nova lista.
-    await this.outbox.enqueueCardMoved(this.prisma, {
+    //
+    // Push fire-and-forget logo após o enqueue — mesmo padrão do
+    // cards.service.move. Sem isso a cascata depende SÓ do cron PULL, e
+    // qualquer falha no PULL (incluindo o bug histórico de TZ
+    // mismatch) deixa a próxima trigger presa indefinidamente.
+    const cascadeIds = await this.outbox.enqueueCardMoved(this.prisma, {
       organizationId: card.organizationId,
       cardId,
       fromListId,
       toListId: target.id,
       chainDepth: chainDepth + 1,
     });
+    void this.outbox.processOne(cascadeIds.leftId);
+    void this.outbox.processOne(cascadeIds.enteredId);
 
     // Auto-status sync: move via automacao tambem pode levar o card pra
     // uma coluna final (ou retira-lo de uma) → re-avalia.

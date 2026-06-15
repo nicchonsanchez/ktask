@@ -65,12 +65,28 @@ export class AutomationsScheduler {
       if (result.processed > 0 || result.failed > 0) {
         this.logger.log(`Outbox poll: ${result.processed} processadas, ${result.failed} falharam`);
       }
+      // Heartbeat a cada minuto + sentinela de pendencia. Se tem rows
+      // pendentes mas o PULL nao processa, algo na query temporal esta
+      // mascarando entries due (foi assim que o bug de TZ ficou meses
+      // invisivel). Log force visibilidade.
+      const now = Date.now();
+      if (now - this.lastHeartbeatAt > 60_000) {
+        const pendingCount = await this.outbox.countPending();
+        if (pendingCount > 0) {
+          this.logger.warn(
+            `Outbox heartbeat: ${pendingCount} pendentes acumulados (PULL não pegou; verifique TZ / nextAttemptAt)`,
+          );
+        }
+        this.lastHeartbeatAt = now;
+      }
     } catch (err) {
       this.logger.error(`Outbox poll erro global: ${err instanceof Error ? err.message : err}`);
     } finally {
       this.outboxProcessing = false;
     }
   }
+
+  private lastHeartbeatAt = 0;
 
   /**
    * Sweeper de runs travados em RUNNING. Roda a cada 5min. Marca como

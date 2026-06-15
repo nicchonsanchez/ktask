@@ -100,6 +100,12 @@ services:
       NODE_ENV: production
       PORT: 4000
       LOG_LEVEL: info
+      # TZ alinhado com o Postgres (America/Sao_Paulo). Sem isso, Node grava
+      # timestamps em UTC e Postgres (cuja sessao roda no TZ acima) os
+      # interpreta como BRT na comparacao, deixando entries da AutomationOutbox
+      # com nextAttemptAt "3h no futuro" — cron PULL nunca acha entries due
+      # e cascatas de automacao ficam presas indefinidamente.
+      TZ: America/Sao_Paulo
       DATABASE_URL: postgresql://${POSTGRES_USER:-ktask}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ktask}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}

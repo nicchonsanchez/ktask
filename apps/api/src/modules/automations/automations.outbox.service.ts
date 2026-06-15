@@ -182,6 +182,17 @@ export class AutomationsOutboxService {
   }
 
   /**
+   * Conta entries no outbox ainda não processadas (independente de
+   * `nextAttemptAt`). Usado pelo heartbeat do scheduler — se há rows
+   * pendentes mas `processPending` não pega nenhuma, algo na query
+   * temporal (`nextAttemptAt <= NOW()`) está mascarando: foi assim que
+   * o bug de TZ mismatch ficou invisível até virar incidente.
+   */
+  async countPending(): Promise<number> {
+    return this.prisma.automationOutbox.count({ where: { processedAt: null } });
+  }
+
+  /**
    * Lock + claim de até BATCH_SIZE rows pendentes. Usa `FOR UPDATE SKIP
    * LOCKED` pra não bloquear workers concorrentes (cada um pega um
    * subset disjunto). Não altera a row aqui — só seleciona; mutações
