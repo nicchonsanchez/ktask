@@ -579,6 +579,10 @@ export class AutomationsEngine {
           body: `Você foi atribuído a uma tarefa no card "${card.title}".`,
           entityType: 'card',
           entityId: cardId,
+          // Mesmo evento canonico de checklists.service — gated por pref do
+          // user + envio WhatsApp (urgente, 2min) quando opt-in.
+          eventKey: 'task_assigned' as const,
+          whatsappPayload: { cardTitle: card.title, cardId, taskText: it.text },
         }));
 
       if (rows.length > 0) {

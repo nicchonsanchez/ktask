@@ -442,6 +442,13 @@ export class ApprovalsService {
             entityType: 'CardApproval',
             entityId: approval.id,
             url: `/aprovacoes`,
+            eventKey: 'approval_pending',
+            whatsappPayload: {
+              actorName: requesterName,
+              cardTitle: card.title,
+              cardId: card.id,
+              url: `ktask.agenciakharis.com.br/aprovacoes`,
+            },
           })
           .then(() => true)
           .catch((err) => {

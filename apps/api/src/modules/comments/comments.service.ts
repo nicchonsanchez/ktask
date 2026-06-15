@@ -120,6 +120,19 @@ export class CommentsService {
         ? parentAuthorId
         : null;
 
+    // Pra eventos com escopo (card_commented), o NotificationsService valida
+    // se o user esta no escopo configurado (leader vs present). Passa leadId
+    // + member ids do card no scopeCard.
+    const scopeCard = {
+      leadId: card.leadId,
+      memberUserIds: assignees.map((a) => a.userId),
+    };
+    const waPayload = {
+      actorName: comment.author.name,
+      cardTitle: card.title,
+      cardId: card.id,
+    };
+
     const notifications = [
       ...mentionUserIds
         .filter((id) => id !== userId)
@@ -131,6 +144,9 @@ export class CommentsService {
           body: this.truncate(input.plainText, 140),
           entityType: 'card',
           entityId: card.id,
+          // Evento canonico — gera WhatsApp (urgente, 2min) quando user opt-in
+          eventKey: 'mention_comment' as const,
+          whatsappPayload: waPayload,
         })),
       ...assigneeIds.map((uid) => ({
         userId: uid,
@@ -140,6 +156,11 @@ export class CommentsService {
         body: this.truncate(input.plainText, 140),
         entityType: 'card',
         entityId: card.id,
+        // Evento com escopo — só dispara se o user está em "present" ou
+        // "leader" conforme pref dele. Sem WhatsApp por design (volumoso).
+        eventKey: 'card_commented' as const,
+        scopeCard,
+        whatsappPayload: waPayload,
       })),
       ...(replyTargetId
         ? [
@@ -151,6 +172,11 @@ export class CommentsService {
               body: this.truncate(input.plainText, 140),
               entityType: 'card',
               entityId: card.id,
+              // Reply tambem entra em card_commented pra reusar a pref
+              // (e o escopo, ja que reply implica que voce estava na thread)
+              eventKey: 'card_commented' as const,
+              scopeCard,
+              whatsappPayload: waPayload,
             },
           ]
         : []),

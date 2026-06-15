@@ -397,6 +397,12 @@ export class CardsService {
           body: card.title,
           entityType: 'card',
           entityId: cardId,
+          eventKey: 'card_lead_assigned',
+          whatsappPayload: {
+            actorName: actor?.name ?? 'Alguém',
+            cardTitle: card.title,
+            cardId,
+          },
         });
       }
     } else {

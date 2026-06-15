@@ -34,6 +34,10 @@ export class ChecklistsService {
     type: 'ASSIGNED' | 'CUSTOM';
     title: string;
     body?: string;
+    /** Quando fornecido, ativa gate de pref + envio WhatsApp se opt-in */
+    eventKey?: 'task_assigned' | 'task_unassigned' | 'task_due_changed';
+    /** Vars pro formatador de WhatsApp */
+    whatsappPayload?: Record<string, unknown>;
   }) {
     if (params.userId === params.actorId) return;
     try {
@@ -45,6 +49,8 @@ export class ChecklistsService {
         body: params.body,
         entityType: 'Card',
         entityId: params.cardId,
+        ...(params.eventKey ? { eventKey: params.eventKey } : {}),
+        ...(params.whatsappPayload ? { whatsappPayload: params.whatsappPayload } : {}),
       });
     } catch {
       // silenciar — notificação não deve bloquear ação principal
@@ -286,6 +292,8 @@ export class ChecklistsService {
           type: 'ASSIGNED',
           title: `Tarefa atribuída: ${updated.text}`,
           body: `Você foi atribuído a uma tarefa no card "${card.title}".`,
+          eventKey: 'task_assigned',
+          whatsappPayload: { cardTitle: card.title, cardId: card.id, taskText: updated.text },
         });
       }
       if (item.assigneeId) {
@@ -297,6 +305,8 @@ export class ChecklistsService {
           type: 'ASSIGNED',
           title: `Tarefa desatribuída: ${updated.text}`,
           body: `Você não está mais responsável por essa tarefa no card "${card.title}".`,
+          eventKey: 'task_unassigned',
+          whatsappPayload: { cardTitle: card.title, cardId: card.id, taskText: updated.text },
         });
       }
     }
