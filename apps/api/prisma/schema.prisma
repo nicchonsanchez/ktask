@@ -238,7 +238,20 @@ model User {
   phone                     String?
   /// Quando true, usa Evolution API pra mandar notificação de aprovação
   /// pendente pro `phone` do user (além das notificações in-app/push).
+  ///
+  /// LEGADO: substituido por `notificationPreferences.approval_pending.whatsapp`.
+  /// Mantido pra compat — o resolveNotificationPrefs lê esse campo como
+  /// fallback quando a chave nova nao existe. Pode ser removido em 1-2 releases.
   notifyApprovalsOnWhatsApp Boolean   @default(false)
+  /// Preferências granulares de notificação. Shape:
+  /// {
+  ///   <eventKey>: { app: bool, whatsapp: bool, scope?: 'leader'|'present' }
+  /// }
+  /// `scope` só vale pros eventos contextuais (card_commented, card_moved, etc).
+  /// 'leader' = só quando user é lead do card. 'present' = lead OR member.
+  /// Defaults sao aplicados em runtime quando a chave eh ausente.
+  /// Ver src/modules/notifications/preferences.types.ts pro shape canonico.
+  notificationPreferences   Json?
   locale                    String    @default("pt-BR")
   timezone                  String    @default("America/Sao_Paulo")
   twoFactorSecret           String?

@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import {
+  resolveNotificationPrefs,
+  type NotificationPreferences,
+} from '@/modules/notifications/preferences.types';
+import type { UpdateNotificationPreferencesRequest } from './dto/notification-prefs.schemas';
 
 export type PublicUser = Pick<
   User,
@@ -108,5 +113,43 @@ export class UsersService {
     }
 
     return updated;
+  }
+
+  /**
+   * Devolve preferências resolvidas (com defaults aplicados). Sempre retorna
+   * todas as chaves canonicas pra UI nao precisar lidar com "ausente".
+   */
+  async getNotificationPreferences(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPreferences: true, notifyApprovalsOnWhatsApp: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return resolveNotificationPrefs(user);
+  }
+
+  /**
+   * Merge das prefs recebidas com o storage atual. Caller pode mandar so
+   * as chaves alteradas (PATCH parcial), sem risco de zerar o resto.
+   */
+  async updateNotificationPreferences(userId: string, patch: UpdateNotificationPreferencesRequest) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPreferences: true, notifyApprovalsOnWhatsApp: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+
+    const current = (user.notificationPreferences ?? {}) as NotificationPreferences;
+    const merged: NotificationPreferences = { ...current, ...patch };
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { notificationPreferences: merged as Prisma.InputJsonValue },
+    });
+
+    return resolveNotificationPrefs({
+      notificationPreferences: merged,
+      notifyApprovalsOnWhatsApp: user.notifyApprovalsOnWhatsApp,
+    });
   }
 }

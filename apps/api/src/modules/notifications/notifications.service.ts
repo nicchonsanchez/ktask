@@ -118,6 +118,35 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * Variante paginada (cursor-based) pra tela /notificacoes (historico
+   * completo). O endpoint `list` segue retornando array pro sininho —
+   * separar evita quebra de contrato.
+   *
+   * Cursor = `id` da ultima notif retornada na pagina anterior. Skip:1
+   * pula o proprio cursor pra nao re-entregar.
+   */
+  async listPaginated(userId: string, opts: { take?: number; cursor?: string } = {}) {
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 100);
+    const rows = await this.prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: take + 1, // +1 pra detectar se ha proxima pagina
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    });
+    const hasMore = rows.length > take;
+    const trimmed = hasMore ? rows.slice(0, take) : rows;
+    const items = trimmed.map((n) => {
+      const isCard = (n.entityType === 'card' || n.entityType === 'Card') && n.entityId;
+      const url = isCard ? `/?card=${n.entityId}&n=${n.id}` : `/?n=${n.id}`;
+      return { ...n, url };
+    });
+    return {
+      items,
+      nextCursor: hasMore ? (trimmed[trimmed.length - 1]?.id ?? null) : null,
+    };
+  }
+
   countUnread(userId: string) {
     return this.prisma.notification.count({ where: { userId, isRead: false } });
   }

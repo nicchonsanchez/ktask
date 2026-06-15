@@ -25,6 +25,10 @@ import { AuthService } from '@/modules/auth/auth.service';
 import { StorageService } from '@/modules/storage/storage.service';
 
 import { UsersService } from './users.service';
+import {
+  UpdateNotificationPreferencesSchema,
+  type UpdateNotificationPreferencesRequest,
+} from './dto/notification-prefs.schemas';
 
 const ALLOWED_AVATAR_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/avif'] as const;
 
@@ -92,6 +96,28 @@ export class UsersController {
     @Body(new ZodValidationPipe(ChangePasswordRequestSchema)) body: ChangePasswordRequest,
   ): Promise<void> {
     await this.auth.changePassword(user.userId, body.currentPassword, body.newPassword);
+  }
+
+  @Get('me/notification-preferences')
+  @ApiOperation({
+    summary: 'Preferências de notificação do usuário (com defaults aplicados)',
+  })
+  async getNotificationPrefs(@CurrentUser() user: AuthenticatedRequestContext) {
+    return this.users.getNotificationPreferences(user.userId);
+  }
+
+  @Patch('me/notification-preferences')
+  @ApiOperation({
+    summary: 'Atualiza (parcialmente) as preferências de notificação',
+    description:
+      'Aceita apenas as chaves de eventos que vão mudar. Backend faz merge com o storage atual.',
+  })
+  async patchNotificationPrefs(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @Body(new ZodValidationPipe(UpdateNotificationPreferencesSchema))
+    body: UpdateNotificationPreferencesRequest,
+  ) {
+    return this.users.updateNotificationPreferences(user.userId, body);
   }
 
   @Post('me/avatar/presigned-url')

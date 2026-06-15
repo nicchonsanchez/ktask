@@ -27,6 +27,23 @@ export class NotificationsController {
     });
   }
 
+  @Get('page')
+  @ApiOperation({
+    summary: 'Histórico paginado (cursor-based)',
+    description:
+      'Pra tela /notificacoes. Sem `cursor`, primeira página. Resposta `{ items, nextCursor }`. `nextCursor=null` quando acabou.',
+  })
+  paginate(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @Query('take') take?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.notifications.listPaginated(user.userId, {
+      take: take ? Number(take) : undefined,
+      cursor: cursor || undefined,
+    });
+  }
+
   @Get('unread-count')
   @ApiOperation({ summary: 'Quantidade de notificações não lidas' })
   async unreadCount(@CurrentUser() user: AuthenticatedRequestContext) {
