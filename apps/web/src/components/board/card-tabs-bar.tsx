@@ -1,8 +1,8 @@
 'use client';
 
-import { Calendar, Cloud, GitBranch, History, Home, Layout } from 'lucide-react';
+import { Calendar, Clock, Cloud, GitBranch, History, Home, Layout } from 'lucide-react';
 
-export type CardTab = 'home' | 'flows' | 'family' | 'timeline' | 'files' | 'calendar';
+export type CardTab = 'home' | 'flows' | 'family' | 'timeline' | 'timesheet' | 'files' | 'calendar';
 
 const TABS: Array<{
   key: CardTab;
@@ -16,6 +16,7 @@ const TABS: Array<{
   { key: 'timeline', label: 'Timeline', icon: History, mobileOnly: true },
   { key: 'flows', label: 'Fluxos', icon: Layout },
   { key: 'family', label: 'Família', icon: GitBranch },
+  { key: 'timesheet', label: 'Timesheet', icon: Clock },
   { key: 'files', label: 'Arquivos', icon: Cloud, comingSoon: true },
   { key: 'calendar', label: 'Calendário', icon: Calendar, comingSoon: true },
 ];

@@ -50,6 +50,7 @@ import { SetParentCardDialog } from './set-parent-card-dialog';
 import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
+import { CardTimesheetTab } from './card-timesheet-tab';
 import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
 import { ContactsBlock } from './contacts-block';
@@ -433,6 +434,7 @@ export function CardModalContent({
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {tab === 'flows' && <CardFlowsTab card={card} />}
             {tab === 'family' && <CardFamilyTab card={card} />}
+            {tab === 'timesheet' && <CardTimesheetTab cardId={card.id} />}
             {tab === 'timeline' && (
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 sm:px-6 lg:hidden">
                 <h2 className="text-fg mb-3 text-base font-semibold">
