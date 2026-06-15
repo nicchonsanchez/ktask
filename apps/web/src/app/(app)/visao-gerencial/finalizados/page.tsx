@@ -78,7 +78,7 @@ export default function VisaoGerencialFinalizadosPage() {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
-            href="/visao-gerencial"
+            href="/visao-gerencial/cards"
             className="text-fg-muted hover:text-fg inline-flex items-center gap-1 text-sm"
           >
             <ChevronLeft size={14} />
