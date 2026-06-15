@@ -11,6 +11,7 @@ import type {
   ManagementApprovalsQuery,
   ManagementArchivedQuery,
   ManagementListQuery,
+  ManagementTasksQuery,
 } from './dto/management.schemas';
 
 /**
@@ -63,6 +64,57 @@ export class ManagementService {
 
     return {
       items: items.map((c) => this.shapeCardItem(c)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      metrics,
+    };
+  }
+
+  // ============================================================
+  // Listar TAREFAS consolidadas (checklist items entre boards)
+  // ============================================================
+  /**
+   * Diferenca pra listCards: aqui 1 linha = 1 ChecklistItem. Mesmo card
+   * pode aparecer N vezes (1 por tarefa). Default doneFilter='pending'
+   * (ver schema). Auto-exclui items de cards arquivados, cards COMPLETED
+   * E cards onde o user nao tem acesso a NENHUM dos boards onde estao —
+   * mesmo criterio de visibility do listCards.
+   */
+  async listTasks(userId: string, tenant: TenantContext, query: ManagementTasksQuery) {
+    this.assertManagementAccess(tenant);
+
+    const boardIds = await this.access.listAccessibleBoardIds(userId, tenant);
+    if (boardIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        metrics: emptyTaskMetrics(),
+      };
+    }
+
+    const where = this.buildTasksWhere(userId, tenant, boardIds, query);
+
+    const [total, items, metrics] = await Promise.all([
+      this.prisma.checklistItem.count({ where }),
+      this.prisma.checklistItem.findMany({
+        where,
+        orderBy: [
+          { isDone: 'asc' }, // pendentes antes de feitas
+          { dueDate: { sort: 'asc', nulls: 'last' } },
+          { position: 'asc' },
+        ],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        select: this.taskSelect(),
+      }),
+      this.computeTaskMetrics(where),
+    ]);
+
+    return {
+      items: items.map((it) => this.shapeTaskItem(it)),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -785,6 +837,13 @@ export class ManagementService {
       and.push(this.dueStatusWhere(query.dueStatus));
     }
 
+    const cardStatuses = parseCsv(query.cardStatuses).filter((s) =>
+      (['ACTIVE', 'WAITING', 'COMPLETED', 'CANCELED'] as const).includes(s as never),
+    ) as Array<'ACTIVE' | 'WAITING' | 'COMPLETED' | 'CANCELED'>;
+    if (cardStatuses.length > 0) {
+      and.push({ status: { in: cardStatuses } });
+    }
+
     // Filtro final-list multi-fluxo: a regra olha pra `CardPresence`, nao
     // pra `Card.listId` (primary). Card pode estar em N boards, em
     // colunas diferentes em cada — basta UM fluxo nao-final pra ser
@@ -817,6 +876,184 @@ export class ManagementService {
     }
 
     return { AND: and };
+  }
+
+  // ============================================================
+  // Helpers de TAREFAS (checklist items)
+  // ============================================================
+  private buildTasksWhere(
+    userId: string,
+    tenant: TenantContext,
+    boardIds: string[],
+    query: ManagementTasksQuery,
+  ): Prisma.ChecklistItemWhereInput {
+    // Visibilidade: o item herda visibilidade do card. Reusa cardVisibilityWhere
+    // (mesmo do listCards) pra esconder cards privados aos quais o user nao tem
+    // acesso. Tambem auto-exclui cards arquivados e COMPLETED — nao faz
+    // sentido aparecer "tarefas" de cards ja resolvidos.
+    const cardWhere: Prisma.CardWhereInput = {
+      organizationId: tenant.organizationId,
+      boardId: { in: boardIds },
+      isArchived: false,
+      status: { not: 'COMPLETED' },
+      ...cardVisibilityWhere(userId, tenant.role),
+    };
+
+    const and: Prisma.ChecklistItemWhereInput[] = [{ checklist: { card: cardWhere } }];
+
+    if (query.q) {
+      and.push({ text: { contains: query.q, mode: 'insensitive' } });
+    }
+
+    const assigneeIds = parseCsv(query.assigneeIds);
+    if (query.unassignedOnly) {
+      and.push({ assigneeId: null });
+    } else if (assigneeIds.length > 0) {
+      and.push({ assigneeId: { in: assigneeIds } });
+    }
+
+    const companyIds = parseCsv(query.companyIds);
+    if (companyIds.length > 0) {
+      and.push({
+        checklist: { card: { contacts: { some: { contactId: { in: companyIds } } } } },
+      });
+    }
+
+    const filterBoardIds = parseCsv(query.boardIds);
+    if (filterBoardIds.length > 0) {
+      const allowed = filterBoardIds.filter((id) => boardIds.includes(id));
+      and.push({ checklist: { card: { boardId: { in: allowed } } } });
+    }
+
+    if (query.dueStatus) {
+      and.push(this.taskDueStatusWhere(query.dueStatus));
+    }
+
+    const priorities = parseCsv(query.priorities).filter((p) =>
+      (['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const).includes(p as never),
+    ) as Array<'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>;
+    if (priorities.length > 0) {
+      and.push({ priority: { in: priorities } });
+    }
+
+    switch (query.doneFilter) {
+      case 'pending':
+        and.push({ isDone: false });
+        break;
+      case 'done':
+        and.push({ isDone: true });
+        break;
+      case 'all':
+        break;
+    }
+
+    return { AND: and };
+  }
+
+  private taskDueStatusWhere(
+    status: NonNullable<ManagementTasksQuery['dueStatus']>,
+  ): Prisma.ChecklistItemWhereInput {
+    const today = startOfDayBRT(new Date());
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
+    const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60_000);
+    // Filtros de prazo so consideram tarefas pendentes. Tarefa feita com
+    // prazo passado nao deve aparecer em "atrasadas".
+    const notDone: Prisma.ChecklistItemWhereInput = { isDone: false };
+    switch (status) {
+      case 'noDate':
+        return { dueDate: null, ...notDone };
+      case 'overdue':
+        return { dueDate: { lt: today }, ...notDone };
+      case 'today':
+        return { dueDate: { gte: today, lt: tomorrow }, ...notDone };
+      case 'next7':
+        return { dueDate: { gte: today, lt: in7 }, ...notDone };
+    }
+  }
+
+  private taskSelect() {
+    return {
+      id: true,
+      text: true,
+      isDone: true,
+      doneAt: true,
+      dueDate: true,
+      priority: true,
+      assignee: { select: { id: true, name: true, avatarUrl: true } },
+      checklist: {
+        select: {
+          id: true,
+          title: true,
+          card: {
+            select: {
+              id: true,
+              shortCode: true,
+              title: true,
+              cardColor: true,
+              status: true,
+              board: { select: { id: true, name: true, color: true } },
+              list: { select: { id: true, name: true } },
+              contacts: {
+                where: { contact: { type: 'COMPANY' as const, deletedAt: null } },
+                select: { contact: { select: { id: true, name: true } } },
+                take: 3,
+              },
+            },
+          },
+        },
+      },
+    } satisfies Prisma.ChecklistItemSelect;
+  }
+
+  private shapeTaskItem(
+    it: Prisma.ChecklistItemGetPayload<{ select: ReturnType<ManagementService['taskSelect']> }>,
+  ) {
+    return {
+      id: it.id,
+      text: it.text,
+      isDone: it.isDone,
+      doneAt: it.doneAt?.toISOString() ?? null,
+      dueDate: it.dueDate?.toISOString() ?? null,
+      priority: it.priority,
+      assignee: it.assignee,
+      checklist: { id: it.checklist.id, title: it.checklist.title },
+      card: {
+        id: it.checklist.card.id,
+        shortCode: it.checklist.card.shortCode,
+        title: it.checklist.card.title,
+        cardColor: it.checklist.card.cardColor,
+        status: it.checklist.card.status,
+        board: it.checklist.card.board,
+        list: it.checklist.card.list,
+        companies: it.checklist.card.contacts.map((x) => x.contact),
+      },
+    };
+  }
+
+  private async computeTaskMetrics(where: Prisma.ChecklistItemWhereInput) {
+    const today = startOfDayBRT(new Date());
+    const [total, pending, overdue, unassigned, distinct] = await Promise.all([
+      this.prisma.checklistItem.count({ where }),
+      this.prisma.checklistItem.count({ where: { AND: [where, { isDone: false }] } }),
+      this.prisma.checklistItem.count({
+        where: { AND: [where, { isDone: false }, { dueDate: { lt: today } }] },
+      }),
+      this.prisma.checklistItem.count({
+        where: { AND: [where, { isDone: false }, { assigneeId: null }] },
+      }),
+      this.prisma.checklistItem.findMany({
+        where: { AND: [where, { isDone: false }, { assigneeId: { not: null } }] },
+        select: { assigneeId: true },
+        distinct: ['assigneeId'],
+      }),
+    ]);
+    return {
+      total,
+      pending,
+      overdue,
+      unassigned,
+      assignees: distinct.length,
+    };
   }
 
   private dueStatusWhere(
@@ -943,6 +1180,10 @@ export class ManagementService {
       clients: clientIds.size,
     };
   }
+}
+
+function emptyTaskMetrics() {
+  return { total: 0, pending: 0, overdue: 0, unassigned: 0, assignees: 0 };
 }
 
 function emptyMetrics() {

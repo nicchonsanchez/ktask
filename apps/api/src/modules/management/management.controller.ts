@@ -26,6 +26,7 @@ import {
   ManagementApprovalsQuerySchema,
   ManagementArchivedQuerySchema,
   ManagementListQuerySchema,
+  ManagementTasksQuerySchema,
   UpdateColumnSchema,
   type AddSourceRequest,
   type CreateColumnRequest,
@@ -33,6 +34,7 @@ import {
   type ManagementApprovalsQuery,
   type ManagementArchivedQuery,
   type ManagementListQuery,
+  type ManagementTasksQuery,
   type UpdateColumnRequest,
 } from './dto/management.schemas';
 
@@ -75,6 +77,20 @@ export class ManagementController {
     @Query(new ZodValidationPipe(ManagementListQuerySchema)) query: ManagementListQuery,
   ) {
     return this.mgmt.listCards(user.userId, org, { ...query, onlyFinalLists: true });
+  }
+
+  @Get('tasks')
+  @ApiOperation({
+    summary: 'Visão Gerencial: lista consolidada de tarefas (checklist items)',
+    description:
+      'Diferente de /management/cards (1 linha = 1 card), aqui 1 linha = 1 ChecklistItem. Foco em responsável da tarefa (assignee), não do card. Default: pendentes apenas.',
+  })
+  listTasks(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Query(new ZodValidationPipe(ManagementTasksQuerySchema)) query: ManagementTasksQuery,
+  ) {
+    return this.mgmt.listTasks(user.userId, org, query);
   }
 
   // ---- Aprovacoes (visao gerencial) ----

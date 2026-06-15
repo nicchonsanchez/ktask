@@ -17,6 +17,12 @@ export const ManagementListQuerySchema = z.object({
   /** IDs de Board (escopa visao gerencial a quadros especificos). */
   boardIds: z.string().optional(),
   /**
+   * Status do card (multiselect via CSV). Quando ausente, traz todos os
+   * status. Permite ao gestor isolar ex.: somente ACTIVE pra "trabalho
+   * em curso", ou COMPLETED pra revisar o que finalizou.
+   */
+  cardStatuses: z.string().optional(),
+  /**
    * Status de prazo:
    * - `overdue` = dueDate < hoje (BRT) e status != COMPLETED
    * - `today` = dueDate dentro do dia de hoje (BRT)
@@ -95,6 +101,46 @@ export const ManagementApprovalsQuerySchema = z.object({
   ageFilter: z.enum(['over3d', 'over7d', 'all']).default('all'),
 });
 export type ManagementApprovalsQuery = z.infer<typeof ManagementApprovalsQuerySchema>;
+
+/**
+ * Query string da listagem gerencial de TAREFAS (checklist items).
+ *
+ * Filtros sao independentes da listagem de cards porque o publico/proposito
+ * eh outro: aqui o gestor ve "quem precisa fazer o que", focando no
+ * responsavel da tarefa (assignee do item), nao do card.
+ *
+ * Default `doneFilter='pending'` — abre mostrando o que ainda esta por
+ * fazer (caso de uso predominante).
+ */
+export const ManagementTasksQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  /** IDs de User assignee do item. CSV. */
+  assigneeIds: z.string().optional(),
+  /** IDs de Contact COMPANY vinculados ao card pai. CSV. */
+  companyIds: z.string().optional(),
+  /** IDs de Board do card pai. CSV. */
+  boardIds: z.string().optional(),
+  /**
+   * Estado de prazo da TAREFA (nao do card).
+   * Mesma semantica do dueStatus de cards.
+   */
+  dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate']).optional(),
+  /** Prioridade do item (CSV). */
+  priorities: z.string().optional(),
+  /**
+   * `pending` = isDone=false; `done` = isDone=true; `all` = ambos.
+   * Default `pending` — gestor abre vendo o que falta.
+   */
+  doneFilter: z.enum(['pending', 'done', 'all']).default('pending'),
+  /**
+   * Quando true, lista apenas tarefas SEM assignee. Util pra triagem
+   * ("essas N tarefas nao tem dono — quem assume?").
+   */
+  unassignedOnly: z.coerce.boolean().optional().default(false),
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type ManagementTasksQuery = z.infer<typeof ManagementTasksQuerySchema>;
 
 export const ManagementArchivedQuerySchema = ManagementListQuerySchema.extend({
   /**
