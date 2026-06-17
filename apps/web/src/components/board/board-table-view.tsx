@@ -266,8 +266,15 @@ function Row({
         return time ? `${date} ${time}` : date;
       })()
     : '—';
+  // "Atrasado" so se o card ainda demanda acao: COMPLETED e CANCELED nao
+  // contam (mesmo com dueDate < hoje, o card nao esta mais "em curso").
+  // O fallback `!completedAt` (antigo) nao cobria status=COMPLETED com
+  // completedAt ainda nulo, nem CANCELED.
   const dueOverdue =
-    card.dueDate && new Date(card.dueDate).getTime() < Date.now() && !card.completedAt;
+    card.dueDate &&
+    new Date(card.dueDate).getTime() < Date.now() &&
+    card.status !== 'COMPLETED' &&
+    card.status !== 'CANCELED';
 
   return (
     <tr

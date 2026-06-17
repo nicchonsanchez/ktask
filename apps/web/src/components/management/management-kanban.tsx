@@ -114,7 +114,10 @@ function KanbanColumnView({ column }: { column: KanbanColumn }) {
 function KanbanCardView({ card, columnId }: { card: KanbanCard; columnId: string }) {
   const pathname = usePathname();
   const isOverdue =
-    card.dueDate && card.status !== 'COMPLETED' && new Date(card.dueDate) < new Date();
+    card.dueDate &&
+    card.status !== 'COMPLETED' &&
+    card.status !== 'CANCELED' &&
+    new Date(card.dueDate) < new Date();
   const repeated = card.inColumnIds.length > 1;
 
   return (

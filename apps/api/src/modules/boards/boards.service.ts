@@ -190,13 +190,21 @@ export class BoardsService {
             }>
           >`
             SELECT c."boardId",
-              COUNT(*) FILTER (WHERE c."completedAt" IS NULL AND c."isArchived" = false) AS open_cards,
               COUNT(*) FILTER (
-                WHERE c."completedAt" IS NULL AND c."isArchived" = false
+                WHERE c."status" NOT IN ('COMPLETED', 'CANCELED')
+                  AND c."isArchived" = false
+                  AND c."deletedAt" IS NULL
+              ) AS open_cards,
+              COUNT(*) FILTER (
+                WHERE c."status" NOT IN ('COMPLETED', 'CANCELED')
+                  AND c."isArchived" = false
+                  AND c."deletedAt" IS NULL
                   AND c."dueDate" IS NOT NULL AND c."dueDate" < ${today}
               ) AS overdue,
               COUNT(*) FILTER (
-                WHERE c."completedAt" IS NULL AND c."isArchived" = false
+                WHERE c."status" NOT IN ('COMPLETED', 'CANCELED')
+                  AND c."isArchived" = false
+                  AND c."deletedAt" IS NULL
                   AND c."dueDate" IS NOT NULL AND c."dueDate" >= ${today} AND c."dueDate" < ${tomorrow}
               ) AS due_today
             FROM "Card" c

@@ -40,10 +40,13 @@ export class NotificationsScheduler {
     const twoDaysAgo = new Date(startOfTodayBRT.getTime() - 2 * 24 * 60 * 60_000);
 
     // 1) DUE_SOON — cards com dueDate hoje (BRT)
+    // Filtra por enum `status` (nao so completedAt) — card marcado como
+    // COMPLETED/CANCELED via badge nao deve gerar lembrete de prazo.
     const dueToday = await this.prisma.card.findMany({
       where: {
         isArchived: false,
-        completedAt: null,
+        deletedAt: null,
+        status: { notIn: ['COMPLETED', 'CANCELED'] },
         dueDate: { gte: startOfTodayBRT, lt: endOfTodayBRT },
       },
       select: {
@@ -67,12 +70,14 @@ export class NotificationsScheduler {
       });
     }
 
-    // 2) OVERDUE — cards atrasados (dueDate < hoje BRT, ainda nao completos)
+    // 2) OVERDUE — cards atrasados (dueDate < hoje BRT, ainda em curso)
     // Limita aos vencidos nos ultimos 2 dias pra evitar spam de cards velhos esquecidos.
+    // Mesma logica do DUE_SOON: filtra status (nao so completedAt).
     const overdue = await this.prisma.card.findMany({
       where: {
         isArchived: false,
-        completedAt: null,
+        deletedAt: null,
+        status: { notIn: ['COMPLETED', 'CANCELED'] },
         dueDate: { gte: twoDaysAgo, lt: startOfTodayBRT },
       },
       select: {

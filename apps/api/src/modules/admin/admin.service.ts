@@ -135,11 +135,16 @@ export class AdminService {
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60_000);
     const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60_000);
 
-    // Filtros derivados pra ativos / no período
+    // Filtros derivados pra ativos / no período.
+    // "Ativo" = card que ainda demanda acao. Antes usava so `completedAt: null`
+    // — passou a ignorar o enum `status` (Doc 42), entao card marcado como
+    // COMPLETED/CANCELED via badge ainda entrava em "ativos", "overdue" e
+    // "dueToday". Agora alinha pelos dois (status + completedAt), em AND.
     const activeFilter: Prisma.CardWhereInput = {
       ...cardFilter,
       isArchived: false,
       completedAt: null,
+      status: { notIn: ['COMPLETED', 'CANCELED'] },
     };
     const completedInPeriodFilter: Prisma.CardWhereInput = {
       ...cardFilter,
@@ -747,6 +752,8 @@ export class AdminService {
           ...noCompanyBoardWhere,
           isArchived: false,
           completedAt: null,
+          // Mesmo motivo do activeFilter acima: alinhar enum status + completedAt.
+          status: { notIn: ['COMPLETED', 'CANCELED'] },
           contacts: { none: { contact: { type: 'COMPANY', deletedAt: null } } },
         },
       }),

@@ -22,12 +22,22 @@ function formatDueChip(iso: string): string {
   return `${dateLabel} ${timeLabel}`;
 }
 
-function dueState(iso: string | null): {
+function dueState(
+  iso: string | null,
+  status: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED' = 'ACTIVE',
+): {
   show: boolean;
   classes: string;
   label?: string;
 } {
   if (!iso) return { show: false, classes: '' };
+
+  // Status COMPLETED / CANCELED neutralizam o "atrasado" — o card nao
+  // demanda mais acao do time (concluido ou descartado). O prazo segue
+  // exibido como referencia historica, mas em tom neutro (sem vermelho/
+  // amarelo). Bug original: card com gomo verde + data vermelha.
+  const isClosed = status === 'COMPLETED' || status === 'CANCELED';
+
   const due = new Date(iso);
   const now = new Date();
 
@@ -38,12 +48,15 @@ function dueState(iso: string | null): {
   const hasTime = due.getHours() !== 0 || due.getMinutes() !== 0;
 
   if (hasTime) {
-    if (due.getTime() < now.getTime())
+    if (due.getTime() < now.getTime()) {
+      if (isClosed) return { show: true, classes: 'text-fg-muted', label: undefined };
       return { show: true, classes: 'text-danger font-semibold', label: undefined };
+    }
     // Mesmo dia + ainda nao passou: amarelo "Hoje"
     const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const days = Math.round((dueDay - today) / 86_400_000);
+    if (isClosed) return { show: true, classes: 'text-fg-muted', label: undefined };
     if (days === 0) return { show: true, classes: 'text-warning font-semibold', label: 'Hoje' };
     if (days <= 3) return { show: true, classes: 'text-warning', label: undefined };
     return { show: true, classes: 'text-fg-muted', label: undefined };
@@ -53,6 +66,7 @@ function dueState(iso: string | null): {
   const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const days = Math.round((dueDay - today) / 86_400_000);
+  if (isClosed) return { show: true, classes: 'text-fg-muted', label: undefined };
   if (days < 0) return { show: true, classes: 'text-danger font-semibold', label: undefined };
   if (days === 0) return { show: true, classes: 'text-warning font-semibold', label: 'Hoje' };
   if (days <= 3) return { show: true, classes: 'text-warning', label: undefined };
@@ -156,7 +170,7 @@ function flagHexFor(color: string | null): string | null {
 
 function CardInner({ card }: { card: CardListItem }) {
   const hasLabels = card.labels.length > 0;
-  const due = dueState(card.dueDate);
+  const due = dueState(card.dueDate, card.status);
   const hasCover = Boolean(card.coverImageUrl);
   const hasCounters =
     card._count.comments > 0 || card._count.checklists > 0 || card._count.attachments > 0;

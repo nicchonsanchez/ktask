@@ -756,7 +756,8 @@ function CardRow({
 
 export function isOverdue(dueDate: string | null, status: ManagementCardItem['status']): boolean {
   if (!dueDate) return false;
-  if (status === 'COMPLETED') return false;
+  // COMPLETED e CANCELED nao demandam mais acao — nao pintam como atrasado.
+  if (status === 'COMPLETED' || status === 'CANCELED') return false;
   return new Date(dueDate).getTime() < startOfDayLocal();
 }
 
