@@ -26,6 +26,7 @@ import {
 import { updateChecklistItem, cardsQueries } from '@/lib/queries/cards';
 import { UserAvatar } from '@/components/user-avatar';
 import { PRIORITY_META } from '@/components/board/checklist-item-pickers';
+import { CustomDateRange } from '@/components/management/custom-date-range';
 import type { OrgRole } from '@ktask/contracts';
 
 interface CurrentOrg {
@@ -40,6 +41,7 @@ const DUE_STATUS_OPTIONS: Array<{ value: ManagementTasksFilters['dueStatus']; la
   { value: 'today', label: 'Vencem hoje' },
   { value: 'next7', label: 'Próximos 7 dias' },
   { value: 'noDate', label: 'Sem prazo' },
+  { value: 'custom', label: 'Personalizado…' },
 ];
 
 const DONE_FILTER_OPTIONS: Array<{ value: ManagementTasksFilters['doneFilter']; label: string }> = [
@@ -70,6 +72,8 @@ export default function VisaoGerencialTarefasPage() {
   const [companyIds, setCompanyIds] = useState<string[]>([]);
   const [boardIds, setBoardIds] = useState<string[]>([]);
   const [dueStatus, setDueStatus] = useState<ManagementTasksFilters['dueStatus']>(undefined);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [doneFilter, setDoneFilter] = useState<ManagementTasksFilters['doneFilter']>('pending');
   const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [page, setPage] = useState(1);
@@ -77,7 +81,19 @@ export default function VisaoGerencialTarefasPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [q, assigneeIds, companyIds, boardIds, dueStatus, doneFilter, unassignedOnly]);
+  }, [
+    q,
+    assigneeIds,
+    companyIds,
+    boardIds,
+    dueStatus,
+    dateFrom,
+    dateTo,
+    doneFilter,
+    unassignedOnly,
+  ]);
+
+  const dueStatusToSend = dueStatus === 'custom' && !dateFrom && !dateTo ? undefined : dueStatus;
 
   const filters: ManagementTasksFilters = useMemo(
     () => ({
@@ -85,13 +101,27 @@ export default function VisaoGerencialTarefasPage() {
       assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
       companyIds: companyIds.length > 0 ? companyIds : undefined,
       boardIds: boardIds.length > 0 ? boardIds : undefined,
-      dueStatus,
+      dueStatus: dueStatusToSend,
+      dateFrom: dueStatus === 'custom' && dateFrom ? dateFrom : undefined,
+      dateTo: dueStatus === 'custom' && dateTo ? dateTo : undefined,
       doneFilter,
       unassignedOnly: unassignedOnly || undefined,
       page,
       pageSize,
     }),
-    [q, assigneeIds, companyIds, boardIds, dueStatus, doneFilter, unassignedOnly, page],
+    [
+      q,
+      assigneeIds,
+      companyIds,
+      boardIds,
+      dueStatus,
+      dueStatusToSend,
+      dateFrom,
+      dateTo,
+      doneFilter,
+      unassignedOnly,
+      page,
+    ],
   );
 
   const tasksQ = useQuery({
@@ -146,6 +176,8 @@ export default function VisaoGerencialTarefasPage() {
     setCompanyIds([]);
     setBoardIds([]);
     setDueStatus(undefined);
+    setDateFrom('');
+    setDateTo('');
     setDoneFilter('pending');
     setUnassignedOnly(false);
   }
@@ -221,6 +253,14 @@ export default function VisaoGerencialTarefasPage() {
             </option>
           ))}
         </select>
+        {dueStatus === 'custom' && (
+          <CustomDateRange
+            from={dateFrom}
+            to={dateTo}
+            onChangeFrom={setDateFrom}
+            onChangeTo={setDateTo}
+          />
+        )}
         <MultiSelect
           label="Responsável"
           options={(membersQ.data ?? []).map((m) => ({ value: m.user.id, label: m.user.name }))}

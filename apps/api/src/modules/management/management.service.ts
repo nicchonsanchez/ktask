@@ -835,7 +835,7 @@ export class ManagementService {
     }
 
     if (query.dueStatus) {
-      and.push(this.dueStatusWhere(query.dueStatus));
+      and.push(this.dueStatusWhere(query));
     }
 
     const cardStatuses = parseCsv(query.cardStatuses).filter((s) =>
@@ -928,7 +928,7 @@ export class ManagementService {
     }
 
     if (query.dueStatus) {
-      and.push(this.taskDueStatusWhere(query.dueStatus));
+      and.push(this.taskDueStatusWhere(query));
     }
 
     const priorities = parseCsv(query.priorities).filter((p) =>
@@ -952,9 +952,9 @@ export class ManagementService {
     return { AND: and };
   }
 
-  private taskDueStatusWhere(
-    status: NonNullable<ManagementTasksQuery['dueStatus']>,
-  ): Prisma.ChecklistItemWhereInput {
+  private taskDueStatusWhere(query: ManagementTasksQuery): Prisma.ChecklistItemWhereInput {
+    const status = query.dueStatus;
+    if (!status) return {};
     const today = startOfDayBRT(new Date());
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
     const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60_000);
@@ -970,6 +970,20 @@ export class ManagementService {
         return { dueDate: { gte: today, lt: tomorrow }, ...notDone };
       case 'next7':
         return { dueDate: { gte: today, lt: in7 }, ...notDone };
+      case 'custom': {
+        const from = parseBrtDate(query.dateFrom);
+        const to = parseBrtDate(query.dateTo);
+        const toExclusive = to ? new Date(to.getTime() + 24 * 60 * 60_000) : null;
+        if (!from && !toExclusive) return {};
+        const range: Prisma.DateTimeFilter = {};
+        if (from) range.gte = from;
+        if (toExclusive) range.lt = toExclusive;
+        // Tarefas concluidas com prazo no range tambem entram (gestor pode
+        // querer revisar todas as tarefas com prazo na semana, feitas ou nao).
+        // Mantemos notDone como default — se o user quer ver tudo, ele
+        // muda o doneFilter pra "Todas".
+        return { dueDate: range, ...notDone };
+      }
     }
   }
 
@@ -1058,9 +1072,9 @@ export class ManagementService {
     };
   }
 
-  private dueStatusWhere(
-    status: NonNullable<ManagementListQuery['dueStatus']>,
-  ): Prisma.CardWhereInput {
+  private dueStatusWhere(query: ManagementListQuery): Prisma.CardWhereInput {
+    const status = query.dueStatus;
+    if (!status) return {};
     const today = startOfDayBRT(new Date());
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
     const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60_000);
@@ -1081,6 +1095,28 @@ export class ManagementService {
         return { dueDate: { gte: today, lt: tomorrow }, ...notCompleted };
       case 'next7':
         return { dueDate: { gte: today, lt: in7 }, ...notCompleted };
+      case 'custom': {
+        const from = parseBrtDate(query.dateFrom);
+        const to = parseBrtDate(query.dateTo);
+        // `to` eh inclusivo do ponto de vista do usuario ("ate 30/06"
+        // significa "incluindo o dia 30/06"). Convertemos pro proximo dia
+        // exclusivo pra capturar o ultimo dia inteiro.
+        const toExclusive = to ? new Date(to.getTime() + 24 * 60 * 60_000) : null;
+        const range: Prisma.DateTimeFilter = {};
+        if (from) range.gte = from;
+        if (toExclusive) range.lt = toExclusive;
+        // Sem nenhum dos dois -> filtro custom degenerado, retorna {}
+        // (nao filtra nada). Front nao deveria mandar dueStatus=custom sem
+        // ao menos uma data, mas defesa em profundidade.
+        if (!from && !toExclusive) return {};
+        const field = query.dateField ?? 'due';
+        if (field === 'completed') {
+          // Tela /finalizados: filtra completedAt do card. Nao restringe
+          // status — todo o ponto eh achar cards concluidos no periodo.
+          return { completedAt: range };
+        }
+        return { dueDate: range, ...notCompleted };
+      }
     }
   }
 
@@ -1216,4 +1252,19 @@ function startOfDayBRT(now: Date): Date {
   const brt = new Date(brtMs);
   brt.setUTCHours(0, 0, 0, 0);
   return new Date(brt.getTime() + 3 * 60 * 60_000);
+}
+
+/**
+ * Converte 'YYYY-MM-DD' em meia-noite BRT do mesmo dia. Usado pelo filtro
+ * de range custom da Visao Gerencial — o front envia a data "do dia que o
+ * usuario escolheu no input", e o backend interpreta no fuso da operacao
+ * (BRT). Retorna null se nao parsear.
+ */
+function parseBrtDate(yyyyMmDd: string | undefined): Date | null {
+  if (!yyyyMmDd) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyyMmDd);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  // Equivale a "00:00:00 BRT" => "03:00:00 UTC".
+  return new Date(`${y}-${mo}-${d}T03:00:00.000Z`);
 }

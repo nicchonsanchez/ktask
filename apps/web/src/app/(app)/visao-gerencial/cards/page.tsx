@@ -34,6 +34,7 @@ import { membersQueries } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { UserAvatar } from '@/components/user-avatar';
 import { ManagementKanban } from '@/components/management/management-kanban';
+import { CustomDateRange } from '@/components/management/custom-date-range';
 
 interface CurrentOrg {
   id: string;
@@ -58,6 +59,7 @@ const DUE_STATUS_OPTIONS: Array<{ value: ManagementFilters['dueStatus']; label: 
   { value: 'today', label: 'Vence hoje' },
   { value: 'next7', label: 'Próximos 7 dias' },
   { value: 'noDate', label: 'Sem data' },
+  { value: 'custom', label: 'Personalizado…' },
 ];
 
 /**
@@ -90,6 +92,11 @@ export default function VisaoGerencialPage() {
   const [userIds, setUserIds] = useState<string[]>([]);
   const [boardIds, setBoardIds] = useState<string[]>([]);
   const [dueStatus, setDueStatus] = useState<ManagementFilters['dueStatus']>(undefined);
+  // Range custom — so usado quando dueStatus = 'custom'. Inputs YYYY-MM-DD do
+  // tipo date nativo (zero deps, validacao do browser). Range aberto eh OK:
+  // backend aceita so `from`, so `to`, ou nenhum (degenera em sem filtro).
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [cardStatuses, setCardStatuses] = useState<NonNullable<ManagementFilters['cardStatuses']>>(
     [],
   );
@@ -100,7 +107,13 @@ export default function VisaoGerencialPage() {
   // "tela vazia" quando o filtro novo tem menos resultados que a pagina atual.
   useEffect(() => {
     setPage(1);
-  }, [q, companyIds, userIds, boardIds, dueStatus, cardStatuses, pageSize]);
+  }, [q, companyIds, userIds, boardIds, dueStatus, dateFrom, dateTo, cardStatuses, pageSize]);
+
+  // Quando o user troca pra 'Personalizado' sem ter setado nenhuma data,
+  // o backend ignora — entao a tela continua mostrando o conjunto anterior.
+  // Para evitar "filtro fantasma" so envia o dueStatus quando ha algo de
+  // verdade pra filtrar.
+  const dueStatusToSend = dueStatus === 'custom' && !dateFrom && !dateTo ? undefined : dueStatus;
 
   const filters: ManagementFilters = useMemo(
     () => ({
@@ -109,11 +122,25 @@ export default function VisaoGerencialPage() {
       userIds: userIds.length > 0 ? userIds : undefined,
       boardIds: boardIds.length > 0 ? boardIds : undefined,
       cardStatuses: cardStatuses.length > 0 ? cardStatuses : undefined,
-      dueStatus,
+      dueStatus: dueStatusToSend,
+      dateFrom: dueStatus === 'custom' && dateFrom ? dateFrom : undefined,
+      dateTo: dueStatus === 'custom' && dateTo ? dateTo : undefined,
       page,
       pageSize,
     }),
-    [q, companyIds, userIds, boardIds, cardStatuses, dueStatus, page, pageSize],
+    [
+      q,
+      companyIds,
+      userIds,
+      boardIds,
+      cardStatuses,
+      dueStatus,
+      dueStatusToSend,
+      dateFrom,
+      dateTo,
+      page,
+      pageSize,
+    ],
   );
 
   const cardsQ = useQuery({
@@ -173,6 +200,8 @@ export default function VisaoGerencialPage() {
     setBoardIds([]);
     setCardStatuses([]);
     setDueStatus(undefined);
+    setDateFrom('');
+    setDateTo('');
   }
 
   return (
@@ -316,6 +345,15 @@ export default function VisaoGerencialPage() {
                   </option>
                 ))}
               </select>
+
+              {dueStatus === 'custom' && (
+                <CustomDateRange
+                  from={dateFrom}
+                  to={dateTo}
+                  onChangeFrom={setDateFrom}
+                  onChangeTo={setDateTo}
+                />
+              )}
 
               <FilterMultiSelect
                 icon={<CheckCircle2 size={12} />}

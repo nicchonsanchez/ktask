@@ -62,6 +62,8 @@ export interface ManagementArchivedResponse {
 
 export type CardStatus = 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
 
+export type DueStatusFilter = 'overdue' | 'today' | 'next7' | 'noDate' | 'custom';
+
 export interface ManagementFilters {
   q?: string;
   companyIds?: string[];
@@ -69,7 +71,18 @@ export interface ManagementFilters {
   labelIds?: string[];
   boardIds?: string[];
   cardStatuses?: CardStatus[];
-  dueStatus?: 'overdue' | 'today' | 'next7' | 'noDate';
+  dueStatus?: DueStatusFilter;
+  /**
+   * So usados quando `dueStatus = 'custom'`. Formato `YYYY-MM-DD`,
+   * interpretados em BRT no backend. Ambos inclusivos.
+   */
+  dateFrom?: string;
+  dateTo?: string;
+  /**
+   * Campo alvo do range custom. Default 'due' (prazo). Apenas a tela
+   * `/finalizados` usa 'completed' (data de conclusao do card).
+   */
+  dateField?: 'due' | 'completed';
   /** Quando true, mostra apenas cards em colunas finais (Finalizado etc). */
   onlyFinalLists?: boolean;
   page?: number;
@@ -126,7 +139,10 @@ export interface ManagementTasksFilters {
   assigneeIds?: string[];
   companyIds?: string[];
   boardIds?: string[];
-  dueStatus?: 'overdue' | 'today' | 'next7' | 'noDate';
+  dueStatus?: DueStatusFilter;
+  /** So quando dueStatus='custom'. Formato YYYY-MM-DD. */
+  dateFrom?: string;
+  dateTo?: string;
   priorities?: TaskPriority[];
   doneFilter?: 'pending' | 'done' | 'all';
   unassignedOnly?: boolean;
@@ -143,6 +159,9 @@ function buildQuery(filters: ManagementFilters | ManagementArchivedFilters): str
   if (filters.boardIds?.length) sp.set('boardIds', filters.boardIds.join(','));
   if (filters.cardStatuses?.length) sp.set('cardStatuses', filters.cardStatuses.join(','));
   if (filters.dueStatus) sp.set('dueStatus', filters.dueStatus);
+  if (filters.dateFrom) sp.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) sp.set('dateTo', filters.dateTo);
+  if (filters.dateField) sp.set('dateField', filters.dateField);
   if ('onlyFinalLists' in filters && filters.onlyFinalLists) sp.set('onlyFinalLists', 'true');
   if (filters.page) sp.set('page', String(filters.page));
   if (filters.pageSize) sp.set('pageSize', String(filters.pageSize));
@@ -186,6 +205,8 @@ export const managementQueries = {
       if (filters.companyIds?.length) sp.set('companyIds', filters.companyIds.join(','));
       if (filters.boardIds?.length) sp.set('boardIds', filters.boardIds.join(','));
       if (filters.dueStatus) sp.set('dueStatus', filters.dueStatus);
+      if (filters.dateFrom) sp.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) sp.set('dateTo', filters.dateTo);
       if (filters.priorities?.length) sp.set('priorities', filters.priorities.join(','));
       if (filters.doneFilter && filters.doneFilter !== 'pending')
         sp.set('doneFilter', filters.doneFilter);

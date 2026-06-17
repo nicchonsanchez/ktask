@@ -28,8 +28,35 @@ export const ManagementListQuerySchema = z.object({
    * - `today` = dueDate dentro do dia de hoje (BRT)
    * - `next7` = dueDate nos proximos 7 dias (inclui hoje)
    * - `noDate` = sem dueDate
+   * - `custom` = range explicito via `dateFrom`/`dateTo` (ver abaixo).
+   *   So aplica restricao `status != COMPLETED` quando o campo alvo eh
+   *   `due` (dueDate). Para `completed`, o ponto eh justamente filtrar
+   *   conclusoes — restringir nao faria sentido.
    */
-  dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate']).optional(),
+  dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate', 'custom']).optional(),
+  /**
+   * Inicio do range custom (`YYYY-MM-DD`, interpretado em BRT). So eh
+   * usado quando `dueStatus = 'custom'`. Inclusive.
+   */
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  /**
+   * Fim do range custom (`YYYY-MM-DD`, interpretado em BRT). Inclusive
+   * (backend converte pra `< dateTo+1dia`). So eh usado quando
+   * `dueStatus = 'custom'`.
+   */
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  /**
+   * Campo alvo do range custom. Default `due` (prazo). Apenas a tela
+   * `/finalizados` envia `completed` (data de conclusao do card).
+   * Ignorado quando `dueStatus != 'custom'`.
+   */
+  dateField: z.enum(['due', 'completed']).optional(),
   /**
    * Quando `true`, mostra apenas cards em colunas marcadas como
    * `isFinalList = true` (ex: "Finalizado"). Usado pela tela
@@ -122,9 +149,18 @@ export const ManagementTasksQuerySchema = z.object({
   boardIds: z.string().optional(),
   /**
    * Estado de prazo da TAREFA (nao do card).
-   * Mesma semantica do dueStatus de cards.
+   * Mesma semantica do dueStatus de cards (incluindo 'custom').
    */
-  dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate']).optional(),
+  dueStatus: z.enum(['overdue', 'today', 'next7', 'noDate', 'custom']).optional(),
+  /** Range custom — so quando `dueStatus = 'custom'`. */
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   /** Prioridade do item (CSV). */
   priorities: z.string().optional(),
   /**

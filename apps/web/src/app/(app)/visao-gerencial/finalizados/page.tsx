@@ -9,8 +9,14 @@ import type { OrgRole } from '@ktask/contracts';
 import { api } from '@/lib/api-client';
 import { managementQueries, type ManagementFilters } from '@/lib/queries/management';
 import { useAuthStore } from '@/stores/auth-store';
+import { CustomDateRange } from '@/components/management/custom-date-range';
 
 import { CardsTable, PaginationBar } from '../cards/page';
+
+const DATE_FILTER_OPTIONS: Array<{ value: 'all' | 'custom'; label: string }> = [
+  { value: 'all', label: 'Todo o período' },
+  { value: 'custom', label: 'Personalizado…' },
+];
 
 interface CurrentOrg {
   myRole: OrgRole;
@@ -35,17 +41,33 @@ export default function VisaoGerencialFinalizadosPage() {
   const isPrivileged = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
 
   const [q, setQ] = useState('');
+  // Filtro de periodo: 'all' = sem range (default), 'custom' = range explicito.
+  // Default 'completed' faz mais sentido em /finalizados: o gestor quase sempre
+  // pergunta "o que concluimos no periodo X?", nao "o que tinha prazo no X?".
+  // Toggle continua disponivel pra revisar entregas pelo prazo original.
+  const [dateMode, setDateMode] = useState<'all' | 'custom'>('all');
+  const [dateField, setDateField] = useState<'due' | 'completed'>('completed');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     setPage(1);
-  }, [q, pageSize]);
+  }, [q, dateMode, dateField, dateFrom, dateTo, pageSize]);
 
-  const filters: ManagementFilters = useMemo(
-    () => ({ q: q.trim() || undefined, page, pageSize }),
-    [q, page, pageSize],
-  );
+  const filters: ManagementFilters = useMemo(() => {
+    const isCustom = dateMode === 'custom' && (dateFrom || dateTo);
+    return {
+      q: q.trim() || undefined,
+      dueStatus: isCustom ? 'custom' : undefined,
+      dateFrom: isCustom && dateFrom ? dateFrom : undefined,
+      dateTo: isCustom && dateTo ? dateTo : undefined,
+      dateField: isCustom ? dateField : undefined,
+      page,
+      pageSize,
+    };
+  }, [q, dateMode, dateField, dateFrom, dateTo, page, pageSize]);
 
   const cardsQ = useQuery({
     ...managementQueries.finalized(filters),
@@ -106,6 +128,30 @@ export default function VisaoGerencialFinalizadosPage() {
             className="border-border bg-bg focus-visible:ring-primary w-full rounded-md border py-1.5 pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2"
           />
         </div>
+
+        <select
+          value={dateMode}
+          onChange={(e) => setDateMode(e.target.value as 'all' | 'custom')}
+          className="border-border bg-bg focus-visible:ring-primary rounded-md border px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2"
+        >
+          {DATE_FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        {dateMode === 'custom' && (
+          <CustomDateRange
+            from={dateFrom}
+            to={dateTo}
+            onChangeFrom={setDateFrom}
+            onChangeTo={setDateTo}
+            dateField={dateField}
+            onChangeField={setDateField}
+          />
+        )}
+
         <span className="text-fg-muted text-[11px]">
           {cardsQ.data?.total ?? 0} card{(cardsQ.data?.total ?? 0) === 1 ? '' : 's'}
         </span>
