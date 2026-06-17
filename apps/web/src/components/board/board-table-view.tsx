@@ -252,11 +252,19 @@ function Row({
   const visibleMembers = card.members.slice(0, 4);
   const overflow = Math.max(0, card.members.length - 4);
   const dueLabel = card.dueDate
-    ? new Date(card.dueDate).toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-      })
+    ? (() => {
+        const d = new Date(card.dueDate);
+        const date = d.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+        });
+        const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+        const time = hasTime
+          ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          : null;
+        return time ? `${date} ${time}` : date;
+      })()
     : '—';
   const dueOverdue =
     card.dueDate && new Date(card.dueDate).getTime() < Date.now() && !card.completedAt;

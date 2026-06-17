@@ -50,7 +50,20 @@ export function DueDatePicker({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const currentDate = value ? new Date(value) : null;
-  const isOverdue = !isCompleted && !!currentDate && currentDate.getTime() < Date.now() - 86400000;
+  // Overdue depende de ter horario ou nao:
+  //  - Sem hora (00:00): so vira "atrasada" depois que o dia INTEIRO vence
+  //    (currentDate < now - 24h). Evita marcar como atrasada uma tarefa
+  //    cadastrada hoje sem hora especifica.
+  //  - Com hora: compara com o instante exato (now). Tarefa de hoje 14h
+  //    so atrasa depois das 14h.
+  const triggerHasTime =
+    !!currentDate && (currentDate.getHours() !== 0 || currentDate.getMinutes() !== 0);
+  const isOverdue =
+    !isCompleted &&
+    !!currentDate &&
+    (triggerHasTime
+      ? currentDate.getTime() < Date.now()
+      : currentDate.getTime() < Date.now() - 86400000);
 
   useEffect(() => {
     if (!open) return;
@@ -78,13 +91,21 @@ export function DueDatePicker({
       );
     }
     const d = new Date(value);
-    const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    const dateLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    // Mostra horario quando != 00:00. Convencao: 00:00 = "sem horario"
+    // (dia inteiro). Hora aparece em telas md+ pra nao apertar o trigger
+    // em viewport estreito.
+    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+    const timeLabel = hasTime
+      ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : null;
     return (
       <>
         <CalendarDays size={14} />
-        {/* Em telas estreitas, mostra só o ícone (cor já indica urgência);
-            o texto da data aparece em md+ pra economizar espaço no header */}
-        <span className="hidden md:inline">{label}</span>
+        <span className="hidden md:inline">
+          {dateLabel}
+          {timeLabel ? ` ${timeLabel}` : ''}
+        </span>
       </>
     );
   }
@@ -136,14 +157,36 @@ export function DatePickerPopover({
   const [cursor, setCursor] = useState<Date>(
     new Date(initial.getFullYear(), initial.getMonth(), 1),
   );
+  // Horario opcional como string HH:MM no time-zone local. Vazio = sem
+  // horario (salva 00:00 implicito). Caller nao precisa lidar com isso —
+  // o ISO final reflete a hora escolhida ou 00:00 quando nao definida.
+  const [time, setTime] = useState<string>(() => {
+    if (!value) return '';
+    const d = new Date(value);
+    const hh = d.getHours();
+    const mm = d.getMinutes();
+    if (hh === 0 && mm === 0) return ''; // tratamos 00:00 como "sem horario"
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  });
 
   function apply() {
     if (!draft) {
       onCommit(null);
       return;
     }
-    // Salva meia-noite local na data escolhida → ISO
-    const d = new Date(draft.getFullYear(), draft.getMonth(), draft.getDate(), 0, 0, 0, 0);
+    // Aplica hora se definida; senao 00:00 local (compat com prazo "do dia inteiro")
+    let hh = 0;
+    let mm = 0;
+    if (time) {
+      const [h, m] = time.split(':');
+      const parsedH = Number(h);
+      const parsedM = Number(m);
+      if (Number.isFinite(parsedH) && Number.isFinite(parsedM)) {
+        hh = Math.min(Math.max(parsedH, 0), 23);
+        mm = Math.min(Math.max(parsedM, 0), 59);
+      }
+    }
+    const d = new Date(draft.getFullYear(), draft.getMonth(), draft.getDate(), hh, mm, 0, 0);
     onCommit(d.toISOString());
   }
 
@@ -162,6 +205,7 @@ export function DatePickerPopover({
   }
   function clearDate() {
     setDraft(null);
+    setTime('');
   }
 
   return (
@@ -211,6 +255,30 @@ export function DatePickerPopover({
           onBack={() => setView('days')}
         />
       )}
+
+      {/* Horario opcional. Vazio = "dia inteiro" (salva 00:00). Quando
+          preenchido, telas de prazo passam a comparar com a hora exata
+          (ex: tarefa de hoje as 14h so vira "atrasada" depois das 14h). */}
+      <div className="border-border/70 mt-3 flex items-center gap-2 border-t pt-2">
+        <label className="text-fg-muted text-[11px]">Horário</label>
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          disabled={!draft}
+          className="border-border bg-bg focus-visible:ring-primary flex-1 rounded-md border px-2 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+        />
+        {time && (
+          <button
+            type="button"
+            onClick={() => setTime('')}
+            className="text-fg-muted hover:text-fg text-[10px]"
+            title="Remover horário (manter só a data)"
+          >
+            limpar
+          </button>
+        )}
+      </div>
 
       {/* Rodapé */}
       <div className="border-border/70 mt-3 flex items-center justify-between border-t pt-2">

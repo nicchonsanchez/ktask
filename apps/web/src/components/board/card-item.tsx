@@ -9,25 +9,51 @@ import type { CardListItem } from '@/lib/queries/boards';
 import { CARD_COLOR_BG, isCardColor } from './card-color-config';
 import { STATUS_LABEL, STATUS_VISUAL } from './status-config';
 
+/**
+ * Format pra o chip do mini-card. Inclui horario quando o dueDate tem
+ * hora definida (!= 00:00). Sem hora: "14 mai". Com hora: "14 mai 14:30".
+ */
+function formatDueChip(iso: string): string {
+  const d = new Date(iso);
+  const dateLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  if (!hasTime) return dateLabel;
+  const timeLabel = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${dateLabel} ${timeLabel}`;
+}
+
 function dueState(iso: string | null): {
   show: boolean;
   classes: string;
   label?: string;
 } {
   if (!iso) return { show: false, classes: '' };
-  // Compara em DIAS DE CALENDÁRIO no fuso local (não em ms).
-  // O due-date-picker salva sempre 00:00 do dia local; sem normalizar
-  // pra dia-de-calendário, qualquer hora depois das 00:00 cairia em
-  // "vencido" mesmo sendo hoje.
   const due = new Date(iso);
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
   const now = new Date();
+
+  // Sem horario (00:00) → compara em dias-de-calendario. Card so vira
+  // "atrasado" depois que o dia INTEIRO passa, nao logo apos 00:00.
+  // Com horario → compara em ms reais; tarefa de hoje 14h vira atrasada
+  // apos as 14h, nao no dia seguinte.
+  const hasTime = due.getHours() !== 0 || due.getMinutes() !== 0;
+
+  if (hasTime) {
+    if (due.getTime() < now.getTime())
+      return { show: true, classes: 'text-danger font-semibold', label: undefined };
+    // Mesmo dia + ainda nao passou: amarelo "Hoje"
+    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const days = Math.round((dueDay - today) / 86_400_000);
+    if (days === 0) return { show: true, classes: 'text-warning font-semibold', label: 'Hoje' };
+    if (days <= 3) return { show: true, classes: 'text-warning', label: undefined };
+    return { show: true, classes: 'text-fg-muted', label: undefined };
+  }
+
+  // Sem hora: por DIA-DE-CALENDARIO (legado)
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const days = Math.round((dueDay - today) / 86_400_000);
-  // Vencido: mostra a DATA em vermelho semibold (não label "Vencido"),
-  // assim o usuário enxerga há quanto tempo passou.
   if (days < 0) return { show: true, classes: 'text-danger font-semibold', label: undefined };
-  // Hoje: amarelo com label explícita — urgência sem ser pânico vermelho.
   if (days === 0) return { show: true, classes: 'text-warning font-semibold', label: 'Hoje' };
   if (days <= 3) return { show: true, classes: 'text-warning', label: undefined };
   return { show: true, classes: 'text-fg-muted', label: undefined };
@@ -213,11 +239,7 @@ function CardInner({ card }: { card: CardListItem }) {
           {due.show && card.dueDate && (
             <span className={`inline-flex items-center gap-1 ${due.classes}`}>
               <Calendar size={11} />
-              {due.label ??
-                new Date(card.dueDate).toLocaleDateString('pt-BR', {
-                  day: '2-digit',
-                  month: 'short',
-                })}
+              {due.label ?? formatDueChip(card.dueDate)}
             </span>
           )}
 

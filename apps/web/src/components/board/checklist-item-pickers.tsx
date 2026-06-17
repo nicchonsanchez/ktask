@@ -60,19 +60,34 @@ export function formatDueLabel(iso: string): {
   label: string;
   tone: 'past' | 'today' | 'future';
 } {
-  const due = new Date(iso);
-  due.setHours(0, 0, 0, 0);
+  const raw = new Date(iso);
+  const hasTime = raw.getHours() !== 0 || raw.getMinutes() !== 0;
+  const timeSuffix = hasTime
+    ? ` ${raw.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    : '';
+
+  // Comparacao por dia-de-calendario pra decidir o tone (hoje / passado /
+  // futuro). Quando o item tem horario, ainda compara o "dia" pra
+  // rotular "Hoje" / "Amanha" — mas se o instante exato ja passou,
+  // forca tone "past" pra refletir atraso real (ex: hoje 14h depois
+  // das 14h).
+  const due = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
   const dayAfter = new Date(today.getTime() + 2 * 24 * 60 * 60_000);
 
-  if (due.getTime() === today.getTime()) return { label: 'Hoje', tone: 'today' };
+  const overdueByTime = hasTime && raw.getTime() < Date.now();
+
+  if (due.getTime() === today.getTime()) {
+    if (overdueByTime) return { label: `Hoje${timeSuffix}`, tone: 'past' };
+    return { label: `Hoje${timeSuffix}`, tone: 'today' };
+  }
   if (due.getTime() < today.getTime())
-    return { label: due.toLocaleDateString('pt-BR'), tone: 'past' };
+    return { label: `${raw.toLocaleDateString('pt-BR')}${timeSuffix}`, tone: 'past' };
   if (due.getTime() < dayAfter.getTime() && due.getTime() >= tomorrow.getTime())
-    return { label: 'Amanhã', tone: 'future' };
-  return { label: due.toLocaleDateString('pt-BR'), tone: 'future' };
+    return { label: `Amanhã${timeSuffix}`, tone: 'future' };
+  return { label: `${raw.toLocaleDateString('pt-BR')}${timeSuffix}`, tone: 'future' };
 }
 
 export function ChecklistDueDatePicker({
