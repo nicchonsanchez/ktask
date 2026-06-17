@@ -50,6 +50,11 @@ export function ChecklistBlock({ card, boardId }: { card: CardDetail; boardId: s
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
     queryClient.invalidateQueries({ queryKey: ['boards', boardId] });
+    // Painel /Inicio (meQueries.tasks) consome ChecklistItem com assignee=me.
+    // Sem invalidar aqui, marcar/criar/atribuir tarefa pelo card-modal nao
+    // atualizava a Home ate window focus / refetchInterval 60s. Invalidate
+    // direto entrega zero latencia pro proprio user agindo na sua tarefa.
+    queryClient.invalidateQueries({ queryKey: ['me', 'tasks'] });
   }
 
   const createMut = useMutation({

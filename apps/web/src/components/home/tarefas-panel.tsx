@@ -40,9 +40,17 @@ export function TarefasPanel({
   const readOnly = !!viewAsUserId;
   const [collapsed, setCollapsed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const tasksQuery = useQuery<MeTasksResponse>(
-    viewAsUserId ? userViewQueries.tasks(viewAsUserId) : meQueries.tasks(),
-  );
+  const tasksQuery = useQuery<MeTasksResponse>({
+    ...(viewAsUserId ? userViewQueries.tasks(viewAsUserId) : meQueries.tasks()),
+    // Painel pessoal: sem socket-por-user (custo alto, manutencao fragil).
+    // Polling 60s + invalidate ao voltar foco cobre 95% dos casos:
+    //  - usuario edita tarefa pelo card-modal -> mutation invalida tasks()
+    //    (commit B desse mesmo PR)
+    //  - outro usuario mexe na minha tarefa -> proximo poll (max 60s) refletira
+    //  - troquei de aba e voltei -> refetch on focus instantaneo
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
   const rawData = tasksQuery.data;
   const data = boardFilter && rawData ? filterTasksByBoard(rawData, boardFilter) : rawData;
   const filteredTasks = selectedDay && data ? filterTasksByDay(data, selectedDay) : null;

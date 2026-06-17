@@ -175,6 +175,37 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return { ok: true };
   }
 
+  /**
+   * Subscribe a um card específico. Usado por card-modal aberto em rotas
+   * que NAO sao /b/[boardId] (Home, Visao Gerencial, /notificacoes).
+   * Sem isso, modal nao recebe `card.updated`/`comment.added` em tempo
+   * real porque o user nao esta na room `board:{boardId}`.
+   *
+   * Auth: confia que ja passou no JWT (handleConnection). Nao re-valida
+   * acesso ao card aqui — o broadcast eh defensivo (so emite quando ha
+   * evento real). Worst case: user com sessao valida ve um titulo de card
+   * que nao deveria ter acesso. Pra fechar isso 100%, fazer assertCardAccess
+   * aqui — vale como follow-up se sensitividade aumentar.
+   */
+  @SubscribeMessage('card.join')
+  async onCardJoin(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() data: { cardId: string },
+  ) {
+    if (!data?.cardId) return { ok: false, error: 'missing_cardId' };
+    await client.join(`card:${data.cardId}`);
+    return { ok: true };
+  }
+
+  @SubscribeMessage('card.leave')
+  async onCardLeave(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() data: { cardId: string },
+  ) {
+    if (data?.cardId) await client.leave(`card:${data.cardId}`);
+    return { ok: true };
+  }
+
   // ---------------- Presence helpers ----------------
 
   private addPresence(boardId: string, userId: string, socketId: string) {
@@ -294,6 +325,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private broadcastBoard(origin: BoardEventPayload, channel: string, payload: unknown) {
     this.io.to(`board:${origin.boardId}`).emit(channel, payload);
+    // Tambem emite no card room quando o evento aponta pra um card especifico.
+    // Permite que viewers do modal em rotas fora de /b/ (Home, Visao Gerencial,
+    // /notificacoes) recebam atualizacoes sem precisar joinar o board inteiro.
+    const cardId = (origin as { cardId?: string }).cardId;
+    if (cardId) this.io.to(`card:${cardId}`).emit(channel, payload);
   }
 }
 

@@ -181,6 +181,55 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
 }
 
 /**
+ * Subscribe socket-thin pra um card especifico. Pensado pra card-modal
+ * aberto em rotas que NAO sao /b/[boardId] (Home, Visao Gerencial,
+ * /notificacoes) — nessas rotas o useRealtimeBoard nao roda, entao sem
+ * isso o modal fica stale ate F5.
+ *
+ * Joina room `card:{cardId}` no servidor. Quando recebe `card.updated` /
+ * `comment.added` / `comment.reaction.updated`, invalida o cache do detail.
+ * No cleanup, emite `card.leave` pra liberar a referencia no servidor.
+ *
+ * Usar em useEffect do componente que abre o modal (idealmente o
+ * card-modal em si, com cardId vindo da URL).
+ */
+export function useRealtimeCard(cardId: string | null) {
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.accessToken);
+
+  useEffect(() => {
+    if (!user || !token || !cardId) return;
+    const socket = getSocket();
+
+    function onUpdated(payload: { cardId: string }) {
+      // Defensivo: socket pode entregar evento de outro card que ainda
+      // estamos joinados (race no cleanup). Filtra pelo cardId atual.
+      if (payload.cardId !== cardId) return;
+      queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
+    }
+
+    function emitJoin() {
+      socket.emit('card.join', { cardId });
+    }
+
+    if (socket.connected) emitJoin();
+    socket.on('connect', emitJoin);
+    socket.on('card.updated', onUpdated);
+    socket.on('comment.added', onUpdated);
+    socket.on('comment.reaction.updated', onUpdated);
+
+    return () => {
+      socket.emit('card.leave', { cardId });
+      socket.off('connect', emitJoin);
+      socket.off('card.updated', onUpdated);
+      socket.off('comment.added', onUpdated);
+      socket.off('comment.reaction.updated', onUpdated);
+    };
+  }, [cardId, queryClient, user, token]);
+}
+
+/**
  * Escuta notificações pessoais. Invalida query de unread count + list.
  */
 export function useRealtimeNotifications() {

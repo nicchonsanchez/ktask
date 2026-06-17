@@ -63,11 +63,19 @@ import {
 } from './card-color-config';
 import { StatusPicker } from './status-picker';
 import type { CardStatus as CardStatusValue } from './status-config';
+import { useRealtimeCard } from '@/hooks/use-realtime-board';
 
 export function CardModal({ boardId }: { boardId: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const cardId = params.get('card');
+
+  // Realtime "thin" pra modal aberto em rotas fora de /b/[boardId]
+  // (Home, Visao Gerencial, /notificacoes). useRealtimeBoard so existe
+  // na rota do board — sem o useRealtimeCard, modal nesses contextos
+  // ficava stale ate F5. No /b/, este hook + useRealtimeBoard se
+  // somam (invalidacao dobrada eh idempotente no React Query).
+  useRealtimeCard(cardId);
 
   const query = useQuery({
     ...cardsQueries.detail(cardId ?? ''),
