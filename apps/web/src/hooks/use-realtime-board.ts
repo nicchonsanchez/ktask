@@ -193,24 +193,33 @@ export function useRealtimeBoard(params: { boardId: string; organizationId: stri
  * Usar em useEffect do componente que abre o modal (idealmente o
  * card-modal em si, com cardId vindo da URL).
  */
-export function useRealtimeCard(cardId: string | null) {
+export function useRealtimeCard(cardId: string | null): { viewerIds: string[] } {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.accessToken);
+  const [viewerIds, setViewerIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!user || !token || !cardId) return;
+    if (!user || !token || !cardId) {
+      setViewerIds([]);
+      return;
+    }
     const socket = getSocket();
 
     function onUpdated(payload: { cardId: string }) {
-      // Defensivo: socket pode entregar evento de outro card que ainda
-      // estamos joinados (race no cleanup). Filtra pelo cardId atual.
       if (payload.cardId !== cardId) return;
       queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
     }
 
+    function onPresence(payload: { cardId: string; userIds: string[] }) {
+      if (payload.cardId !== cardId) return;
+      setViewerIds(payload.userIds);
+    }
+
     function emitJoin() {
-      socket.emit('card.join', { cardId });
+      socket.emit('card.join', { cardId }, (res?: { ok: boolean; online?: string[] }) => {
+        if (res?.online) setViewerIds(res.online);
+      });
     }
 
     if (socket.connected) emitJoin();
@@ -218,6 +227,7 @@ export function useRealtimeCard(cardId: string | null) {
     socket.on('card.updated', onUpdated);
     socket.on('comment.added', onUpdated);
     socket.on('comment.reaction.updated', onUpdated);
+    socket.on('card.presence.update', onPresence);
 
     return () => {
       socket.emit('card.leave', { cardId });
@@ -225,8 +235,12 @@ export function useRealtimeCard(cardId: string | null) {
       socket.off('card.updated', onUpdated);
       socket.off('comment.added', onUpdated);
       socket.off('comment.reaction.updated', onUpdated);
+      socket.off('card.presence.update', onPresence);
+      setViewerIds([]);
     };
   }, [cardId, queryClient, user, token]);
+
+  return { viewerIds };
 }
 
 /**

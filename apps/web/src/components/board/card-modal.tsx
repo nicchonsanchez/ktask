@@ -51,6 +51,7 @@ import { CardTabsBar, type CardTab } from './card-tabs-bar';
 import { CardFlowsTab } from './card-flows-tab';
 import { CardFamilyTab } from './card-family-tab';
 import { CardTimesheetTab } from './card-timesheet-tab';
+import { CardViewers } from './card-viewers';
 import { LabelPicker } from './label-picker';
 import { ApprovalsBlock } from './approvals-block';
 import { ContactsBlock } from './contacts-block';
@@ -75,7 +76,10 @@ export function CardModal({ boardId }: { boardId: string }) {
   // na rota do board — sem o useRealtimeCard, modal nesses contextos
   // ficava stale ate F5. No /b/, este hook + useRealtimeBoard se
   // somam (invalidacao dobrada eh idempotente no React Query).
-  useRealtimeCard(cardId);
+  //
+  // viewerIds = userIds atualmente com o modal aberto (presence).
+  // Avatares renderizados no header do CardModalContent (mais baixo).
+  const { viewerIds } = useRealtimeCard(cardId);
 
   const query = useQuery({
     ...cardsQueries.detail(cardId ?? ''),
@@ -95,7 +99,14 @@ export function CardModal({ boardId }: { boardId: string }) {
         className="h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] gap-0 overflow-hidden rounded-none p-0 sm:h-[calc(100vh-4rem)] sm:max-h-[960px] sm:w-[calc(100vw-4rem)] sm:max-w-[1200px] sm:rounded-md"
       >
         {query.isLoading && <CardModalSkeleton />}
-        {query.data && <CardModalContent card={query.data} boardId={boardId} onClose={close} />}
+        {query.data && (
+          <CardModalContent
+            card={query.data}
+            boardId={boardId}
+            onClose={close}
+            viewerIds={viewerIds}
+          />
+        )}
         {!query.isLoading && !query.data && (
           <div className="p-8">
             <DialogTitle>Card não encontrado</DialogTitle>
@@ -113,10 +124,17 @@ export function CardModalContent({
   card,
   boardId,
   onClose,
+  viewerIds = [],
 }: {
   card: CardDetail;
   boardId: string;
   onClose: () => void;
+  /**
+   * userIds com o card-modal aberto agora (presence). Vem do useRealtimeCard
+   * no CardModal. Renderizado como stack de avatares no header com tooltip
+   * "X está visualizando". Inclui o proprio user (filtra no render).
+   */
+  viewerIds?: string[];
 }) {
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
@@ -165,19 +183,41 @@ export function CardModalContent({
     if (prev) queryClient.setQueryData(cardsQueries.detail(card.id).queryKey, prev);
   }
 
+  // Optimistic concurrency: title e description sao os 2 campos onde o user
+  // PASSA TEMPO editando (digitando). Se 2 pessoas mexem ao mesmo tempo,
+  // o backend retorna 409 (ConflictException) e nos pegamos aqui pra avisar
+  // antes de sobrescrever silenciosamente.
+  //
+  // Pra cor/status/prazo (clicks atomicos), nao envia ifVersion — bumpar
+  // version a cada click e ter race com o proprio user que clica varias
+  // vezes seguidas geraria 409 falsos.
+  function handleConflict(err: unknown, fallback: string) {
+    if (err instanceof Error && /409/.test(err.message)) {
+      notify.error(
+        'Este card foi atualizado por outra pessoa enquanto você editava. Recarregando os dados…',
+      );
+      // Forca refetch — user re-edita por cima da versao nova
+      queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
+      return true;
+    }
+    notify.error(errorMessage(err, fallback));
+    return false;
+  }
+
   const titleMut = useMutation({
-    mutationFn: (next: string) => updateCard(card.id, { title: next }),
+    mutationFn: (next: string) => updateCard(card.id, { title: next, ifVersion: card.version }),
     onMutate: (next) => ({ prev: optimistic('title', next) }),
     onError: (e, _v, ctx) => {
       rollback(ctx?.prev);
-      notify.error(errorMessage(e, 'Erro ao salvar título.'));
+      handleConflict(e, 'Erro ao salvar título.');
     },
     onSuccess: invalidate,
   });
 
   const descMut = useMutation({
-    mutationFn: (doc: unknown) => updateCard(card.id, { description: doc }),
-    onError: (e) => notify.error(errorMessage(e, 'Erro ao salvar descrição.')),
+    mutationFn: (doc: unknown) =>
+      updateCard(card.id, { description: doc, ifVersion: card.version }),
+    onError: (e) => handleConflict(e, 'Erro ao salvar descrição.'),
     onSuccess: invalidate,
   });
 
@@ -343,6 +383,7 @@ export function CardModalContent({
       <header className="bg-bg z-20 flex shrink-0 flex-col gap-2 px-5 pb-3 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-7 sm:pt-6">
         {/* Botões — primeiro no mobile (sm:order-2 manda pra direita no desktop) */}
         <div className="-mr-1 flex shrink-0 items-center justify-end gap-1 sm:order-2 sm:mr-0 sm:gap-1.5">
+          <CardViewers viewerIds={viewerIds} members={card.members.map((m) => m.user)} />
           <StatusPicker
             value={card.status}
             onChange={(s) => statusMut.mutate(s)}

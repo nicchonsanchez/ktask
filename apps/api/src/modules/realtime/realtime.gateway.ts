@@ -71,6 +71,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    * só removemos do conjunto quando o último socket sai.
    */
   private readonly presence = new Map<string, Map<string, Set<string>>>();
+  /**
+   * Presence por card: cardId → userId → Set<socketId>. Atualizada em
+   * `card.join`/`card.leave`/`handleDisconnect`. Broadcast emite
+   * `card.presence.update` no room `card:{cardId}`.
+   */
+  private readonly cardPresence = new Map<string, Map<string, Set<string>>>();
 
   constructor(
     private readonly jwt: JwtService,
@@ -116,6 +122,18 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
           this.emitPresence(boardId);
         }
         if (users.size === 0) this.presence.delete(boardId);
+      }
+      // Mesmo cleanup pros cards onde estava com modal aberto (Doc:
+      // presence "X visualizando")
+      for (const [cardId, users] of this.cardPresence.entries()) {
+        const sockets = users.get(client.data.userId);
+        if (!sockets || !sockets.has(client.id)) continue;
+        sockets.delete(client.id);
+        if (sockets.size === 0) {
+          users.delete(client.data.userId);
+          this.emitCardPresence(cardId);
+        }
+        if (users.size === 0) this.cardPresence.delete(cardId);
       }
     }
   }
@@ -181,6 +199,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Sem isso, modal nao recebe `card.updated`/`comment.added` em tempo
    * real porque o user nao esta na room `board:{boardId}`.
    *
+   * Tambem aplica presence: gateway anuncia quem mais esta vendo o card
+   * (avatares "X visualizando" no header). Cleanup automatico no disconnect.
+   *
    * Auth: confia que ja passou no JWT (handleConnection). Nao re-valida
    * acesso ao card aqui — o broadcast eh defensivo (so emite quando ha
    * evento real). Worst case: user com sessao valida ve um titulo de card
@@ -194,7 +215,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   ) {
     if (!data?.cardId) return { ok: false, error: 'missing_cardId' };
     await client.join(`card:${data.cardId}`);
-    return { ok: true };
+    this.addCardPresence(data.cardId, client.data.userId, client.id);
+    this.emitCardPresence(data.cardId);
+    return { ok: true, online: this.snapshotCardPresence(data.cardId) };
   }
 
   @SubscribeMessage('card.leave')
@@ -202,7 +225,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: AuthedSocket,
     @MessageBody() data: { cardId: string },
   ) {
-    if (data?.cardId) await client.leave(`card:${data.cardId}`);
+    if (data?.cardId) {
+      await client.leave(`card:${data.cardId}`);
+      const removed = this.removeCardPresence(data.cardId, client.data.userId, client.id);
+      if (removed) this.emitCardPresence(data.cardId);
+    }
     return { ok: true };
   }
 
@@ -244,6 +271,46 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.io
       .to(`board:${boardId}`)
       .emit('presence.update', { boardId, userIds: this.snapshotPresence(boardId) });
+  }
+
+  // ---------------- Card presence (Doc: presence "X visualizando") ----------------
+
+  private addCardPresence(cardId: string, userId: string, socketId: string) {
+    let users = this.cardPresence.get(cardId);
+    if (!users) {
+      users = new Map();
+      this.cardPresence.set(cardId, users);
+    }
+    let sockets = users.get(userId);
+    if (!sockets) {
+      sockets = new Set();
+      users.set(userId, sockets);
+    }
+    sockets.add(socketId);
+  }
+
+  /** Retorna true se o último socket do user saiu (precisa rebroadcast). */
+  private removeCardPresence(cardId: string, userId: string, socketId: string): boolean {
+    const users = this.cardPresence.get(cardId);
+    if (!users) return false;
+    const sockets = users.get(userId);
+    if (!sockets) return false;
+    sockets.delete(socketId);
+    if (sockets.size > 0) return false;
+    users.delete(userId);
+    if (users.size === 0) this.cardPresence.delete(cardId);
+    return true;
+  }
+
+  private snapshotCardPresence(cardId: string): string[] {
+    const users = this.cardPresence.get(cardId);
+    return users ? Array.from(users.keys()) : [];
+  }
+
+  private emitCardPresence(cardId: string) {
+    this.io
+      .to(`card:${cardId}`)
+      .emit('card.presence.update', { cardId, userIds: this.snapshotCardPresence(cardId) });
   }
 
   // -----------------------------------------------------------------

@@ -23,6 +23,8 @@ export interface CardDetail {
   coverAttachmentId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Optimistic concurrency: enviado de volta no PATCH como `ifVersion`. */
+  version: number;
   leadId: string | null;
   lead: { id: string; name: string; email: string; avatarUrl: string | null } | null;
   list: { id: string; name: string; boardId: string };
@@ -169,6 +171,12 @@ export interface UpdateCardInput {
   privacy?: 'PUBLIC' | 'TEAM_ONLY';
   /** Doc 42: status. Mudar pra COMPLETED auto-set completedAt. */
   status?: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
+  /**
+   * Optimistic concurrency: passa o `card.version` que o user esta editando.
+   * Backend responde 409 (ConflictError) se mudou em paralelo. Front captura
+   * e mostra dialog "card foi atualizado — recarregar".
+   */
+  ifVersion?: number;
 }
 
 export function updateCard(cardId: string, input: UpdateCardInput) {

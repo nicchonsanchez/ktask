@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
@@ -44,6 +45,15 @@ interface UpdateCardInput {
   /** Doc 42: status (4 estados). Mudar pra COMPLETED auto-set completedAt;
    *  mudar pra outro status auto-clear. */
   status?: 'ACTIVE' | 'COMPLETED' | 'WAITING' | 'CANCELED';
+  /**
+   * Optimistic concurrency: quando enviado, backend verifica se o version
+   * do servidor bate. Se nao bate, retorna 409 Conflict — front mostra
+   * "alguem atualizou enquanto voce editava — recarregar?".
+   *
+   * Quando omitido (callers internos, automacoes, importadores): pula
+   * o check pra preservar comportamento legado.
+   */
+  ifVersion?: number;
 }
 
 interface MoveCardInput {
@@ -257,6 +267,19 @@ export class CardsService {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
     await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
+    // Optimistic concurrency: quando o cliente envia ifVersion, comparamos
+    // com o version atual. Difere -> 409 Conflict (UI avisa antes de
+    // sobrescrever silenciosamente). Sem ifVersion (automacoes, callers
+    // legados), pula o check pra preservar comportamento.
+    if (input.ifVersion !== undefined && input.ifVersion !== card.version) {
+      throw new ConflictException({
+        code: 'card_version_mismatch',
+        message: 'Card foi atualizado por outra pessoa enquanto você editava.',
+        currentVersion: card.version,
+        yourVersion: input.ifVersion,
+      });
+    }
+
     // Troca de líder: valida que o user alvo é membro da Org e registra activity específica
     const leadChanged = input.leadId !== undefined && input.leadId !== card.leadId;
     if (leadChanged && input.leadId) {
@@ -328,6 +351,10 @@ export class CardsService {
         privacy: input.privacy ?? undefined,
         // Doc 42: status. Activity log gerado abaixo se mudou.
         status: input.status ?? undefined,
+        // Optimistic concurrency: bump a cada update. Inclui mesmo
+        // updates partial (so titulo, so cor) — qualquer mudanca
+        // detectada por outro user em ifVersion check vai disparar 409.
+        version: { increment: 1 },
       },
     });
 

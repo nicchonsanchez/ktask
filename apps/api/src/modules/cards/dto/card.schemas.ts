@@ -52,6 +52,12 @@ export const UpdateCardSchema = z.object({
   /** Doc 42: status do card (ACTIVE/COMPLETED/WAITING/CANCELED). Mudar
    *  pra COMPLETED auto-set completedAt; mudar pra outro auto-clear. */
   status: CardStatusSchema.optional(),
+  /**
+   * Optimistic concurrency: version do card no momento em que o cliente
+   * comecou a editar. Backend retorna 409 se outro user atualizou
+   * enquanto isso. Omitido = comportamento legado (sobrescreve).
+   */
+  ifVersion: z.number().int().nonnegative().optional(),
 });
 export type UpdateCardRequest = z.infer<typeof UpdateCardSchema>;
 
