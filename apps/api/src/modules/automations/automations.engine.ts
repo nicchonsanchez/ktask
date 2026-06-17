@@ -711,6 +711,12 @@ export class AutomationsEngine {
     }
 
     // ---- dueDate ----
+    // OFFSET_FROM_NOW deve produzir "dia X as 00:00 BRT", nao "agora + X dias"
+    // com hora/min/seg do momento da execucao. A UI manda apenas o numero
+    // de dias (sem hora); copiar o relogio da execucao polui a coluna Prazo
+    // com horarios aleatorios tipo "19:15" — queixa relatada por usuario.
+    // OFFSET_FROM_CARD_DUE preserva o horario do card pai (se o card tem
+    // hora explicita, a tarefa "vence junto" naquele horario).
     let dueDate: Date | null = null;
     const DAY = 24 * 60 * 60 * 1000;
     if (config.dueMode === 'OFFSET_FROM_CARD_DUE' && typeof config.dueOffsetDays === 'number') {
@@ -720,7 +726,8 @@ export class AutomationsEngine {
       });
       if (card?.dueDate) dueDate = new Date(card.dueDate.getTime() + config.dueOffsetDays * DAY);
     } else if (config.dueMode === 'OFFSET_FROM_NOW' && typeof config.dueOffsetDays === 'number') {
-      dueDate = new Date(Date.now() + config.dueOffsetDays * DAY);
+      const base = startOfDayBRT(new Date());
+      dueDate = new Date(base.getTime() + config.dueOffsetDays * DAY);
     } else if (config.dueMode === 'FIXED_DATE' && config.dueDate) {
       const parsed = new Date(config.dueDate);
       if (!Number.isNaN(parsed.getTime())) dueDate = parsed;
@@ -2208,4 +2215,17 @@ function hasItemSpecificConfig(item: ChecklistItemConfig): boolean {
     (item.itemPriority && item.itemPriority !== 'NONE') ||
     item.itemRecurrence,
   );
+}
+
+/**
+ * Meia-noite BRT (UTC-3) do dia atual. Mesmo padrao do management.service —
+ * o servidor em Hetzner roda em UTC mas as operacoes (incluindo o conceito
+ * de "hoje") sao em BRT. Mantido inline pra evitar import cruzado entre
+ * modulos so por causa de um helper de 4 linhas.
+ */
+function startOfDayBRT(now: Date): Date {
+  const brtMs = now.getTime() - 3 * 60 * 60_000;
+  const brt = new Date(brtMs);
+  brt.setUTCHours(0, 0, 0, 0);
+  return new Date(brt.getTime() + 3 * 60 * 60_000);
 }
