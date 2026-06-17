@@ -99,6 +99,7 @@ export class UsersViewService {
         card: {
           organizationId: viewer.organizationId,
           isArchived: false,
+          deletedAt: null, // soft-delete nested
           board: { isArchived: false },
         },
       },

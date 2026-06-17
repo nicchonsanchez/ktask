@@ -193,7 +193,7 @@ export class ManagementService {
     const where: Prisma.CardApprovalWhereInput = {
       organizationId: tenant.organizationId,
       status: 'PENDING',
-      card: { boardId: { in: boardIds } },
+      card: { boardId: { in: boardIds }, deletedAt: null },
     };
 
     // Filtro de idade: requestedAt < (now - N dias)
@@ -300,7 +300,7 @@ export class ManagementService {
 
     const approvalWhere: Prisma.CardApprovalWhereInput = {
       organizationId: tenant.organizationId,
-      card: { boardId: { in: boardIds } },
+      card: { boardId: { in: boardIds }, deletedAt: null },
       ...(statuses && statuses.length > 0
         ? {
             status: {
@@ -308,7 +308,7 @@ export class ManagementService {
             },
           }
         : {}),
-      ...(query.boardId ? { card: { boardId: query.boardId } } : {}),
+      ...(query.boardId ? { card: { boardId: query.boardId, deletedAt: null } } : {}),
     };
 
     if (query.period !== 'all') {
@@ -610,6 +610,7 @@ export class ManagementService {
             AND: [
               { organizationId: tenant.organizationId },
               { isArchived: false },
+              { deletedAt: null }, // soft-delete nested
               cardVisibilityWhere(userId, tenant.role),
             ],
           },
@@ -895,6 +896,7 @@ export class ManagementService {
       organizationId: tenant.organizationId,
       boardId: { in: boardIds },
       isArchived: false,
+      deletedAt: null, // soft-delete nested
       status: { not: 'COMPLETED' },
       ...cardVisibilityWhere(userId, tenant.role),
     };

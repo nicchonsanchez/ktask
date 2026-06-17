@@ -79,6 +79,12 @@ export class MeService {
         card: {
           organizationId: org.organizationId,
           isArchived: false,
+          // Filtro de soft-delete: a extension do PrismaService so injeta
+          // `deletedAt: null` em queries top-level de `card`/`list`. Em
+          // filtros nested via relacao (como aqui, partindo do ChecklistItem),
+          // precisa setar explicito senao tarefas de cards na lixeira
+          // aparecem no /Inicio.
+          deletedAt: null,
           board: { isArchived: false },
         },
       },
@@ -231,6 +237,12 @@ export class MeService {
         card: {
           organizationId: org.organizationId,
           isArchived: false,
+          // Filtro de soft-delete: a extension do PrismaService so injeta
+          // `deletedAt: null` em queries top-level de `card`/`list`. Em
+          // filtros nested via relacao (como aqui, partindo do ChecklistItem),
+          // precisa setar explicito senao tarefas de cards na lixeira
+          // aparecem no /Inicio.
+          deletedAt: null,
           board: { isArchived: false },
         },
       },
@@ -328,6 +340,10 @@ export class MeService {
         checklist: {
           card: {
             organizationId: org.organizationId,
+            // Defensivo: nao reagendar tarefa de card na lixeira (operacao
+            // dispara via UI que ja exclui esses, mas evita estado inconsistente
+            // se o caller mandar id stale).
+            deletedAt: null,
           },
         },
       },
@@ -350,6 +366,7 @@ export class MeService {
         card: {
           organizationId: org.organizationId,
           isArchived: false,
+          deletedAt: null,
           board: { isArchived: false },
           OR: [{ leadId: userId }, { members: { some: { userId } } }],
         },
@@ -410,6 +427,12 @@ export class MeService {
         card: {
           organizationId: org.organizationId,
           isArchived: false,
+          // Filtro de soft-delete: a extension do PrismaService so injeta
+          // `deletedAt: null` em queries top-level de `card`/`list`. Em
+          // filtros nested via relacao (como aqui, partindo do ChecklistItem),
+          // precisa setar explicito senao tarefas de cards na lixeira
+          // aparecem no /Inicio.
+          deletedAt: null,
           board: { isArchived: false },
         },
       },

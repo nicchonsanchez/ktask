@@ -375,7 +375,11 @@ export class BoardsService {
                   // isFinalList). O drawer virtual sumiu, FINALIZADO real e
                   // o unico lugar.
                   // Doc 25: filtra cards privados que o user nao pode ver.
-                  card: { isArchived: false, ...cardVisibilityWhere(userId, tenant.role) },
+                  card: {
+                    isArchived: false,
+                    deletedAt: null, // soft-delete extension nao cobre nested
+                    ...cardVisibilityWhere(userId, tenant.role),
+                  },
                 },
                 orderBy: { position: 'asc' },
                 include: {
@@ -418,7 +422,7 @@ export class BoardsService {
           boardId,
           removedAt: null,
           completedAt: { not: null },
-          card: { isArchived: false },
+          card: { isArchived: false, deletedAt: null },
         },
       }),
     ]);
@@ -492,7 +496,7 @@ export class BoardsService {
         boardId,
         removedAt: null,
         completedAt: { not: null },
-        card: { isArchived: false, organizationId: tenant.organizationId },
+        card: { isArchived: false, deletedAt: null, organizationId: tenant.organizationId },
       },
       orderBy: [{ completedAt: 'desc' }, { cardId: 'desc' }],
       take: limit + 1,
