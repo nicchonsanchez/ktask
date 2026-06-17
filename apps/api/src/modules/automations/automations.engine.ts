@@ -359,10 +359,22 @@ export class AutomationsEngine {
     if (validIds.length === 0) return { tagsAdded: [] };
 
     // createMany skipDuplicates evita inserir labels que já estão no card
-    await this.prisma.cardLabel.createMany({
+    const result = await this.prisma.cardLabel.createMany({
       data: validIds.map((labelId) => ({ cardId, labelId })),
       skipDuplicates: true,
     });
+
+    // Yellow fix: sem CARD_UPDATED, etiquetas adicionadas via automacao so
+    // apareciam pro user que abriu a pagina depois — quem ja estava com o
+    // board aberto via UI dessincronizada. Emit so se algo realmente entrou.
+    if (result.count > 0) {
+      this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+        boardId: card.boardId,
+        organizationId: card.organizationId,
+        actorId: automation.createdById,
+        cardId,
+      });
+    }
 
     return { tagsAdded: validIds };
   }
@@ -382,6 +394,25 @@ export class AutomationsEngine {
     const result = await this.prisma.cardLabel.deleteMany({
       where: { cardId, labelId: { in: tagIds } },
     });
+
+    // Yellow fix: mesmo motivo do handleInsertTags — sem evento, remocao
+    // via automacao nao chegava em tempo real no front. So emite se houve
+    // delecao real (idempotencia: 0 deletados = nada mudou).
+    if (result.count > 0) {
+      const card = await this.prisma.card.findUnique({
+        where: { id: cardId },
+        select: { boardId: true, organizationId: true },
+      });
+      if (card) {
+        this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+          boardId: card.boardId,
+          organizationId: card.organizationId,
+          actorId: automation.createdById,
+          cardId,
+        });
+      }
+    }
+
     return { tagsRemoved: tagIds, deletedCount: result.count };
   }
 
@@ -740,12 +771,17 @@ export class AutomationsEngine {
 
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      select: { organizationId: true, leadId: true },
+      select: { organizationId: true, boardId: true, leadId: true },
     });
     if (!card) return { leadId: null };
 
     if (replaceMode === 'KEEP_IF_HAS_LEAD' && card.leadId) {
       return { leadId: card.leadId, skipped: true };
+    }
+
+    // Idempotente — se ja eh o lead atual, nao mexe (evita Activity ruidosa).
+    if (card.leadId === config.userId) {
+      return { leadId: config.userId, skipped: true };
     }
 
     const membership = await this.prisma.membership.findUnique({
@@ -760,9 +796,9 @@ export class AutomationsEngine {
       throw new Error('Usuário alvo não é membro da organização.');
     }
 
+    const previousLeadId = card.leadId;
     let removedFromTeam: string | undefined;
-    if (replaceMode === 'REMOVE_FROM_TEAM' && card.leadId && card.leadId !== config.userId) {
-      const previousLeadId = card.leadId;
+    if (replaceMode === 'REMOVE_FROM_TEAM' && previousLeadId && previousLeadId !== config.userId) {
       await this.prisma.cardMember.deleteMany({
         where: { cardId, userId: previousLeadId },
       });
@@ -777,6 +813,34 @@ export class AutomationsEngine {
       where: { cardId_userId: { cardId, userId: config.userId } },
       update: {},
       create: { cardId, userId: config.userId },
+    });
+
+    // BUG FIX: handler nao gravava Activity nem emitia CARD_UPDATED. Resultado:
+    // troca de lider via automacao acontecia "silenciosa" — sem registro no
+    // historico do card e sem realtime pro front (clientes ficavam com o lead
+    // antigo ate F5). Cards.service ja faz isso no caminho manual (CARD_LEAD_CHANGED).
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: 'CARD_LEAD_CHANGED',
+        payload: {
+          fromUserId: previousLeadId,
+          toUserId: config.userId,
+          via: 'automation',
+          automationId: automation.id,
+          ...(removedFromTeam ? { removedFromTeam } : {}),
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
     });
 
     return { leadId: config.userId, ...(removedFromTeam ? { removedFromTeam } : {}) };
@@ -796,7 +860,7 @@ export class AutomationsEngine {
 
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      select: { organizationId: true },
+      select: { organizationId: true, boardId: true },
     });
     if (!card) return { membersAdded: [] };
 
@@ -810,10 +874,22 @@ export class AutomationsEngine {
     const validIds = memberships.map((m) => m.userId);
     if (validIds.length === 0) return { membersAdded: [] };
 
-    await this.prisma.cardMember.createMany({
+    const result = await this.prisma.cardMember.createMany({
       data: validIds.map((userId) => ({ cardId, userId })),
       skipDuplicates: true,
     });
+
+    // Yellow fix: sem CARD_UPDATED, novos membros so apareciam no card depois
+    // de F5. Tambem deixa o `realtime` cobrir o caso comum de "automacao
+    // adicionou Fulano ao time" sem precisar de polling.
+    if (result.count > 0) {
+      this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+        boardId: card.boardId,
+        organizationId: card.organizationId,
+        actorId: automation.createdById,
+        cardId,
+      });
+    }
 
     return { membersAdded: validIds };
   }
@@ -878,11 +954,18 @@ export class AutomationsEngine {
 
     // Cria notificações MENTION pra cada user mencionado (exceto o autor
     // da automação, que aqui é o "remetente" do comment).
+    //
+    // Yellow fix: antes chamava prisma.notification.createMany direto,
+    // bypassando NotificationsService — eventKey/preferencias/quiet hours/
+    // WhatsApp Outbox/caps anti-block NAO eram aplicados. Resultado: user
+    // que desativou 'mention_comment' nas preferencias continuava recebendo
+    // ping via automacao. Agora unifica com CommentsService (eventKey =
+    // mention_comment, urgente -> WhatsApp opt-in respeita pref).
     if (mentionUserIds.length > 0) {
       const targets = mentionUserIds.filter((id) => id !== automation.createdById);
       if (targets.length > 0) {
-        await this.prisma.notification.createMany({
-          data: targets.map((uid) => ({
+        await this.notifications.createMany(
+          targets.map((uid) => ({
             userId: uid,
             organizationId: card.organizationId,
             type: 'MENTION' as const,
@@ -890,11 +973,26 @@ export class AutomationsEngine {
             body: text.slice(0, 140),
             entityType: 'card',
             entityId: cardId,
+            eventKey: 'mention_comment' as const,
+            whatsappPayload: {
+              cardTitle: card.title,
+              cardId,
+              actorName: actor?.name ?? 'Automação',
+              snippet: text.slice(0, 140),
+            },
           })),
-          skipDuplicates: true,
-        });
+        );
       }
     }
+
+    // Yellow fix: comentario via automacao tambem nao emitia CARD_UPDATED.
+    // Card-modal aberto em outro user nao mostrava o comment novo ate F5.
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+    });
 
     return { commentId: comment.id, mentionedUserIds: mentionUserIds };
   }
@@ -929,52 +1027,76 @@ export class AutomationsEngine {
   }
 
   /**
-   * SET_CARD_STATUS — altera completedAt / isArchived. Suporta:
-   *   - 'COMPLETED': marca como finalizado (completedAt = now)
-   *   - 'REOPENED':  desmarca (completedAt = null)
-   *   - 'ARCHIVED':  arquiva
+   * SET_CARD_STATUS — altera Card.status (enum), Card.completedAt e
+   * Card.isArchived de forma consistente.
+   *
+   * Valores aceitos (config.status):
+   *   - 'ACTIVE'    -> status=ACTIVE,    completedAt=null
+   *   - 'WAITING'   -> status=WAITING,   completedAt=null
+   *   - 'CANCELED'  -> status=CANCELED,  completedAt=null
+   *   - 'COMPLETED' -> status=COMPLETED, completedAt=now, completedById=automation.createdBy
+   *   - 'ARCHIVED'  -> isArchived=true (NAO mexe no enum status — eh ortogonal)
+   *
+   * Compat: aceita os 2 valores legados ('REOPENED' -> ACTIVE; 'COMPLETED'
+   * idem). Payloads antigos seguem funcionando.
+   *
+   * BUG FIX: antes desse fix o handler so mexia em completedAt/isArchived
+   * sem tocar no enum Card.status (Doc 42 introduziu o enum mas o handler
+   * nao foi atualizado). Resultado: card terminava com `status=ACTIVE` e
+   * `completedAt=now` simultaneamente — estado inconsistente. Tambem o UI
+   * so oferecia 3 opcoes (Concluido/Reabrir/Arquivar) sem cobrir WAITING
+   * e CANCELED.
    */
   private async handleSetCardStatus(
     automation: Automation,
     cardId: string,
   ): Promise<{ status: string }> {
     const config = automation.actionConfig as {
-      status?: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+      status?: 'ACTIVE' | 'WAITING' | 'COMPLETED' | 'CANCELED' | 'ARCHIVED' | 'REOPENED';
     };
     if (!config.status) throw new Error('Status alvo não informado.');
 
+    // Normaliza legado: 'REOPENED' do payload antigo vira ACTIVE
+    const target = config.status === 'REOPENED' ? 'ACTIVE' : config.status;
+
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      select: { boardId: true, organizationId: true },
+      select: { boardId: true, organizationId: true, status: true, completedAt: true },
     });
     if (!card) throw new Error('Card não encontrado.');
 
-    let activityType: 'CARD_COMPLETED' | 'CARD_UNCOMPLETED' | 'CARD_ARCHIVED';
-    switch (config.status) {
-      case 'COMPLETED':
-        await this.prisma.card.update({
-          where: { id: cardId },
-          data: {
-            completedAt: new Date(),
-            completedById: automation.createdById,
-          },
-        });
-        activityType = 'CARD_COMPLETED';
-        break;
-      case 'REOPENED':
-        await this.prisma.card.update({
-          where: { id: cardId },
-          data: { completedAt: null, completedById: null },
-        });
-        activityType = 'CARD_UNCOMPLETED';
-        break;
-      case 'ARCHIVED':
-        await this.prisma.card.update({
-          where: { id: cardId },
-          data: { isArchived: true },
-        });
-        activityType = 'CARD_ARCHIVED';
-        break;
+    let activityType: 'CARD_COMPLETED' | 'CARD_UNCOMPLETED' | 'CARD_ARCHIVED' | 'CARD_UPDATED';
+    if (target === 'ARCHIVED') {
+      await this.prisma.card.update({
+        where: { id: cardId },
+        data: { isArchived: true },
+      });
+      activityType = 'CARD_ARCHIVED';
+    } else if (target === 'COMPLETED') {
+      // Alinha enum + completedAt + completedById. completedById eh a
+      // automacao que disparou (igual ao caminho de complete manual).
+      await this.prisma.card.update({
+        where: { id: cardId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: card.completedAt ?? new Date(),
+          completedById: automation.createdById,
+        },
+      });
+      activityType = 'CARD_COMPLETED';
+    } else {
+      // ACTIVE, WAITING, CANCELED — limpa completedAt se estava setado
+      // (saindo de COMPLETED) e atualiza o enum.
+      const wasCompleted = card.status === 'COMPLETED';
+      await this.prisma.card.update({
+        where: { id: cardId },
+        data: {
+          status: target,
+          ...(wasCompleted ? { completedAt: null, completedById: null } : {}),
+        },
+      });
+      // Activity de "desconclusao" so quando estava em COMPLETED
+      activityType = wasCompleted ? 'CARD_UNCOMPLETED' : 'CARD_UPDATED';
     }
 
     await this.prisma.activity.create({
@@ -1319,28 +1441,56 @@ export class AutomationsEngine {
 
     const card = await this.prisma.card.findUnique({
       where: { id: cardId },
-      select: { listId: true },
+      select: { listId: true, boardId: true, organizationId: true },
     });
     if (!card) throw new Error('Card não encontrado.');
 
+    let newPos: number;
     if (where === 'TOP') {
       const first = await this.prisma.card.findFirst({
         where: { listId: card.listId, isArchived: false, id: { not: cardId } },
         orderBy: { position: 'asc' },
         select: { position: true },
       });
-      const newPos = computeInsertPosition(null, first?.position ?? null);
-      await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
-      return { position: newPos };
+      newPos = computeInsertPosition(null, first?.position ?? null);
+    } else {
+      const last = await this.prisma.card.findFirst({
+        where: { listId: card.listId, isArchived: false, id: { not: cardId } },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      newPos = computeInsertPosition(last?.position ?? null, null);
     }
 
-    const last = await this.prisma.card.findFirst({
-      where: { listId: card.listId, isArchived: false, id: { not: cardId } },
-      orderBy: { position: 'desc' },
-      select: { position: true },
-    });
-    const newPos = computeInsertPosition(last?.position ?? null, null);
     await this.prisma.card.update({ where: { id: cardId }, data: { position: newPos } });
+
+    // BUG FIX: handler nao gravava Activity nem emitia evento. Kanban no
+    // front nao reordenava ate F5; historico do card nao registrava o pulo
+    // pro topo/base. Agora alinhado com handleMoveCard (mesmo padrao).
+    await this.prisma.activity.create({
+      data: {
+        organizationId: card.organizationId,
+        boardId: card.boardId,
+        cardId,
+        actorId: automation.createdById,
+        type: 'CARD_UPDATED',
+        payload: {
+          kind: 'position_changed',
+          listId: card.listId,
+          to: where,
+          via: 'automation',
+          automationId: automation.id,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    this.events.emit(EVENT_NAMES.CARD_UPDATED, {
+      boardId: card.boardId,
+      organizationId: card.organizationId,
+      actorId: automation.createdById,
+      cardId,
+    });
+
     return { position: newPos };
   }
 
@@ -1467,8 +1617,13 @@ export class AutomationsEngine {
     });
 
     // Realtime: notifica frontend pro Kanban animar a transição.
+    //
+    // BUG FIX: antes emitia `card.boardId` (primary). Em cards multi-fluxo,
+    // se a automacao movesse o card num fluxo NAO-primary, o frontend
+    // ouvia o board errado — clientes assistindo o fluxo afetado ficavam
+    // sem realtime ate F5. Agora sempre scopeBoardId (o fluxo do move).
     this.events.emit(EVENT_NAMES.CARD_MOVED, {
-      boardId: card.boardId,
+      boardId: scopeBoardId,
       organizationId: card.organizationId,
       actorId: automation.createdById,
       cardId,

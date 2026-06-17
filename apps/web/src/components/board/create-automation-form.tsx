@@ -169,9 +169,7 @@ export function CreateAutomationForm({
   );
   const [teamUserIds, setTeamUserIds] = useState<string[]>(initial?.teamUserIds ?? []);
   const [commentTemplate, setCommentTemplate] = useState(initial?.commentTemplate ?? '');
-  const [cardStatus, setCardStatus] = useState<'COMPLETED' | 'REOPENED' | 'ARCHIVED'>(
-    initial?.cardStatus ?? 'COMPLETED',
-  );
+  const [cardStatus, setCardStatus] = useState<CardStatusValue>(initial?.cardStatus ?? 'COMPLETED');
   // Doc 25 V1.1: SET_PRIVACY action
   const [cardPrivacy, setCardPrivacy] = useState<'PUBLIC' | 'TEAM_ONLY'>(
     initial?.cardPrivacy ?? 'TEAM_ONLY',
@@ -709,6 +707,32 @@ const TRIGGERS: Array<{ value: AutomationTrigger; label: string; disabled?: bool
 
 type LeadReplaceMode = 'MOVE_TO_TEAM' | 'REMOVE_FROM_TEAM' | 'KEEP_IF_HAS_LEAD';
 
+/**
+ * Valores aceitos pela action SET_CARD_STATUS. Os 4 primeiros sao o enum
+ * Card.status no DB; 'ARCHIVED' eh ortogonal (mexe em Card.isArchived).
+ * O legado 'REOPENED' ainda eh aceito no parse (normalizado pra 'ACTIVE').
+ */
+type CardStatusValue = 'ACTIVE' | 'WAITING' | 'COMPLETED' | 'CANCELED' | 'ARCHIVED';
+
+/**
+ * Parse defensivo do `status` salvo em actionConfig. Normaliza o legado
+ * 'REOPENED' -> 'ACTIVE' (automacoes salvas antes do enum unificado
+ * seguem editaveis sem virar 'COMPLETED' por engano).
+ */
+function parseCardStatus(raw: unknown): CardStatusValue {
+  if (raw === 'REOPENED') return 'ACTIVE';
+  if (
+    raw === 'ACTIVE' ||
+    raw === 'WAITING' ||
+    raw === 'COMPLETED' ||
+    raw === 'CANCELED' ||
+    raw === 'ARCHIVED'
+  ) {
+    return raw;
+  }
+  return 'COMPLETED';
+}
+
 interface ConfigState {
   tagIds: string[];
   checklistTitle: string;
@@ -719,7 +743,7 @@ interface ConfigState {
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
   commentTemplate: string;
-  cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+  cardStatus: CardStatusValue;
   cardPrivacy: 'PUBLIC' | 'TEAM_ONLY';
   childTitleTemplate: string;
   copyLead: boolean;
@@ -980,7 +1004,7 @@ interface InitialState {
   leadReplaceMode: LeadReplaceMode;
   teamUserIds: string[];
   commentTemplate: string;
-  cardStatus: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
+  cardStatus: CardStatusValue;
   cardPrivacy: 'PUBLIC' | 'TEAM_ONLY';
   childTitleTemplate: string;
   copyLead: boolean;
@@ -1140,10 +1164,7 @@ function extractInitial(a: Automation): InitialState {
         : 'MOVE_TO_TEAM',
     teamUserIds: Array.isArray(cfg.userIds) ? (cfg.userIds as string[]) : [],
     commentTemplate: typeof cfg.template === 'string' ? (cfg.template as string) : '',
-    cardStatus:
-      cfg.status === 'COMPLETED' || cfg.status === 'REOPENED' || cfg.status === 'ARCHIVED'
-        ? (cfg.status as 'COMPLETED' | 'REOPENED' | 'ARCHIVED')
-        : 'COMPLETED',
+    cardStatus: parseCardStatus(cfg.status),
     cardPrivacy:
       cfg.privacy === 'PUBLIC' || cfg.privacy === 'TEAM_ONLY'
         ? (cfg.privacy as 'PUBLIC' | 'TEAM_ONLY')
@@ -1658,14 +1679,19 @@ function CardStatusConfig({
   value,
   onChange,
 }: {
-  value: 'COMPLETED' | 'REOPENED' | 'ARCHIVED';
-  onChange: (v: 'COMPLETED' | 'REOPENED' | 'ARCHIVED') => void;
+  value: CardStatusValue;
+  onChange: (v: CardStatusValue) => void;
 }) {
-  const options = [
+  // 4 status do enum + Arquivar (ortogonal). Cobre todos os casos uteis
+  // pra automacao — Ummense usa o mesmo padrao (cancelar = nao deletar +
+  // sair do fluxo principal).
+  const options: Array<{ value: CardStatusValue; label: string }> = [
     { value: 'COMPLETED', label: 'Marcar como finalizado' },
-    { value: 'REOPENED', label: 'Reabrir (desmarcar finalizado)' },
+    { value: 'ACTIVE', label: 'Reabrir / marcar como ativo' },
+    { value: 'WAITING', label: 'Marcar como aguardando' },
+    { value: 'CANCELED', label: 'Marcar como cancelado' },
     { value: 'ARCHIVED', label: 'Arquivar' },
-  ] as const;
+  ];
   return (
     <div className="flex flex-col gap-1.5">
       {options.map((opt) => (
