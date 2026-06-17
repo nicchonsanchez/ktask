@@ -84,12 +84,25 @@ export type NotificationPreferences = Partial<Record<NotificationEventKey, Event
 
 /**
  * Defaults aplicados quando a chave não existe no JSON do user. Filosofia:
- * - In-app: tudo ligado (descobrir na prática o que silenciar)
- * - WhatsApp: tudo DESLIGADO (opt-in consciente — evita ruído)
- * - Escopo: `present` (cobre lead + member)
+ *
+ * Aplicado em 2026-06-17 com base na configuracao do operador principal
+ * da Kharis (Nicchon) — ele decidiu que esses eram os defaults mais
+ * relevantes pra evitar ruido excessivo. Premissa por categoria:
+ *
+ * - **Coisas dirigidas a voce** (mention, task_*, approval_*, lead_assigned):
+ *   tudo ligado in-app. WhatsApp so em mention (interrupcao explicita,
+ *   user esta sendo citado).
+ * - **Eventos contextuais com escopo**: por padrao SO eventos onde voce
+ *   eh lider (escopo `leader`); eventos onde voce eh apenas membro nao
+ *   fazem barulho. Exceto card_commented e card_due_changed que ficam
+ *   ligados pra lider; o resto (completed/moved/checklist_changed) fica
+ *   DESLIGADO no app por gerar muito ruido.
+ *
+ * Cada user pode mudar tudo em /configuracoes/notificacoes.
  */
 export const DEFAULT_PREFS: Record<NotificationEventKey, EventPref> = {
-  mention_comment: { app: true, whatsapp: false },
+  // Dirigidos a voce — tudo ligado in-app, WhatsApp so em mencao
+  mention_comment: { app: true, whatsapp: true },
   task_assigned: { app: true, whatsapp: false },
   task_unassigned: { app: true, whatsapp: false },
   task_due_changed: { app: true, whatsapp: false },
@@ -97,11 +110,14 @@ export const DEFAULT_PREFS: Record<NotificationEventKey, EventPref> = {
   approval_pending: { app: true, whatsapp: false },
   approval_responded: { app: true, whatsapp: false },
   card_lead_assigned: { app: true, whatsapp: false },
-  card_commented: { app: true, whatsapp: false, scope: 'present' },
-  card_completed: { app: true, whatsapp: false, scope: 'present' },
-  card_moved: { app: true, whatsapp: false, scope: 'present' },
-  card_due_changed: { app: true, whatsapp: false, scope: 'present' },
-  card_checklist_changed: { app: true, whatsapp: false, scope: 'present' },
+  // Contextuais — escopo `leader` por padrao (so onde voce eh lider).
+  // Eventos de alto volume (completed/moved/checklist_changed) desligados
+  // no app por padrao — user opta por receber quando precisa.
+  card_commented: { app: true, whatsapp: false, scope: 'leader' },
+  card_completed: { app: false, whatsapp: false, scope: 'present' },
+  card_moved: { app: false, whatsapp: false, scope: 'present' },
+  card_due_changed: { app: true, whatsapp: false, scope: 'leader' },
+  card_checklist_changed: { app: false, whatsapp: false, scope: 'present' },
   card_sla_breach: { app: true, whatsapp: false, scope: 'leader' },
 };
 
