@@ -122,7 +122,7 @@ export default function VisaoGerencialFinalizadosPage() {
         </div>
       ) : (
         <>
-          <CardsTable items={items} />
+          <CardsTable items={items} showCompletedAt />
           <PaginationBar
             total={cardsQ.data?.total ?? 0}
             page={page}

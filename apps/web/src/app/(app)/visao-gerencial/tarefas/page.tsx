@@ -194,17 +194,20 @@ export default function VisaoGerencialTarefasPage() {
           placeholder="Buscar tarefa…"
           className="border-border bg-bg w-56 rounded-md border px-2 py-1.5 text-xs"
         />
-        <select
-          value={doneFilter}
-          onChange={(e) => setDoneFilter(e.target.value as ManagementTasksFilters['doneFilter'])}
-          className="border-border bg-bg rounded-md border px-2 py-1.5 text-xs"
-        >
-          {DONE_FILTER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <label className="text-fg-muted inline-flex items-center gap-1.5 text-xs">
+          Status:
+          <select
+            value={doneFilter}
+            onChange={(e) => setDoneFilter(e.target.value as ManagementTasksFilters['doneFilter'])}
+            className="border-border bg-bg rounded-md border px-2 py-1.5 text-xs"
+          >
+            {DONE_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <select
           value={dueStatus ?? ''}
           onChange={(e) =>

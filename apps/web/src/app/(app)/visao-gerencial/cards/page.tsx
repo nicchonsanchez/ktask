@@ -566,7 +566,18 @@ function FilterMultiSelect({
   );
 }
 
-export function CardsTable({ items }: { items: ManagementCardItem[] }) {
+export function CardsTable({
+  items,
+  showCompletedAt = false,
+}: {
+  items: ManagementCardItem[];
+  /**
+   * Quando true, renderiza coluna "Finalizado em" no lugar de "Prazo".
+   * Usado na tela /finalizados — prazo eh irrelevante quando o card ja
+   * foi concluido; o que importa eh QUANDO foi.
+   */
+  showCompletedAt?: boolean;
+}) {
   return (
     <div className="border-border overflow-x-auto rounded-md border">
       <table className="w-full text-xs">
@@ -575,14 +586,16 @@ export function CardsTable({ items }: { items: ManagementCardItem[] }) {
             <th className="px-3 py-2 text-left font-semibold">Título</th>
             <th className="px-3 py-2 text-left font-semibold">Cliente</th>
             <th className="px-3 py-2 text-left font-semibold">Responsável</th>
-            <th className="px-3 py-2 text-left font-semibold">Prazo</th>
+            <th className="px-3 py-2 text-left font-semibold">
+              {showCompletedAt ? 'Finalizado em' : 'Prazo'}
+            </th>
             <th className="px-3 py-2 text-left font-semibold">Coluna</th>
             <th className="px-3 py-2 text-left font-semibold">Quadro</th>
           </tr>
         </thead>
         <tbody>
           {items.map((c) => (
-            <CardRow key={c.id} card={c} />
+            <CardRow key={c.id} card={c} showCompletedAt={showCompletedAt} />
           ))}
         </tbody>
       </table>
@@ -590,7 +603,13 @@ export function CardsTable({ items }: { items: ManagementCardItem[] }) {
   );
 }
 
-function CardRow({ card }: { card: ManagementCardItem }) {
+function CardRow({
+  card,
+  showCompletedAt = false,
+}: {
+  card: ManagementCardItem;
+  showCompletedAt?: boolean;
+}) {
   const overdue = isOverdue(card.dueDate, card.status);
   return (
     <tr
@@ -661,16 +680,29 @@ function CardRow({ card }: { card: ManagementCardItem }) {
           {card.members.length === 0 && !card.lead && <span className="text-fg-subtle">—</span>}
         </div>
       </td>
-      <td className={`px-3 py-2 ${overdue ? 'text-danger font-medium' : 'text-fg-muted'}`}>
-        {card.dueDate ? (
-          <span className="inline-flex items-center gap-1">
-            <CalendarClock size={11} />
-            {formatDate(card.dueDate)}
-          </span>
-        ) : (
-          <span className="text-fg-subtle">—</span>
-        )}
-      </td>
+      {showCompletedAt ? (
+        <td className="text-fg-muted px-3 py-2">
+          {card.completedAt ? (
+            <span className="inline-flex items-center gap-1">
+              <CalendarClock size={11} />
+              {formatDate(card.completedAt)}
+            </span>
+          ) : (
+            <span className="text-fg-subtle">—</span>
+          )}
+        </td>
+      ) : (
+        <td className={`px-3 py-2 ${overdue ? 'text-danger font-medium' : 'text-fg-muted'}`}>
+          {card.dueDate ? (
+            <span className="inline-flex items-center gap-1">
+              <CalendarClock size={11} />
+              {formatDate(card.dueDate)}
+            </span>
+          ) : (
+            <span className="text-fg-subtle">—</span>
+          )}
+        </td>
+      )}
       <td className="text-fg-muted px-3 py-2">{card.list.name}</td>
       <td className="px-3 py-2">
         <span
