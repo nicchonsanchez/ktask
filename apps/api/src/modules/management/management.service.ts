@@ -978,11 +978,12 @@ export class ManagementService {
         const range: Prisma.DateTimeFilter = {};
         if (from) range.gte = from;
         if (toExclusive) range.lt = toExclusive;
-        // Tarefas concluidas com prazo no range tambem entram (gestor pode
-        // querer revisar todas as tarefas com prazo na semana, feitas ou nao).
-        // Mantemos notDone como default — se o user quer ver tudo, ele
-        // muda o doneFilter pra "Todas".
-        return { dueDate: range, ...notDone };
+        // 'Personalizado' eh ortogonal ao 'doneFilter' (Pendentes/Concluidas/
+        // Todas). NAO aplicar `notDone` aqui — senao o user que pede "tarefas
+        // com prazo entre X e Y" com doneFilter='Concluidas' recebe vazio.
+        // Os outros 4 ramos (overdue/today/next7/noDate) mantem `notDone`
+        // porque sao filtros semanticos de "ainda demanda acao".
+        return { dueDate: range };
       }
     }
   }
@@ -1079,22 +1080,22 @@ export class ManagementService {
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60_000);
     const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60_000);
 
-    // Todos os filtros de prazo sao pra acoes pendentes — excluir COMPLETED.
-    // Cards concluidos com prazo "amanha" nao devem aparecer em "Proximos 7
-    // dias"; cards concluidos sem prazo nao devem aparecer em "Sem data".
-    // Antes so o 'overdue' fazia isso; os outros 3 mostravam cards COMPLETED
-    // confundindo a listagem.
-    const notCompleted: Prisma.CardWhereInput = { status: { not: 'COMPLETED' } };
+    // Filtros de prazo so consideram cards que ainda demandam acao — exclui
+    // COMPLETED e CANCELED (Doc 42). Antes excluia so COMPLETED, deixando
+    // cards CANCELED com prazo passado aparecerem em "Atrasados". Alinha
+    // com o resto da Visao Gerencial (helper isOverdue, contador da Home,
+    // KPIs admin) que ja excluem ambos.
+    const notClosed: Prisma.CardWhereInput = { status: { notIn: ['COMPLETED', 'CANCELED'] } };
 
     switch (status) {
       case 'noDate':
-        return { dueDate: null, ...notCompleted };
+        return { dueDate: null, ...notClosed };
       case 'overdue':
-        return { dueDate: { lt: today }, ...notCompleted };
+        return { dueDate: { lt: today }, ...notClosed };
       case 'today':
-        return { dueDate: { gte: today, lt: tomorrow }, ...notCompleted };
+        return { dueDate: { gte: today, lt: tomorrow }, ...notClosed };
       case 'next7':
-        return { dueDate: { gte: today, lt: in7 }, ...notCompleted };
+        return { dueDate: { gte: today, lt: in7 }, ...notClosed };
       case 'custom': {
         const from = parseBrtDate(query.dateFrom);
         const to = parseBrtDate(query.dateTo);
@@ -1115,7 +1116,7 @@ export class ManagementService {
           // status — todo o ponto eh achar cards concluidos no periodo.
           return { completedAt: range };
         }
-        return { dueDate: range, ...notCompleted };
+        return { dueDate: range, ...notClosed };
       }
     }
   }

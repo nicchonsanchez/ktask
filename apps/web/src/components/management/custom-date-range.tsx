@@ -46,6 +46,8 @@ export function CustomDateRange({
       <input
         type="date"
         value={from}
+        // Impede `from > to` no browser. Se to=='', sem limite superior.
+        max={to || undefined}
         onChange={(e) => onChangeFrom(e.target.value)}
         className="border-border bg-bg-subtle rounded border px-1.5 py-0.5 text-[11px]"
       />
@@ -53,6 +55,7 @@ export function CustomDateRange({
       <input
         type="date"
         value={to}
+        min={from || undefined}
         onChange={(e) => onChangeTo(e.target.value)}
         className="border-border bg-bg-subtle rounded border px-1.5 py-0.5 text-[11px]"
       />
