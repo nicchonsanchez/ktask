@@ -787,7 +787,10 @@ export class CardsService {
     if (card.deletedAt === null) {
       return card; // idempotente
     }
-    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
+    // includeTrashed: true porque o card que estamos restaurando esta com
+    // deletedAt != null — sem isso a soft-delete extension esconde o card
+    // do assertCardAccess e o endpoint sempre dispara 404.
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR', { includeTrashed: true });
 
     const updated = await raw.card.update({
       where: { id: cardId },

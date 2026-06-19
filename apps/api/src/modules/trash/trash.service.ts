@@ -77,7 +77,12 @@ export class TrashService {
       include: {
         board: { select: { id: true, name: true } },
         deletedBy: { select: { id: true, name: true, email: true } },
-        _count: { select: { cards: true } },
+        // UI mostra esse count como "Cards vivos" e usa pra decidir se libera
+        // o botao de exclusao permanente (lista com card vivo bloqueia). O
+        // filtro `deletedAt: null` casa com a regra do backend
+        // (lists.service.deletePermanent). Sem o filtro o count incluia
+        // cards trashed e a UI mentia.
+        _count: { select: { cards: { where: { deletedAt: null } } } },
       },
     });
 

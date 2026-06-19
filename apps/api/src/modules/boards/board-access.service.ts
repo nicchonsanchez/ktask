@@ -71,8 +71,17 @@ export class BoardAccessService {
     cardId: string,
     tenant: TenantContext,
     required: BoardRole = 'VIEWER',
+    // BUG FIX: por padrao, a soft-delete extension injeta `deletedAt: null`
+    // nas queries de `prisma.card`. Isso fazia restoreFromTrash quebrar:
+    // o card EXISTE no DB (com deletedAt != null), mas assertCardAccess o
+    // achava como inexistente -> NotFoundException -> ninguem conseguia
+    // restaurar. Passar `includeTrashed: true` em endpoints que precisam
+    // operar SOBRE o card na lixeira (restoreFromTrash). Os demais
+    // callers seguem com o default (so cards vivos).
+    options: { includeTrashed?: boolean } = {},
   ): Promise<{ role: BoardRole }> {
-    const card = await this.prisma.card.findUnique({
+    const cardDelegate = options.includeTrashed ? this.prisma.raw.card : this.prisma.card;
+    const card = await cardDelegate.findUnique({
       where: { id: cardId },
       select: {
         id: true,

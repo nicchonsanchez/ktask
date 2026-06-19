@@ -94,7 +94,9 @@ export function ManualEntryDialog({
 
   const createMut = useMutation({
     mutationFn: () => {
-      if (!card) throw new Error('Selecione um card');
+      // Card e OPCIONAL — TimeEntry.cardId no schema eh String? e o
+      // ManualEntrySchema do backend aceita undefined. Entry sem card eh
+      // "tempo livre" (reuniao, ajuste de rotas, formacao etc.).
       const startedAt = new Date(`${startDate}T${startTime}:00`).toISOString();
       const endedAt = new Date(`${endDate}T${endTime}:00`).toISOString();
       if (new Date(endedAt).getTime() <= new Date(startedAt).getTime()) {
@@ -102,14 +104,14 @@ export function ManualEntryDialog({
       }
       if (isEdit && entry) {
         return updateTimeEntry(entry.id, {
-          cardId: card.id,
+          cardId: card?.id ?? null,
           startedAt,
           endedAt,
           note: note.trim() || null,
         });
       }
       return createManualEntry({
-        cardId: card.id,
+        cardId: card?.id ?? null,
         startedAt,
         endedAt,
         note: note.trim() || null,
@@ -131,8 +133,8 @@ export function ManualEntryDialog({
     },
   });
 
-  const canSubmit =
-    !!card && !!startDate && !!startTime && !!endDate && !!endTime && !createMut.isPending;
+  // Card NAO entra no canSubmit — eh opcional (tempo livre).
+  const canSubmit = !!startDate && !!startTime && !!endDate && !!endTime && !createMut.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -267,7 +269,8 @@ function CardPicker({
   onSelect,
 }: {
   selected: PickedCard | null;
-  onSelect: (c: PickedCard) => void;
+  // Aceita null pra permitir limpar a selecao (tempo "livre", sem card).
+  onSelect: (c: PickedCard | null) => void;
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -281,7 +284,21 @@ function CardPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-fg-muted text-[11px] font-medium">Card</span>
+      <div className="flex items-baseline justify-between">
+        <span className="text-fg-muted text-[11px] font-medium">Card (opcional)</span>
+        {selected && (
+          <button
+            type="button"
+            onClick={() => {
+              onSelect(null);
+              setQuery('');
+            }}
+            className="text-fg-muted hover:text-danger text-[10px] hover:underline"
+          >
+            Sem card
+          </button>
+        )}
+      </div>
       {selected ? (
         <div className="border-primary/40 bg-primary-subtle/30 flex items-center gap-2 rounded-md border px-3 py-2">
           <div className="min-w-0 flex-1">
@@ -293,7 +310,7 @@ function CardPicker({
           <button
             type="button"
             onClick={() => {
-              onSelect(null as never);
+              onSelect(null);
               setQuery('');
               setOpen(true);
             }}

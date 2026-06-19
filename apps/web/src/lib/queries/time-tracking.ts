@@ -143,7 +143,9 @@ export function stopTimer(entryId: string) {
 }
 
 export function createManualEntry(input: {
-  cardId: string;
+  /** Opcional — null/undefined cria entry "livre" (sem card vinculado).
+   *  Backend aceita ambos (ManualEntrySchema). */
+  cardId?: string | null;
   startedAt: string;
   endedAt: string;
   note?: string | null;
