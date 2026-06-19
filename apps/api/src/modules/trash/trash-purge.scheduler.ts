@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { StorageService } from '@/modules/storage/storage.service';
 
 import { TRASH_RETENTION_DAYS } from './trash.service';
 
@@ -18,7 +19,10 @@ export class TrashPurgeScheduler {
   private readonly logger = new Logger(TrashPurgeScheduler.name);
   private running = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Cron('30 3 * * *', { timeZone: 'UTC' })
   async purge() {
@@ -34,6 +38,7 @@ export class TrashPurgeScheduler {
       const raw = this.prisma.raw;
       let purgedCards = 0;
       let purgedLists = 0;
+      let purgedFiles = 0;
 
       // Cards primeiro: se uma lista vencida tem cards filhos vencidos, o
       // CASCADE da FK list -> card ja resolveria, mas deletar cards primeiro
@@ -45,8 +50,24 @@ export class TrashPurgeScheduler {
           take: 100,
         });
         if (batch.length === 0) break;
-        await raw.card.deleteMany({ where: { id: { in: batch.map((c) => c.id) } } });
-        purgedCards += batch.length;
+        const cardIds = batch.map((c) => c.id);
+
+        // Coleta storageKeys dos attachments ANTES do DELETE — CASCADE apaga
+        // as linhas mas nao chama o S3. Sem isso, arquivos ficam orfanados
+        // pra sempre (e o bucket acumula cobranca sem propósito).
+        const attachments = await this.prisma.attachment.findMany({
+          where: { cardId: { in: cardIds } },
+          select: { storageKey: true },
+        });
+        const keys = attachments.map((a) => a.storageKey).filter(Boolean);
+
+        await raw.card.deleteMany({ where: { id: { in: cardIds } } });
+        purgedCards += cardIds.length;
+
+        if (keys.length > 0) {
+          await this.storage.deleteObjects(keys);
+          purgedFiles += keys.length;
+        }
       }
 
       while (true) {
@@ -62,7 +83,7 @@ export class TrashPurgeScheduler {
 
       if (purgedCards > 0 || purgedLists > 0) {
         this.logger.log(
-          `Auto-purge concluido: ${purgedCards} card(s) e ${purgedLists} lista(s) com deletedAt <= ${cutoff.toISOString()}`,
+          `Auto-purge concluido: ${purgedCards} card(s), ${purgedLists} lista(s), ${purgedFiles} arquivo(s) S3 com deletedAt <= ${cutoff.toISOString()}`,
         );
       }
     } catch (err) {

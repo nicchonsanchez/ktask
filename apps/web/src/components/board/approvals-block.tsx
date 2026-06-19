@@ -34,6 +34,54 @@ import { RequestApprovalDialog } from './request-approval-dialog';
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
 const PRIVILEGED_ROLES = new Set(['OWNER', 'ADMIN', 'GESTOR']);
 
+/**
+ * Draft persistente em localStorage. Usado pra justificativa de
+ * reprovacao e motivo de cancelamento — textos que o user pode estar
+ * digitando quando o componente desmonta (aba descartada pelo Chrome em
+ * background, approval expirar/ser cancelada por outro revisor, refresh
+ * acidental). Sem isso o texto era perdido. Caso reportado em prod
+ * (jun/2026): revisor estava reprovando, foi ate outra aba pegar um
+ * texto, voltou e o popup tinha fechado, perdendo tudo.
+ *
+ * Limpa explicitamente apos commit (onSuccess) ou cancel.
+ */
+function usePersistentDraft(
+  key: string,
+  initial = '',
+): [string, (next: string) => void, () => void] {
+  const [value, setValue] = useState<string>(() => {
+    if (typeof window === 'undefined') return initial;
+    try {
+      return window.localStorage.getItem(key) ?? initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (value) window.localStorage.setItem(key, value);
+      else window.localStorage.removeItem(key);
+    } catch {
+      // localStorage cheio/desabilitado — ignora (volta a ser draft em memoria)
+    }
+  }, [key, value]);
+
+  const clear = () => {
+    setValue('');
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // ignora
+      }
+    }
+  };
+
+  return [value, setValue, clear];
+}
+
 interface CurrentOrgResponse {
   id: string;
   myRole: 'OWNER' | 'ADMIN' | 'GESTOR' | 'MEMBER' | 'GUEST';
@@ -118,9 +166,25 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
   const [rejectOpen, setRejectOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [resendOpen, setResendOpen] = useState(false);
-  const [rejectNote, setRejectNote] = useState('');
-  const [cancelReason, setCancelReason] = useState('');
+  // Drafts persistem em localStorage — chave por approvalId. Sobrevivem a
+  // remount (tab discard do Chrome, refresh acidental, approval invalidada
+  // por realtime). Ver doc do usePersistentDraft acima.
+  const [rejectNote, setRejectNote, clearRejectNote] = usePersistentDraft(
+    `ktask:reject-draft:${approval.id}`,
+  );
+  const [cancelReason, setCancelReason, clearCancelReason] = usePersistentDraft(
+    `ktask:cancel-draft:${approval.id}`,
+  );
   const [error, setError] = useState<string | null>(null);
+
+  // Se o user tem draft de reprovacao salvo e o componente monta com a
+  // approval ainda pendente, abre o ConfirmModal automaticamente — assim ele
+  // ve o texto que estava escrevendo. Roda so na primeira render (eslint OK).
+  useEffect(() => {
+    if (rejectNote) setRejectOpen(true);
+    if (cancelReason) setCancelOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const queryClient = useQueryClient();
   const me = useAuthStore((s) => s.user);
@@ -140,7 +204,7 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
       invalidateAll();
       setConfirmOpen(false);
       setRejectOpen(false);
-      setRejectNote('');
+      clearRejectNote();
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Erro ao decidir.');
@@ -152,7 +216,7 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
     onSuccess: () => {
       invalidateAll();
       setCancelOpen(false);
-      setCancelReason('');
+      clearCancelReason();
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Erro ao cancelar.');

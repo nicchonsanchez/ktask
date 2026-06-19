@@ -790,7 +790,50 @@ export class CardsService {
     // includeTrashed: true porque o card que estamos restaurando esta com
     // deletedAt != null — sem isso a soft-delete extension esconde o card
     // do assertCardAccess e o endpoint sempre dispara 404.
-    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR', { includeTrashed: true });
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR', {
+      includeTrashed: true,
+    });
+
+    // Se a lista pai esta na lixeira (cenario comum: lista foi trashed, e os
+    // cards cascataram), restauramos a lista junto. Sem isso o card volta
+    // mas aponta pra uma lista invisivel — vira "card fantasma" no board.
+    // Caso o user tenha trashed a lista de proposito e queira so o card de
+    // volta, ainda pode mandar a lista pra lixeira de novo via /lixeira.
+    const parentList = await raw.list.findUnique({
+      where: { id: card.listId },
+      select: { id: true, deletedAt: true, boardId: true },
+    });
+    const restoredParent = parentList?.deletedAt !== null;
+    if (restoredParent && parentList) {
+      const last = await this.prisma.list.findFirst({
+        where: { boardId: parentList.boardId, isArchived: false },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      await raw.list.update({
+        where: { id: parentList.id },
+        data: {
+          deletedAt: null,
+          deletedById: null,
+          position: (last?.position ?? 0) + 1,
+        },
+      });
+      await this.prisma.activity.create({
+        data: {
+          organizationId: tenant.organizationId,
+          boardId: parentList.boardId,
+          actorId: userId,
+          type: 'LIST_RESTORED_FROM_TRASH',
+          payload: { listId: parentList.id, viaCard: cardId },
+        },
+      });
+      this.events.emit(EVENT_NAMES.LIST_UPDATED, {
+        boardId: parentList.boardId,
+        organizationId: tenant.organizationId,
+        actorId: userId,
+        listId: parentList.id,
+      });
+    }
 
     const updated = await raw.card.update({
       where: { id: cardId },
@@ -804,7 +847,7 @@ export class CardsService {
         cardId,
         actorId: userId,
         type: 'CARD_RESTORED_FROM_TRASH',
-        payload: { cardId },
+        payload: { cardId, parentListRestored: restoredParent },
       },
     });
 
@@ -847,7 +890,24 @@ export class CardsService {
       );
     }
 
+    // Coleta storageKeys dos attachments do card ANTES do delete pra evitar
+    // arquivos orfanados no MinIO/S3. CASCADE do Prisma apaga as linhas mas
+    // nao chama o S3 — sem isso, attachments acumulavam no bucket pra
+    // sempre. Inclui attachments de comments tambem (FK Attachment.cardId
+    // existe mesmo quando ha commentId).
+    const attachments = await this.prisma.attachment.findMany({
+      where: { cardId },
+      select: { storageKey: true },
+    });
+    const storageKeys = attachments.map((a) => a.storageKey).filter(Boolean);
+
     await raw.card.delete({ where: { id: cardId } });
+
+    // S3 cleanup depois do DB delete — se o S3 falhar, ao menos a row foi.
+    // deleteObjects eh tolerante a erro (logger.warn, nao throw).
+    if (storageKeys.length > 0) {
+      await this.storage.deleteObjects(storageKeys);
+    }
 
     await this.prisma.activity.create({
       data: {

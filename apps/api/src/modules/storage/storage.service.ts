@@ -1,5 +1,10 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'node:crypto';
 
@@ -137,6 +142,46 @@ export class StorageService {
       }),
     );
     return { key, publicUrl: this.publicUrlFor(key) };
+  }
+
+  /**
+   * Remove um objeto do bucket. Fire-and-forget: nao lanca se o objeto nao
+   * existir (S3 retorna 204 mesmo nesse caso). Storage desabilitado eh
+   * no-op — chamadores nao precisam saber se o S3 esta configurado.
+   *
+   * Use em cleanups de delete cascata (cards, attachments excluidos
+   * permanentemente). Sem isso, files ficavam orfanados no MinIO.
+   */
+  async deleteObject(key: string): Promise<void> {
+    if (!this.internalClient) return;
+    try {
+      await this.internalClient.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch (err) {
+      this.logger.warn(`deleteObject falhou pra key=${key}: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Batch delete (ate 1000 keys por chamada — limite da AWS). Itera
+   * em chunks pra suportar quantidades maiores sem repensar callers.
+   * Usado pelo cron de purge + deletePermanent de card/list.
+   */
+  async deleteObjects(keys: string[]): Promise<void> {
+    if (!this.internalClient || keys.length === 0) return;
+    const CHUNK = 1000;
+    for (let i = 0; i < keys.length; i += CHUNK) {
+      const slice = keys.slice(i, i + CHUNK);
+      try {
+        await this.internalClient.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: slice.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+      } catch (err) {
+        this.logger.warn(`deleteObjects falhou (${slice.length} keys): ${(err as Error).message}`);
+      }
+    }
   }
 }
 
