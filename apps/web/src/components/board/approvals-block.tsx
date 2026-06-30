@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Ban,
@@ -179,12 +179,17 @@ function PendingApprovalCard({ cardId, approval }: { cardId: string; approval: C
 
   // Se o user tem draft de reprovacao salvo e o componente monta com a
   // approval ainda pendente, abre o ConfirmModal automaticamente — assim ele
-  // ve o texto que estava escrevendo. Roda so na primeira render (eslint OK).
+  // ve o texto que estava escrevendo. Roda so na primeira render: nao
+  // colocamos rejectNote/cancelReason nas deps de proposito (queremos so
+  // o snapshot inicial). useRef pra travar o efeito pos-mount evita o
+  // hipotetico re-disparo se algum lint future habilitar exhaustive-deps.
+  const didInitDrafts = useRef(false);
   useEffect(() => {
+    if (didInitDrafts.current) return;
+    didInitDrafts.current = true;
     if (rejectNote) setRejectOpen(true);
     if (cancelReason) setCancelOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rejectNote, cancelReason]);
 
   const queryClient = useQueryClient();
   const me = useAuthStore((s) => s.user);
