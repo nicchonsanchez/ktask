@@ -82,6 +82,10 @@ export function markNotificationRead(id: string) {
   return api.post(`/api/v1/notifications/${id}/read`);
 }
 
+export function markNotificationUnread(id: string) {
+  return api.post(`/api/v1/notifications/${id}/unread`);
+}
+
 export function markAllNotificationsRead() {
   return api.post<{ count: number }>('/api/v1/notifications/read-all');
 }

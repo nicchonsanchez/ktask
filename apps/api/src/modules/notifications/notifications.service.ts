@@ -269,4 +269,18 @@ export class NotificationsService {
     });
     return { count: res.count };
   }
+
+  /**
+   * Reverte `isRead` pra false. Tipica acao via menu de contexto da
+   * notificacao quando o user ja marcou como lida mas quer voltar
+   * a destacar — ex: clicou sem ler de verdade. `readAt` vira null
+   * tambem pra coerencia (a notificacao nao foi "lida em" data X).
+   */
+  async markAsUnread(userId: string, notificationId: string) {
+    await this.prisma.notification.updateMany({
+      where: { id: notificationId, userId },
+      data: { isRead: false, readAt: null },
+    });
+    return { ok: true };
+  }
 }

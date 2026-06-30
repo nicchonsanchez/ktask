@@ -62,4 +62,10 @@ export class NotificationsController {
   markAllRead(@CurrentUser() user: AuthenticatedRequestContext) {
     return this.notifications.markAllAsRead(user.userId);
   }
+
+  @Post(':id/unread')
+  @ApiOperation({ summary: 'Marcar notificação como NÃO lida (reverte read)' })
+  markUnread(@CurrentUser() user: AuthenticatedRequestContext, @Param('id') id: string) {
+    return this.notifications.markAsUnread(user.userId, id);
+  }
 }

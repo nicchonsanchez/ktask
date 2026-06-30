@@ -19,11 +19,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@ktask/ui';
 import {
   markAllNotificationsRead,
   markNotificationRead,
+  markNotificationUnread,
   notificationsQueries,
   type NotificationItem,
 } from '@/lib/queries/notifications';
 import { formatRelativeTime } from '@/lib/prose';
 import { useRealtimeNotifications } from '@/hooks/use-realtime-board';
+import { NotificationContextMenu } from './notifications-context-menu';
 
 const ICONS: Record<
   NotificationItem['type'],
@@ -40,6 +42,14 @@ const ICONS: Record<
 
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
+  // Menu de contexto (right-click) — guarda qual notificacao + posicao do mouse.
+  // null = fechado. So uma instancia por vez (clicar em outra notificacao
+  // sobrescreve este state — comportamento normal de context menu).
+  const [contextMenu, setContextMenu] = useState<{
+    notif: NotificationItem;
+    x: number;
+    y: number;
+  } | null>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -53,6 +63,13 @@ export function NotificationsBell() {
 
   const readMut = useMutation({
     mutationFn: markNotificationRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+
+  const unreadMut = useMutation({
+    mutationFn: markNotificationUnread,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
@@ -109,7 +126,16 @@ export function NotificationsBell() {
               {items.map((n) => {
                 const Icon = ICONS[n.type] ?? Bell;
                 return (
-                  <li key={n.id} className={n.isRead ? '' : 'bg-primary-subtle/40'}>
+                  <li
+                    key={n.id}
+                    className={n.isRead ? '' : 'bg-primary-subtle/40'}
+                    onContextMenu={(e) => {
+                      // Right-click abre menu custom no lugar do nativo.
+                      // Afeta SO esta li (resto do app segue com menu nativo).
+                      e.preventDefault();
+                      setContextMenu({ notif: n, x: e.clientX, y: e.clientY });
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={() => {
@@ -162,6 +188,27 @@ export function NotificationsBell() {
           </Link>
         </div>
       </PopoverContent>
+
+      {contextMenu && (
+        <NotificationContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          url={contextMenu.notif.url}
+          isRead={contextMenu.notif.isRead}
+          onClose={() => setContextMenu(null)}
+          onOpenNewTab={() => {
+            // Marca como lida (alinhado com o click esquerdo) e abre noutra aba.
+            if (!contextMenu.notif.isRead) readMut.mutate(contextMenu.notif.id);
+            if (contextMenu.notif.url) {
+              window.open(contextMenu.notif.url, '_blank', 'noopener,noreferrer');
+            }
+          }}
+          onToggleRead={() => {
+            if (contextMenu.notif.isRead) unreadMut.mutate(contextMenu.notif.id);
+            else readMut.mutate(contextMenu.notif.id);
+          }}
+        />
+      )}
     </Popover>
   );
 }
