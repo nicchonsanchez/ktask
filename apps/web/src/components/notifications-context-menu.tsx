@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ExternalLink, Eye, EyeOff } from 'lucide-react';
 
 /**
@@ -38,6 +39,11 @@ export function NotificationContextMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
+  // SSR guard: createPortal precisa do document, que so existe no client.
+  // Sem isso, render server-side quebra ("document is not defined").
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   // Auto-flip nas bordas do viewport. Roda apos primeira render pra
   // poder medir o tamanho real do menu (rect.width/height).
   useEffect(() => {
@@ -71,10 +77,18 @@ export function NotificationContextMenu({
     };
   }, [onClose]);
 
-  return (
+  if (!mounted) return null;
+
+  // Portalizado direto pro <body> pra escapar do stacking context do
+  // Popover do Radix UI (que renderiza seus filhos num portal proprio com
+  // z-index alto). Sem o portal, o menu ficava ATRAS do popover de
+  // notificacoes apesar do position:fixed + zIndex 200 — o navegador
+  // respeita stacking contexts antes do z-index. zIndex 10000 garante
+  // ficar acima de dialogs, popovers e outras camadas custom.
+  return createPortal(
     <div
       ref={ref}
-      style={{ position: 'fixed', left: x, top: y, zIndex: 200 }}
+      style={{ position: 'fixed', left: x, top: y, zIndex: 10000 }}
       className="border-border bg-bg min-w-[200px] rounded-md border py-1 shadow-lg"
       role="menu"
       // Impede que o right-click DENTRO do proprio menu reabra outro menu
@@ -98,7 +112,8 @@ export function NotificationContextMenu({
           onClose();
         }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
