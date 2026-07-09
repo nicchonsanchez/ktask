@@ -103,6 +103,14 @@ export const DuplicateCardSchema = z
     /** Se omitido, duplica no mesmo board e lista do card original */
     targetBoardId: z.string().cuid().nullable().optional(),
     targetListId: z.string().cuid().nullable().optional(),
+    /**
+     * Descricao inicial pro card duplicado. So eh usada quando
+     * `copyDescription` NAO estiver true — se o user quer copiar a
+     * descricao do original, o override eh ignorado. Texto plano; o
+     * backend converte pra ProseMirror doc simples (1 paragrafo).
+     * Vazio/omitido = card nasce sem descricao.
+     */
+    descriptionOverride: z.string().max(5000).optional().nullable(),
   })
   .default({})
   .refine((v) => (!v.targetBoardId && !v.targetListId) || (!!v.targetBoardId && !!v.targetListId), {

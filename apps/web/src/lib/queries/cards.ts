@@ -199,6 +199,8 @@ export interface DuplicateCardOptions {
   count?: number;
   targetBoardId?: string | null;
   targetListId?: string | null;
+  /** Texto plano — so eh usado quando `copyDescription` NAO for true. */
+  descriptionOverride?: string | null;
 }
 
 export function duplicateCard(cardId: string, options: DuplicateCardOptions = {}) {

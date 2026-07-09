@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, Loader2, X } from 'lucide-react';
 
@@ -39,12 +40,19 @@ export function DuplicateCardDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [opts, setOpts] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(TOGGLES.map((t) => [t.key, t.defaultOn])),
   );
   const [count, setCount] = useState(1);
   const [boardSel, setBoardSel] = useState<BoardListItem | null>(null);
   const [listSel, setListSel] = useState<{ id: string; name: string } | null>(null);
+  // Rascunho de descricao pro card duplicado — so eh enviado quando o
+  // check "Descrição" (copyDescription) esta desmarcado. Se marcado, o
+  // textarea some e o valor eh ignorado no submit.
+  const [descriptionDraft, setDescriptionDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Reset ao reabrir
@@ -54,6 +62,7 @@ export function DuplicateCardDialog({
       setCount(1);
       setBoardSel(null);
       setListSel(null);
+      setDescriptionDraft('');
       setError(null);
     }
   }, [open]);
@@ -73,11 +82,24 @@ export function DuplicateCardDialog({
         count,
         targetBoardId: boardSel?.id ?? null,
         targetListId: listSel?.id ?? null,
+        // Envia descriptionOverride so quando o check copyDescription NAO
+        // esta ativo — se o user marcou "copiar descricao do original", o
+        // rascunho manual eh ignorado no backend.
+        descriptionOverride:
+          !opts.copyDescription && descriptionDraft.trim().length > 0 ? descriptionDraft : null,
       } as DuplicateCardOptions),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['boards'] });
       queryClient.invalidateQueries({ queryKey: cardsQueries.detail(card.id).queryKey });
       onOpenChange(false);
+      // Cópia unica -> navega pra ela (equivalente a clicar no card criado).
+      // Para N > 1 mantem o comportamento antigo (volta pro original) —
+      // abrir automaticamente a primeira de 10 seria estranho.
+      if (count === 1 && data.cards[0]) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('card', data.cards[0].id);
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      }
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Erro ao duplicar.');
@@ -131,13 +153,28 @@ export function DuplicateCardDialog({
 
           {/* Toggles */}
           {TOGGLES.map((t) => (
-            <label key={t.key} className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={!!opts[t.key]}
-                onChange={() => setOpts((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
-              />
-              <span>{t.label}</span>
-            </label>
+            <div key={t.key} className="flex flex-col gap-1.5">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox
+                  checked={!!opts[t.key]}
+                  onChange={() => setOpts((prev) => ({ ...prev, [t.key]: !prev[t.key] }))}
+                />
+                <span>{t.label}</span>
+              </label>
+              {/* Textarea de descricao inicial — so aparece pro check "Descrição"
+                  quando ele esta desmarcado. Se o user marca copiar, o campo some
+                  (nao faz sentido ter os dois). */}
+              {t.key === 'copyDescription' && !opts.copyDescription && (
+                <textarea
+                  value={descriptionDraft}
+                  onChange={(e) => setDescriptionDraft(e.target.value)}
+                  placeholder="Descrição inicial (opcional) — deixe em branco pra criar sem descrição"
+                  rows={3}
+                  maxLength={5000}
+                  className="border-border bg-bg-subtle focus-visible:ring-primary ml-6 resize-none rounded-md border px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2"
+                />
+              )}
+            </div>
           ))}
 
           {/* Vincular a outro fluxo */}

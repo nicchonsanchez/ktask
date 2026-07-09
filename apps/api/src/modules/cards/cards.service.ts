@@ -951,6 +951,8 @@ export class CardsService {
       count?: number;
       targetBoardId?: string | null;
       targetListId?: string | null;
+      /** Descricao inicial (texto plano) quando copyDescription != true. */
+      descriptionOverride?: string | null;
     } = {},
   ) {
     const count = Math.max(1, Math.min(options.count ?? 1, 10));
@@ -1063,10 +1065,19 @@ export class CardsService {
           boardId: destBoardId,
           listId: destListId,
           title: count > 1 ? `${source.title} (cópia ${i + 1})` : `${source.title} (cópia)`,
+          // Prioridade da descricao no card duplicado:
+          //   1. copyDescription === true  -> copia do original (JSON)
+          //   2. descriptionOverride       -> ProseMirror doc a partir do texto plano
+          //   3. resto                     -> undefined (sem descricao)
+          // Antes: copyDescription tinha o default `!== false`, entao copiava
+          // quando o campo era undefined. Agora exige `=== true` explicito
+          // pra copiar — o UI ja passa `false` pelo padrao do checkbox.
           description:
-            options.copyDescription !== false
+            options.copyDescription === true
               ? ((source.description ?? undefined) as Prisma.InputJsonValue | undefined)
-              : undefined,
+              : options.descriptionOverride && options.descriptionOverride.trim().length > 0
+                ? (plainTextToProseMirror(options.descriptionOverride) as Prisma.InputJsonValue)
+                : undefined,
           cardColor: source.cardColor,
           startDate: options.copyDueDate !== false ? source.startDate : null,
           dueDate: options.copyDueDate !== false ? source.dueDate : null,
@@ -2359,4 +2370,18 @@ export class CardsService {
 
     return { beforePos: before.position, afterPos: next?.position ?? null };
   }
+}
+
+/**
+ * Converte texto plano em doc ProseMirror simples (1 paragrafo por
+ * bloco separado por \n\n). Usado no duplicate quando o user informa
+ * `descriptionOverride`. Mesmo formato do plainTextToDoc do comments —
+ * mantido inline pra evitar dep cruzada entre modulos por 6 linhas.
+ */
+function plainTextToProseMirror(text: string): { type: 'doc'; content: unknown[] } {
+  const paragraphs = text.split(/\n{2,}/).map((p) => ({
+    type: 'paragraph',
+    content: p.length > 0 ? [{ type: 'text', text: p }] : [],
+  }));
+  return { type: 'doc', content: paragraphs };
 }
