@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -100,7 +101,7 @@ export class MessageTemplatesService {
    */
   private assertCanEdit(creatorId: string, userId: string, tenant: TenantContext) {
     if (creatorId === userId) return;
-    if (tenant.role === 'OWNER' || tenant.role === 'ADMIN') return;
+    if (canPermanentlyDelete(tenant.role)) return;
     throw new ForbiddenException('Sem permissão para editar este modelo.');
   }
 }

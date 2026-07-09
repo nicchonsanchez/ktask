@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
@@ -873,7 +874,7 @@ export class CardsService {
    *      nao deve ficar disponivel pra MEMBER/GESTOR.
    */
   async deletePermanent(userId: string, tenant: TenantContext, cardId: string) {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException(
         'Apenas OWNER ou ADMIN da organização podem excluir permanentemente.',
       );

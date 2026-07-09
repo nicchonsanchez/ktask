@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import type { Prisma, ContactType } from '@prisma/client';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -190,7 +191,7 @@ export class ImporterService {
    * NAO persiste nada — so devolve sugestao pra UI montar o passo 2.
    */
   async preview(tenant: TenantContext, body: ImportPreviewRequest): Promise<ImportPreviewResult> {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException('Apenas OWNER/ADMIN pode importar fluxos.');
     }
 
@@ -319,7 +320,7 @@ export class ImporterService {
     tenant: TenantContext,
     body: ImportExecuteRequest,
   ): Promise<ImportReport> {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException('Apenas OWNER/ADMIN pode importar fluxos.');
     }
 
@@ -1030,7 +1031,7 @@ export class ImporterService {
     tenant: TenantContext,
     body: ImportUmmenseRequest,
   ): Promise<ImportReport> {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException('Apenas OWNER/ADMIN pode importar fluxos.');
     }
 

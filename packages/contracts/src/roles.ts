@@ -38,6 +38,25 @@ export const ORG_ROLES_WITH_BOARD_BYPASS: readonly OrgRole[] = ['OWNER', 'ADMIN'
 export const ORG_ROLES_ADMIN_ORG: readonly OrgRole[] = ['OWNER', 'ADMIN'];
 
 /**
+ * Ator tem bypass administrativo em qualquer quadro da Org (dono/adm/gestor)?
+ * Usar em todo lugar que hoje tem `role === 'OWNER' || role === 'ADMIN' || role === 'GESTOR'`
+ * pra evitar drift — antes cada callsite reimplementava e alguns esqueciam GESTOR.
+ */
+export function isOrgAdmin(role: OrgRole): boolean {
+  return (ORG_ROLES_WITH_BOARD_BYPASS as readonly OrgRole[]).includes(role);
+}
+
+/**
+ * Ator pode executar operacoes IRREVERSIVEIS (excluir permanente, purge, deletar
+ * template de outro usuario etc.). Mais restrito que isOrgAdmin — deliberadamente
+ * exclui GESTOR (gestor gerencia dia-a-dia mas nao apaga). Alinha com
+ * ORG_ROLES_ADMIN_ORG. Use em vez de inline `role === 'OWNER' || role === 'ADMIN'`.
+ */
+export function canPermanentlyDelete(role: OrgRole): boolean {
+  return (ORG_ROLES_ADMIN_ORG as readonly OrgRole[]).includes(role);
+}
+
+/**
  * Teto por rank: verdadeiro se `actor` pode atribuir/definir papel `target`.
  * Regras extras (ex: ADMIN não rebaixa outro ADMIN) ficam no service de membership.
  */

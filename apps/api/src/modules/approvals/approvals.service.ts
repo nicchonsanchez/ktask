@@ -11,6 +11,8 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import type { ApprovalStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
+import { isOrgAdmin } from '@ktask/contracts';
+
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { CardStatusSyncService } from '@/modules/cards/card-status-sync';
@@ -996,8 +998,7 @@ export class ApprovalsService {
     }
 
     // Quem pode desfazer: o próprio decisor OU OWNER/ADMIN/GESTOR da Org.
-    const isPrivileged =
-      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const isPrivileged = isOrgAdmin(tenant.role);
     if (approval.decidedById !== userId && !isPrivileged) {
       throw new ForbiddenException('Sem permissão pra desfazer esta aprovação.');
     }
@@ -1194,8 +1195,7 @@ export class ApprovalsService {
         `Aprovação já foi ${approval.status.toLowerCase()} — não pode ser cancelada.`,
       );
     }
-    const isPrivileged =
-      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const isPrivileged = isOrgAdmin(tenant.role);
     if (approval.requestedById !== userId && !isPrivileged) {
       throw new ForbiddenException('Sem permissão pra cancelar este pedido.');
     }
@@ -1381,8 +1381,7 @@ export class ApprovalsService {
         `Aprovação já foi ${approval.status.toLowerCase()} — não pode ser reenviada.`,
       );
     }
-    const isPrivileged =
-      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const isPrivileged = isOrgAdmin(tenant.role);
     if (approval.requestedById !== userId && !isPrivileged) {
       throw new ForbiddenException('Sem permissão pra reenviar este pedido.');
     }
@@ -1572,8 +1571,7 @@ export class ApprovalsService {
     if (approval.status !== 'PENDING') {
       throw new BadRequestException('Só pedidos pendentes permitem remover revisor.');
     }
-    const isPrivileged =
-      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const isPrivileged = isOrgAdmin(tenant.role);
     if (approval.requestedById !== userId && !isPrivileged) {
       throw new ForbiddenException('Sem permissão pra remover revisor.');
     }

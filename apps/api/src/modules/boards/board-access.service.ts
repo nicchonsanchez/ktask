@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { BoardRole } from '@prisma/client';
+import { isOrgAdmin } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -101,11 +102,8 @@ export class BoardAccessService {
       throw new NotFoundException('Card não encontrado.');
     }
 
-    const isOrgAdmin =
-      tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
-
     // TEAM_ONLY: so lider, membros do card ou admin da Org veem.
-    if (card.privacy === 'TEAM_ONLY' && !isOrgAdmin) {
+    if (card.privacy === 'TEAM_ONLY' && !isOrgAdmin(tenant.role)) {
       const isLead = card.leadId === userId;
       const isMember = card.members.length > 0;
       if (!isLead && !isMember) {
@@ -153,7 +151,21 @@ export class BoardAccessService {
       }
     }
 
-    // Nenhum board acessivel
+    // Nenhum board acessivel — mesmo fallback que o TEAM_ONLY: se o user
+    // eh lead OU membro do card, deriva role efetivo do OrgRole. Cobre o
+    // cenario "adicionado como membro de card PUBLIC em board privado
+    // sem BoardMember entry" — antes ficava bloqueado (asimetria vs
+    // TEAM_ONLY). Regra: se voce foi convidado pra trabalhar no card,
+    // trabalha nele, independente do privacy setting do card.
+    const isLead = card.leadId === userId;
+    const isMember = card.members.length > 0;
+    if (isLead || isMember) {
+      const impliedRole: BoardRole = tenant.role === 'GUEST' ? 'VIEWER' : 'EDITOR';
+      if (hasAtLeastBoardRole(impliedRole, required)) {
+        return { role: impliedRole };
+      }
+    }
+
     throw lastError ?? new ForbiddenException('Sem acesso a nenhum quadro deste card.');
   }
 
@@ -164,7 +176,7 @@ export class BoardAccessService {
    * cards do membro nos boards que ele proprio tambem tem acesso.
    */
   async listAccessibleBoardIds(userId: string, tenant: TenantContext): Promise<string[]> {
-    const bypass = tenant.role === 'OWNER' || tenant.role === 'ADMIN' || tenant.role === 'GESTOR';
+    const bypass = isOrgAdmin(tenant.role);
     const where = bypass
       ? { organizationId: tenant.organizationId, isArchived: false }
       : {

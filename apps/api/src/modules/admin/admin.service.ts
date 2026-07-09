@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AutomationOutboxScope, AutomationTrigger } from '@prisma/client';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -820,7 +821,7 @@ export class AdminService {
   }
 
   private assertAdmin(tenant: TenantContext) {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException('Apenas OWNER ou ADMIN da organização pode ver stats.');
     }
   }

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isOrgAdmin } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -530,7 +531,7 @@ export class MeService {
    * veem so de boards onde sao membros OU boards com visibility=ORGANIZATION.
    */
   async getOrgRecentActivity(userId: string, org: TenantContext, limit = 10) {
-    const bypass = org.role === 'OWNER' || org.role === 'ADMIN' || org.role === 'GESTOR';
+    const bypass = isOrgAdmin(org.role);
     // Activity nao tem relacao direta com Board no Prisma; filtra via
     // boardId IN (...) calculando os acessiveis primeiro pra MEMBER/GUEST.
     let accessibleBoardIds: string[] | null = null;

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { computeInsertPosition } from '@/common/util/position';
@@ -92,7 +93,7 @@ export class ChecklistTemplatesService {
       throw new NotFoundException('Template não encontrado.');
     }
     // Só o criador ou OWNER/ADMIN da Org pode editar
-    if (tpl.createdById !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (tpl.createdById !== userId && !canPermanentlyDelete(tenant.role)) {
       throw new BadRequestException('Sem permissão pra editar este template.');
     }
     return this.prisma.checklistTemplate.update({
@@ -109,7 +110,7 @@ export class ChecklistTemplatesService {
     if (!tpl || tpl.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Template não encontrado.');
     }
-    if (tpl.createdById !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (tpl.createdById !== userId && !canPermanentlyDelete(tenant.role)) {
       throw new BadRequestException('Sem permissão pra remover este template.');
     }
     await this.prisma.checklistTemplate.delete({ where: { id } });

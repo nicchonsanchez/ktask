@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { isOrgAdmin } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -124,10 +125,11 @@ export class TasksService {
   ) {
     const isAssignee = task.assigneeId === userId;
     const isCreator = task.createdById === userId;
-    const isOrgAdmin = org.role === 'OWNER' || org.role === 'ADMIN';
-    if (!isAssignee && !isCreator && !isOrgAdmin) {
+    // Inclui GESTOR — gestor da equipe deve poder editar/marcar tarefas
+    // atribuidas a membros. Mesma logica de moderacao de time-tracking.
+    if (!isAssignee && !isCreator && !isOrgAdmin(org.role)) {
       throw new ForbiddenException(
-        'Apenas o assignee, o criador ou OWNER/ADMIN podem editar esta tarefa.',
+        'Apenas o assignee, o criador ou administradores podem editar esta tarefa.',
       );
     }
   }

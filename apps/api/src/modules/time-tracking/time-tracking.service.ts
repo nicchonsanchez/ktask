@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Prisma, TimeEntrySource } from '@prisma/client';
+import { isOrgAdmin } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -147,7 +148,7 @@ export class TimeTrackingService {
       throw new NotFoundException('Entry não encontrada.');
     }
 
-    if (entry.userId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (entry.userId !== userId && !isOrgAdmin(tenant.role)) {
       throw new ForbiddenException('Você só pode parar suas próprias entries.');
     }
 
@@ -216,7 +217,7 @@ export class TimeTrackingService {
     await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const targetUserId = input.userId && input.userId !== userId ? input.userId : userId;
-    if (targetUserId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (targetUserId !== userId && !isOrgAdmin(tenant.role)) {
       throw new ForbiddenException(
         'Apenas OWNER/ADMIN da organização pode lançar entries pra outro usuário.',
       );
@@ -262,7 +263,7 @@ export class TimeTrackingService {
     if (!entry || entry.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Entry não encontrada.');
     }
-    if (entry.userId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (entry.userId !== userId && !isOrgAdmin(tenant.role)) {
       throw new ForbiddenException('Sem permissão pra editar essa entry.');
     }
 
@@ -331,7 +332,7 @@ export class TimeTrackingService {
     if (!entry || entry.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Entry não encontrada.');
     }
-    if (entry.userId !== userId && tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (entry.userId !== userId && !isOrgAdmin(tenant.role)) {
       throw new ForbiddenException('Sem permissão pra remover essa entry.');
     }
 

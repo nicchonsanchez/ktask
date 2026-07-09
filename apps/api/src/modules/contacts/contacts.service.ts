@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { canPermanentlyDelete } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -225,7 +226,7 @@ export class ContactsService {
   }
 
   async remove(userId: string, tenant: TenantContext, id: string) {
-    if (tenant.role !== 'OWNER' && tenant.role !== 'ADMIN') {
+    if (!canPermanentlyDelete(tenant.role)) {
       throw new ForbiddenException('Apenas ADMIN+ pode remover contatos.');
     }
     const existing = await this.prisma.contact.findUnique({ where: { id } });

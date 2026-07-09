@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { isOrgAdmin } from '@ktask/contracts';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
@@ -137,12 +138,15 @@ export class AttachmentsService {
       throw new NotFoundException('Anexo não encontrado.');
     }
 
-    // Anexo de comment: dono do comment OU OWNER/ADMIN da Org.
+    // Anexo de comment: dono do comment OU quem tem bypass admin da Org
+    // (inclui GESTOR — moderacao de comentarios eh gestao do dia-a-dia,
+    // nao acao irreversivel; alinha com approvals.undo, etc).
     if (attachment.commentId && attachment.comment) {
       const isOwner = attachment.comment.authorId === userId;
-      const isOrgAdmin = tenant.role === 'OWNER' || tenant.role === 'ADMIN';
-      if (!isOwner && !isOrgAdmin) {
-        throw new ForbiddenException('Apenas o autor do comentário ou OWNER/ADMIN pode remover.');
+      if (!isOwner && !isOrgAdmin(tenant.role)) {
+        throw new ForbiddenException(
+          'Apenas o autor do comentário ou administradores podem remover.',
+        );
       }
     } else {
       // Anexo direto do card: requer EDITOR no board.
