@@ -111,18 +111,28 @@ export class BoardAccessService {
       if (!isLead && !isMember) {
         throw new ForbiddenException('Card privado — apenas líder e equipe.');
       }
-      // TEAM_ONLY: returna role do board primario pra honrar required
-      // (lider pode editar; membro pode comentar etc.). Se nao tiver
-      // acesso ao board primario, devolve EDITOR como minimo (lider sempre
-      // pode mexer no card; membros podem comentar). Mantemos verificacao
-      // de `required` abaixo via assertAccess.
+      // Preferencia 1: se tem acesso ao board (via BoardMember ou board
+      // ORGANIZATION), usa o role calculado pelo assertAccess (mais forte).
       try {
         return await this.assertAccess(userId, card.boardId, tenant, required);
       } catch {
-        // Lider/membro do card sem acesso ao board: ainda permite VIEWER
-        // (modal abre). EDITOR e acima exigem acesso ao board.
-        if (required === 'VIEWER') return { role: 'VIEWER' };
-        throw new ForbiddenException(`Permissão insuficiente (requer ${required}).`);
+        // Fallback: usuario foi adicionado explicitamente (lider ou membro)
+        // num card TEAM_ONLY, mas nao tem acesso ao board (ex: board
+        // PRIVATE sem BoardMember entry). Antes, o sistema permitia VIEWER
+        // e barrava tudo acima — quem foi convidado pro card via membro
+        // conseguia LER mas nao COMENTAR/editar, o que eh inconsistente:
+        // se voce foi adicionado pra trabalhar no card, deveria trabalhar
+        // nele. Agora deriva role efetivo do OrgRole (mesmo mapeamento do
+        // resolveBoardRole quando tem acesso normal ao board):
+        //   MEMBER -> EDITOR   (comenta, edita, anexa etc.)
+        //   GUEST  -> VIEWER   (so le)
+        // OWNER/ADMIN/GESTOR ja passaram por `isOrgAdmin` acima, entao
+        // aqui so sobram MEMBER e GUEST.
+        const impliedRole: BoardRole = tenant.role === 'GUEST' ? 'VIEWER' : 'EDITOR';
+        if (!hasAtLeastBoardRole(impliedRole, required)) {
+          throw new ForbiddenException(`Permissão insuficiente (requer ${required}).`);
+        }
+        return { role: impliedRole };
       }
     }
 
