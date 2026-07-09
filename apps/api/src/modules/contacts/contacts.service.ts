@@ -266,7 +266,8 @@ export class ContactsService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'VIEWER');
+    // Respeita TEAM_ONLY do card — nao basta ter acesso ao board.
+    await this.access.assertCardAccess(userId, cardId, tenant, 'VIEWER');
 
     const links = await this.prisma.cardContact.findMany({
       where: { cardId },
@@ -296,7 +297,9 @@ export class ContactsService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    // TEAM_ONLY: quem esta na equipe do card pode vincular contato/cliente,
+    // mesmo sem acesso ao board (era assertAccess).
+    await this.access.assertCardAccess(userId, cardId, tenant, 'EDITOR');
 
     let contactId: string;
 
@@ -406,7 +409,7 @@ export class ContactsService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    await this.access.assertCardAccess(userId, cardId, tenant, 'EDITOR');
 
     await this.prisma.cardContact
       .delete({ where: { cardId_contactId: { cardId, contactId } } })

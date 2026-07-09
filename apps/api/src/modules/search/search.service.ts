@@ -41,16 +41,18 @@ export class SearchService {
 
     const bypass = (ORG_ROLES_WITH_BOARD_BYPASS as readonly string[]).includes(tenant.role);
 
-    // Boards visíveis ao user (mesma regra de listForUser)
+    // Boards visíveis ao user (mesma regra de listForUser).
+    // GUEST inclusive ve boards ORGANIZATION: bate com resolveBoardRole
+    // (GUEST -> VIEWER em qualquer board ORG), me.service, board-access,
+    // time-tracking. Antes o search excluia GUEST de ORG, criando
+    // inconsistencia: GUEST via boards ORG no sidebar mas nao achava via
+    // busca global. Alinhado com o resto do sistema.
     const boardWhereBase: Prisma.BoardWhereInput = bypass
       ? { organizationId: tenant.organizationId, isArchived: false }
       : {
           organizationId: tenant.organizationId,
           isArchived: false,
-          OR: [
-            { members: { some: { userId } } },
-            ...(tenant.role !== 'GUEST' ? [{ visibility: 'ORGANIZATION' as const }] : []),
-          ],
+          OR: [{ members: { some: { userId } } }, { visibility: 'ORGANIZATION' as const }],
         };
 
     const visibleBoards = await this.prisma.board.findMany({

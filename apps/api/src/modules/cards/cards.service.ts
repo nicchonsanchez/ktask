@@ -975,7 +975,18 @@ export class CardsService {
     if (!source || source.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, source.boardId, tenant, 'EDITOR');
+    // Acesso ao card FONTE: precisa poder LER o card pra duplicar (exfiltrar
+    // titulo/desc/checklists). VIEWER eh suficiente; antes usava assertAccess
+    // no board, permitindo EDITOR do board duplicar card TEAM_ONLY do qual
+    // nao faz parte da equipe. Duplicacao no board destino segue exigindo
+    // EDITOR do board destino (linha 999 quando `targetBoardId` mudou, ou
+    // implicito abaixo quando eh mesmo board — vamos garantir EDITOR ali).
+    await this.access.assertCardAccess(userId, source.id, tenant, 'VIEWER');
+    // EDITOR no board fonte apenas se o destino for o proprio board fonte
+    // (default). Se mudou de board, o check do destino abaixo cobre.
+    if (!options.targetBoardId) {
+      await this.access.assertAccess(userId, source.boardId, tenant, 'EDITOR');
+    }
 
     // Resolve destino: por padrão é o mesmo board/lista do card original.
     let destBoardId = source.boardId;
@@ -1998,6 +2009,13 @@ export class CardsService {
     input: { toListId: string; afterCardId?: string | null; beforeCardId?: string | null },
   ) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    // Precisa checar acesso ao CARD (nao so ao board) pra respeitar TEAM_ONLY.
+    // Sem isso qualquer EDITOR do board conseguia mover card privado que nao
+    // faz parte da equipe — hijack de fluxo. `assertCardAccess` cobre TEAM_ONLY
+    // (lead/member) + delega pro `assertAccess` no board pra checar EDITOR.
+    await this.access.assertCardAccess(userId, cardId, tenant, 'EDITOR');
+    // Alem do card, quem move dentro de UM fluxo especifico precisa ter EDITOR
+    // NAQUELE board — mover num fluxo onde voce nao tem acesso nao faz sentido.
     await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
 
     const presence = await this.prisma.cardPresence.findUnique({
@@ -2189,9 +2207,11 @@ export class CardsService {
    */
   async setPrimaryFlow(userId: string, tenant: TenantContext, cardId: string, boardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
-    // EDITOR nos DOIS boards: no novo (pra "assumir" como primário) e no
-    // antigo (pra "abrir mão"). Sem isso, user que tem acesso só ao novo
-    // poderia "sequestrar" o card de um board onde nao tem permissao.
+    // Precisa ser EDITOR do CARD (respeita TEAM_ONLY — sem isso qualquer
+    // EDITOR do board destino conseguia sequestrar card privado onde nao
+    // esta na equipe) + EDITOR nos DOIS boards (novo pra assumir, antigo
+    // pra abrir mao).
+    await this.access.assertCardAccess(userId, cardId, tenant, 'EDITOR');
     await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
     await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
 
@@ -2249,6 +2269,9 @@ export class CardsService {
    */
   async unlinkFromFlow(userId: string, tenant: TenantContext, cardId: string, boardId: string) {
     const card = await this.getCardOrThrow(cardId, tenant.organizationId);
+    // Precisa ser EDITOR do card (respeita TEAM_ONLY) + EDITOR no board
+    // do fluxo alvo pra confirmar que faz sentido desvincular ali.
+    await this.access.assertCardAccess(userId, cardId, tenant, 'EDITOR');
     await this.access.assertAccess(userId, boardId, tenant, 'EDITOR');
 
     if (boardId === card.boardId) {

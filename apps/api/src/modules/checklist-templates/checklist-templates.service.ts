@@ -65,7 +65,11 @@ export class ChecklistTemplatesService {
     if (!checklist || checklist.card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Checklist não encontrada.');
     }
-    await this.access.assertAccess(userId, checklist.card.boardId, tenant, 'EDITOR');
+    // Ler os itens do card fonte pra extrair template respeita TEAM_ONLY:
+    // antes usava assertAccess do board, permitindo EDITOR do board salvar
+    // template a partir de checklist de card privado do qual nao faz parte.
+    // VIEWER eh suficiente (leitura); nao muda nada no card fonte.
+    await this.access.assertCardAccess(userId, checklist.card.id, tenant, 'VIEWER');
 
     const items = checklist.items.map((i) => i.text).filter((t) => t.length > 0);
     if (items.length === 0) {
@@ -130,7 +134,9 @@ export class ChecklistTemplatesService {
     if (!card || card.organizationId !== tenant.organizationId) {
       throw new NotFoundException('Card não encontrado.');
     }
-    await this.access.assertAccess(userId, card.boardId, tenant, 'EDITOR');
+    // Aplicar template escreve no card destino — precisa EDITOR do card
+    // (respeita TEAM_ONLY, alem do board). Antes usava so o board.
+    await this.access.assertCardAccess(userId, card.id, tenant, 'EDITOR');
 
     const items = (tpl.items as unknown as string[]) || [];
 
