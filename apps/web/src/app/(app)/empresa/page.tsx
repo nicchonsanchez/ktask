@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Users, Building2, Eye, ChevronRight, Clock, ShieldCheck } from 'lucide-react';
+import { Users, Building2, Eye, ChevronRight, Clock, ShieldCheck, UserPlus } from 'lucide-react';
 import type { OrgRole } from '@ktask/contracts';
-import { ORG_ROLE_LABELS } from '@ktask/contracts';
+import { ORG_ROLE_LABELS, ORG_ROLES_ADMIN_ORG } from '@ktask/contracts';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { orgMembersSummaryQuery, type MemberSummaryRow } from '@/lib/queries/user-view';
@@ -53,6 +53,12 @@ export default function EmpresaPage() {
   });
 
   const isPrivileged = orgQuery.data ? PRIVILEGED_ROLES.includes(orgQuery.data.myRole) : false;
+  // Convite eh permissao mais estreita que "privileged" — GESTOR nao convida
+  // (backend enforca via @RequireOrgRole('ADMIN')). Mesma constante que
+  // reference "administrar a Org (convidar, integracoes, billing)".
+  const canInvite = orgQuery.data
+    ? (ORG_ROLES_ADMIN_ORG as readonly OrgRole[]).includes(orgQuery.data.myRole)
+    : false;
 
   const summaryQuery = useQuery({
     ...orgMembersSummaryQuery,
@@ -92,13 +98,28 @@ export default function EmpresaPage() {
       </div>
 
       <section className="mt-10">
-        <div className="mb-3 flex items-baseline justify-between">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-fg-muted text-sm font-semibold uppercase tracking-wide">Membros</h2>
-          <span className="text-fg-subtle text-[11px]">
-            {isPrivileged
-              ? 'Veja contadores ou abra a visão de tarefas do membro.'
-              : 'Clique pra ver o timesheet do membro.'}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-fg-subtle text-[11px]">
+              {isPrivileged
+                ? 'Veja contadores ou abra a visão de tarefas do membro.'
+                : 'Clique pra ver o timesheet do membro.'}
+            </span>
+            {/* Atalho pra tela de convite. So aparece pra OWNER/ADMIN pra
+                bater com o guard do backend (@RequireOrgRole('ADMIN')) —
+                GESTOR nao convida. Sem esse atalho, admin precisava ir em
+                Configuracoes -> Membros. */}
+            {canInvite && (
+              <Link
+                href="/configuracoes/membros"
+                className="bg-primary text-primary-fg hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              >
+                <UserPlus size={13} />
+                Adicionar membro
+              </Link>
+            )}
+          </div>
         </div>
         <div className="border-border bg-bg-subtle overflow-hidden rounded-lg border">
           {membersQuery.isLoading ? (
