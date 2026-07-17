@@ -22,19 +22,16 @@ import { ApiError } from '@/lib/api-client';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { UserAvatar } from '@/components/user-avatar';
 import { MemberDetailModal } from '@/components/settings/member-detail-modal';
+import { PhoneInput, getCountry, toE164 } from '@/components/settings/phone-input';
 
 const InviteSchema = z.object({
   email: z.string().email('E-mail inválido.').toLowerCase().trim(),
   role: OrgRoleSchema.exclude(['OWNER']),
-  // Doc 35: telefone opcional pra envio via WhatsApp em paralelo ao email.
-  // Campo livre — sanitizamos client-side antes de enviar; backend revalida.
-  phone: z
-    .string()
-    .optional()
-    .refine(
-      (v) => !v || v.replace(/\D/g, '').length >= 10,
-      'Telefone precisa de DDI+DDD+número (mín. 10 dígitos).',
-    ),
+  // Pais controla o DDI (default BR = +55). Guardado como ISO alpha-2.
+  country: z.string().length(2).default('BR'),
+  // Numero LOCAL do usuario (DDD + numero, sem DDI) — o backend recebe
+  // o E.164 sem '+' combinado no submit. Vazio = sem WhatsApp.
+  phoneLocal: z.string().optional(),
 });
 type InviteInput = z.infer<typeof InviteSchema>;
 
@@ -172,27 +169,50 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<InviteInput>({
     resolver: zodResolver(InviteSchema),
-    defaultValues: { role: 'MEMBER' },
+    defaultValues: { role: 'MEMBER', country: 'BR', phoneLocal: '' },
   });
 
+  const country = watch('country') ?? 'BR';
+  const phoneLocal = watch('phoneLocal') ?? '';
+
   const mut = useMutation({
-    mutationFn: (input: InviteInput) =>
-      inviteMember({
+    mutationFn: (input: InviteInput) => {
+      const localDigits = (input.phoneLocal ?? '').replace(/\D/g, '');
+      // Valida no submit em vez de no schema — evita mensagem enquanto o
+      // usuario ainda esta digitando. Vazio = sem WhatsApp (permitido).
+      if (localDigits.length > 0) {
+        const c = getCountry(input.country);
+        if (localDigits.length < c.minDigits) {
+          throw new Error(
+            `Telefone precisa de ${c.minDigits}${c.minDigits !== c.maxDigits ? '-' + c.maxDigits : ''} dígitos para ${c.name}.`,
+          );
+        }
+      }
+      return inviteMember({
         email: input.email,
         role: input.role,
-        phone: input.phone?.replace(/\D/g, '') || undefined,
-      }),
+        phone: localDigits ? toE164(input.country, localDigits) : undefined,
+      });
+    },
     onSuccess: (res) => {
       setLastToken(res.rawToken);
       setSubmitError(null);
-      reset();
+      reset({ role: 'MEMBER', country: 'BR', phoneLocal: '', email: '' });
       onInvited();
     },
     onError: (err) => {
-      setSubmitError(err instanceof ApiError ? err.message : 'Falha ao enviar convite.');
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Falha ao enviar convite.';
+      setSubmitError(msg);
     },
   });
 
@@ -206,7 +226,7 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
       onSubmit={handleSubmit((v) => mut.mutate(v))}
       className="border-border bg-bg-subtle rounded-lg border p-4"
     >
-      <div className="grid gap-3 sm:grid-cols-[1fr_180px_180px_auto]">
+      <div className="grid gap-3 sm:grid-cols-[1fr_220px_180px_auto]">
         <div className="flex flex-col gap-1">
           <Label htmlFor="invite-email">E-mail</Label>
           <Input
@@ -222,14 +242,14 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
           <Label htmlFor="invite-phone">
             WhatsApp <span className="text-fg-subtle text-[10px]">(opcional)</span>
           </Label>
-          <Input
+          {/* Pais + numero local separados. O submit combina em E.164 (sem +). */}
+          <PhoneInput
             id="invite-phone"
-            type="tel"
-            placeholder="5531999999999"
-            error={!!errors.phone}
-            {...register('phone')}
+            country={country}
+            onCountryChange={(c) => setValue('country', c, { shouldDirty: true })}
+            value={phoneLocal}
+            onChange={(digits) => setValue('phoneLocal', digits, { shouldDirty: true })}
           />
-          {errors.phone && <p className="text-danger text-xs">{errors.phone.message}</p>}
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="invite-role">Papel</Label>
