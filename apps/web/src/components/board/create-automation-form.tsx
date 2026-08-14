@@ -32,12 +32,9 @@ import { VarTextarea, type TemplateVar } from './var-textarea';
 import { MessageTemplateButtons } from './message-template-buttons';
 import { ConditionsBuilder } from './conditions-builder';
 import { NestedAutomationButton, type NestedAutomationDraft } from './nested-automation-popover';
-import {
-  ChecklistAssigneePicker,
-  ChecklistDueDatePicker,
-  ChecklistPriorityPicker,
-} from './checklist-item-pickers';
+import { ChecklistAssigneePicker, ChecklistPriorityPicker } from './checklist-item-pickers';
 import { RecurrencePicker } from './recurrence-picker';
+import { AutomationDueModePicker } from './automation-due-mode-picker';
 
 const COMMENT_VARS: TemplateVar[] = [
   { token: '{{card.title}}', label: 'Título do card' },
@@ -1414,11 +1411,6 @@ function ChecklistItemRow({
       }
     : null;
 
-  // Data fixa (FIXED_DATE) eh o unico modo editavel via UI no picker do
-  // card. Modos legacy (OFFSET_FROM_*) ficam invisiveis no picker mas o
-  // backend continua suportando.
-  const dueDateForPicker = item.dueMode === 'FIXED_DATE' ? item.dueDate || null : null;
-
   return (
     <li className="group/item border-border/60 hover:border-border bg-bg relative flex items-center gap-1 rounded-md border px-2 py-1.5">
       <input
@@ -1435,16 +1427,22 @@ function ChecklistItemRow({
         className="flex-1 bg-transparent text-sm focus:outline-none"
       />
 
-      {/* Mesmos pickers usados em uma tarefa real do card. */}
-      <ChecklistDueDatePicker
-        dueDate={dueDateForPicker}
-        onChange={(iso) => {
-          if (iso) {
-            onPatch({ dueMode: 'FIXED_DATE', dueDate: iso, dueOffsetDays: 0 });
-          } else {
-            onPatch({ dueMode: 'NONE', dueDate: '', dueOffsetDays: 0 });
-          }
+      {/* Picker com todos os modos (dinamicos + fixo). O picker de tarefa
+          REAL do card (ChecklistDueDatePicker) continua so aceitando data
+          absoluta — nao eh usado aqui. */}
+      <AutomationDueModePicker
+        value={{
+          dueMode: item.dueMode,
+          dueOffsetDays: item.dueOffsetDays,
+          dueDate: item.dueDate,
         }}
+        onChange={(next) =>
+          onPatch({
+            dueMode: next.dueMode,
+            dueOffsetDays: next.dueOffsetDays,
+            dueDate: next.dueDate,
+          })
+        }
       />
       <ChecklistPriorityPicker
         priority={item.itemPriority}
