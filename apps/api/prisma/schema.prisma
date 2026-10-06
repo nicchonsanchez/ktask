@@ -143,6 +143,8 @@ enum ActivityType {
   CONTACT_UNLINKED_FROM_USER
   MEMBER_NAME_CHANGED
   MEMBER_EMAIL_CHANGE_REQUESTED
+  MEMBER_EMAIL_CHANGED
+  MEMBER_EMAIL_CHANGE_CANCELLED
   MEMBER_PHONE_CHANGED
   MEMBER_PASSWORD_RESET_FORCED
   MEMBER_PASSWORD_RESET_SENT
@@ -265,8 +267,8 @@ model User {
   suspendedAt               DateTime?
   suspendedReason           String?
   /// Pendencia de troca de email: novo email aguardando confirmacao via
-  /// link enviado pro proprio user. Quando user clica, sistema move
-  /// pendingEmail -> email e limpa pendingEmail. Anti-sequestro.
+  /// link enviado pro NOVO endereco (EmailChangeToken). Quando user clica,
+  /// sistema move pendingEmail -> email e limpa pendingEmail. Anti-sequestro.
   pendingEmail              String?
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
@@ -308,6 +310,7 @@ model User {
   approvalReviews           CardApprovalReviewer[] @relation("CardApprovalReviewer")
   messageTemplates          MessageTemplate[]
   passwordResetTokens       PasswordResetToken[]
+  emailChangeTokens         EmailChangeToken[]
   whatsappOutbox            WhatsappOutbox[]
   /// Contact vinculado (1:1 via Contact.userId). Quando existe, no CRM
   /// o User aparece como entrada de Contact com identidade vinda do User.
@@ -368,6 +371,28 @@ model WhatsappOutbox {
   @@index([userId, sentAt])
   /// Cap por org / hora
   @@index([organizationId, sentAt])
+}
+
+/// Doc 53: confirmacao de troca de email pedida por admin. Link vai pro
+/// NOVO endereco (prova de posse). Expira em 48h; single-use (usedAt).
+/// Reenviar/cancelar invalida os pendentes (usedAt = now). Token raw vai
+/// pro email, hash sha256 fica no DB.
+model EmailChangeToken {
+  id             String    @id @default(cuid())
+  userId         String
+  newEmail       String
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  /// Org e admin que pediram — Activity de confirmacao cai nessa Org.
+  organizationId String
+  requestedById  String
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 /// Doc 43: token de recuperacao de senha. Gerado quando user pede

@@ -23,6 +23,8 @@ import {
  *   GET   /v1/admin/members/:userId          -> detalhe completo (modal)
  *   GET   /v1/admin/members/:userId/activity -> ultimas N actions
  *   PATCH /v1/admin/members/:userId          -> nome/phone/email (com fluxo de confirmacao)
+ *   POST  /v1/admin/members/:userId/email-change/resend
+ *   POST  /v1/admin/members/:userId/email-change/cancel
  *   POST  /v1/admin/members/:userId/force-password-reset
  *   POST  /v1/admin/members/:userId/suspend
  *   POST  /v1/admin/members/:userId/unsuspend
@@ -59,6 +61,26 @@ export class MembersAdminController {
     @Body(new ZodValidationPipe(UpdateMemberSchema)) body: UpdateMemberRequest,
   ) {
     return this.service.update(actor.userId, org, userId, body);
+  }
+
+  @Post(':userId/email-change/resend')
+  @ApiOperation({ summary: 'Reenvia link de confirmacao da troca de email pendente' })
+  resendEmailChange(
+    @CurrentUser() actor: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('userId') userId: string,
+  ) {
+    return this.service.resendEmailChange(actor.userId, org, userId);
+  }
+
+  @Post(':userId/email-change/cancel')
+  @ApiOperation({ summary: 'Cancela troca de email pendente e invalida links enviados' })
+  cancelEmailChange(
+    @CurrentUser() actor: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('userId') userId: string,
+  ) {
+    return this.service.cancelEmailChange(actor.userId, org, userId);
   }
 
   @Post(':userId/force-password-reset')

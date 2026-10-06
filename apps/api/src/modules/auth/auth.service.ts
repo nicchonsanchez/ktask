@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import type { Prisma } from '@prisma/client';
 
 import { env } from '@/config/env';
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -437,6 +438,133 @@ export class AuthService {
 
     this.logger.log(`[resetPassword] senha redefinida pra ${record.user.email}`);
     return { ok: true };
+  }
+
+  /**
+   * Doc 53: gera token de confirmacao de troca de email e envia o link pro
+   * NOVO endereco (prova de posse — anti-sequestro). Invalida links
+   * pendentes anteriores do mesmo user, entao so o ultimo link vale.
+   *
+   * Diferente do reset de senha, aguarda o envio: o retorno `sent` diz pro
+   * admin se o email saiu (SMTP fora do ar nao pode virar silencio).
+   */
+  async dispatchEmailChangeConfirmation(params: {
+    user: { id: string; name: string };
+    newEmail: string;
+    organizationId: string;
+    requestedById: string;
+  }): Promise<{ sent: boolean; expiresAt: Date }> {
+    const { user, newEmail, organizationId, requestedById } = params;
+    const rawToken = this.tokens.generate();
+    const tokenHash = this.tokens.hash(rawToken);
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60_000); // 48h
+
+    await this.prisma.$transaction([
+      this.prisma.emailChangeToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.emailChangeToken.create({
+        data: { userId: user.id, newEmail, tokenHash, expiresAt, organizationId, requestedById },
+      }),
+    ]);
+
+    const confirmUrl = `${env.APP_URL.replace(/\/$/, '')}/confirmar-email/${rawToken}`;
+    const sent = await this.mail
+      .sendEmailChangeConfirmation({ to: newEmail, name: user.name, confirmUrl, expiresAt })
+      .catch((err: Error) => {
+        this.logger.error(`[emailChange] mail failed pra ${newEmail}: ${err.message}`);
+        return false;
+      });
+    this.logger.log(
+      `[emailChange] link ${sent ? 'enviado' : 'NAO enviado'} pra ${newEmail} (user ${user.id})`,
+    );
+    return { sent, expiresAt };
+  }
+
+  /** Doc 53: invalida links de troca de email pendentes do user. */
+  async invalidateEmailChangeTokens(userId: string): Promise<void> {
+    await this.prisma.emailChangeToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  /**
+   * Doc 53: valida token e efetiva a troca (pendingEmail -> email). Rota
+   * publica — quem tem o link provou posse do novo endereco. Sessoes nao
+   * sao revogadas (troca de email nao e incidente de seguranca).
+   */
+  async confirmEmailChange(params: { token: string }): Promise<{ ok: true; email: string }> {
+    const tokenHash = this.tokens.hash(params.token);
+    const record = await this.prisma.emailChangeToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          select: { id: true, email: true, pendingEmail: true, deletedAt: true, suspendedAt: true },
+        },
+      },
+    });
+    if (!record) {
+      throw new BadRequestException('Link inválido ou expirado.');
+    }
+    if (record.usedAt) {
+      throw new BadRequestException(
+        'Este link já foi usado ou foi substituído por um mais recente.',
+      );
+    }
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException('Link expirado. Peça ao administrador para reenviar.');
+    }
+    if (record.user.deletedAt || record.user.suspendedAt) {
+      throw new BadRequestException('Conta indisponível.');
+    }
+    if (record.user.pendingEmail !== record.newEmail) {
+      // Admin cancelou ou trocou o destino depois que este link saiu.
+      throw new BadRequestException('Esta troca de e-mail foi cancelada.');
+    }
+    const taken = await this.prisma.user.findUnique({
+      where: { email: record.newEmail },
+      select: { id: true },
+    });
+    if (taken && taken.id !== record.userId) {
+      throw new ConflictException('Este e-mail já está em uso por outra conta.');
+    }
+
+    const oldEmail = record.user.email;
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { email: record.newEmail, pendingEmail: null },
+      }),
+      this.prisma.emailChangeToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.activity.create({
+        data: {
+          organizationId: record.organizationId,
+          actorId: record.userId,
+          type: 'MEMBER_EMAIL_CHANGED',
+          payload: {
+            targetUserId: record.userId,
+            from: oldEmail,
+            to: record.newEmail,
+            requestedById: record.requestedById,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      }),
+    ]);
+
+    this.events.emit(SP_EVENT_NAMES.USUARIO_EMAIL_ALTERADO, {
+      userId: record.userId,
+      emailAntigo: oldEmail,
+      emailNovo: record.newEmail,
+    });
+    this.logger.log(
+      `[emailChange] user ${record.userId} confirmou: ${oldEmail} -> ${record.newEmail}`,
+    );
+    return { ok: true, email: record.newEmail };
   }
 
   // -----------------------------------------------------------------

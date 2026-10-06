@@ -47,8 +47,29 @@ export interface UpdateMemberInput {
   phone?: string | null;
 }
 
+export interface UpdateMemberResult {
+  ok: boolean;
+  changed: boolean;
+  /** Presente quando o email mudou: link de confirmação enviado pro novo endereço. */
+  emailChange?: { to: string; sent: boolean };
+}
+
 export function updateMember(userId: string, input: UpdateMemberInput) {
-  return api.patch(`/api/v1/admin/members/${userId}`, input);
+  return api.patch<UpdateMemberResult>(`/api/v1/admin/members/${userId}`, input);
+}
+
+/** Doc 53: reenvia o link de confirmação da troca de e-mail pendente. */
+export function resendEmailChange(userId: string) {
+  return api.post<{ ok: boolean; sent: boolean; message: string }>(
+    `/api/v1/admin/members/${userId}/email-change/resend`,
+  );
+}
+
+/** Doc 53: cancela a troca de e-mail pendente e invalida os links enviados. */
+export function cancelEmailChange(userId: string) {
+  return api.post<{ ok: boolean; changed: boolean }>(
+    `/api/v1/admin/members/${userId}/email-change/cancel`,
+  );
 }
 
 export function forcePasswordReset(userId: string) {

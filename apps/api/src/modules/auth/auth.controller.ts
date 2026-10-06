@@ -46,6 +46,12 @@ const ResetPasswordSchema = z.object({
 });
 type ResetPasswordRequest = z.infer<typeof ResetPasswordSchema>;
 
+// Doc 53: confirmacao de troca de email
+const ConfirmEmailChangeSchema = z.object({
+  token: z.string().min(10),
+});
+type ConfirmEmailChangeRequest = z.infer<typeof ConfirmEmailChangeSchema>;
+
 const REFRESH_COOKIE_NAME = 'ktask_refresh';
 
 function cookieOptions(expires?: Date) {
@@ -142,6 +148,17 @@ export class AuthController {
     @Body(new ZodValidationPipe(ResetPasswordSchema)) body: ResetPasswordRequest,
   ) {
     return this.auth.resetPassword({ token: body.token, newPassword: body.newPassword });
+  }
+
+  @Public()
+  @Post('confirm-email-change')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 900_000, limit: 5 } })
+  @ApiOperation({ summary: 'Doc 53: confirma troca de email com token enviado pro novo endereco' })
+  async confirmEmailChange(
+    @Body(new ZodValidationPipe(ConfirmEmailChangeSchema)) body: ConfirmEmailChangeRequest,
+  ) {
+    return this.auth.confirmEmailChange({ token: body.token });
   }
 
   @Public()
