@@ -122,6 +122,15 @@ export class PerformanceController {
     return this.report.events(org, toFilters(q), q.metric, q.page, q.pageSize);
   }
 
+  @Get('flow')
+  @ApiOperation({ summary: 'Fluxo do trabalho por quadro (recebidos, tempo por etapa...)' })
+  flow(
+    @CurrentOrg() org: TenantContext,
+    @Query(new ZodValidationPipe(PerformanceFiltersSchema)) q: PerformanceFiltersQuery,
+  ) {
+    return this.report.flow(org, toFilters(q));
+  }
+
   @Get('cards')
   @ApiOperation({ summary: 'Drill-down de "Cards trabalhados" (cards distintos)' })
   cards(

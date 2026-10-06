@@ -557,3 +557,48 @@ export interface GoalDto {
   needsConfig: string | null;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Fluxo do trabalho por quadro (Fase 5, spec §15 — Atendimento/Desenvolvimento)
+// ---------------------------------------------------------------------------
+
+/**
+ * Indicadores do FLUXO (nao da pessoa): contam movimentos de qualquer
+ * origem exceto importacao — tempo numa coluna e fato, independe de quem
+ * moveu. Classificacao (iniciado/aguardando/devolvido/concluido) usa a
+ * configuracao vigente na data de cada evento.
+ */
+export interface FlowStageTime {
+  listId: string;
+  name: string;
+  /** Media de horas que os cards ficaram na coluna (saidas no periodo). */
+  avgHours: number;
+  samples: number;
+}
+
+export interface FlowBoardMetrics {
+  board: { id: string; name: string; color: string | null };
+  level: PerformanceConfigLevel;
+  /** Cards que entraram no fluxo no periodo (criados ou vinculados). */
+  received: number;
+  /** Cards que sairam de "Entrada" pra trabalho no periodo (1a vez). */
+  started: number;
+  /** Entradas em coluna "Aguardando cliente/terceiro" no periodo. */
+  waitingEntries: number;
+  /** Cards ativos agora em coluna "Aguardando". */
+  waitingNow: number;
+  /** Retrocessos no periodo (devolucoes). */
+  returned: number;
+  completed: number;
+  reopened: number;
+  /** Media de horas da entrada no fluxo ate o inicio (1o atendimento). */
+  avgFirstResponseHours: number | null;
+  /** Media de horas da entrada no fluxo ate a conclusao. */
+  avgCycleHours: number | null;
+  stages: FlowStageTime[];
+}
+
+export interface PerformanceFlowResponse {
+  period: { from: string; to: string };
+  boards: FlowBoardMetrics[];
+}

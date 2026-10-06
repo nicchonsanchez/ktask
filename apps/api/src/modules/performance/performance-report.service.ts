@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  performanceConfigLevel,
   PERFORMANCE_ACTION_TYPES,
   PERFORMANCE_MAX_RANGE_DAYS,
+  type FlowBoardMetrics,
+  type PerformanceFlowResponse,
   type PerformanceArea,
   type PerformanceCardsResponse,
   type PerformanceColumnConfig,
@@ -15,7 +18,7 @@ import {
 import { PrismaService } from '@/common/prisma/prisma.service';
 import type { TenantContext } from '@/common/tenant/tenant.types';
 
-import type { PerformanceConfigVersionLike } from './movement-classifier';
+import { pickVersionAt, type PerformanceConfigVersionLike } from './movement-classifier';
 import {
   aggregate,
   dayKey,
@@ -26,6 +29,11 @@ import {
   type DerivedPerformanceEvent,
 } from './performance-aggregate';
 import { PerformanceConfigService } from './performance-config.service';
+import { computeFlowCounters } from './flow-metrics';
+
+/** Quanto historico antes do periodo usar pra saber desde quando o card esta na coluna. */
+const FLOW_LOOKBACK_DAYS = 180;
+const FLOW_MAX_BOARDS = 20;
 
 export interface PerformanceFilters {
   from: Date;
@@ -278,6 +286,174 @@ export class PerformanceReportService {
     return { pending, overdue };
   }
 
+  /**
+   * Fase 5 (spec §15) — indicadores do FLUXO por quadro (Atendimento,
+   * Desenvolvimento...). Movimentos de qualquer origem exceto importacao:
+   * tempo numa coluna e fato, independe de quem moveu. Read-only.
+   */
+  async flow(tenant: TenantContext, f: PerformanceFilters): Promise<PerformanceFlowResponse> {
+    this.config.assertCanManage(tenant);
+    this.validateRange(f);
+    const orgId = tenant.organizationId;
+
+    let boardIds = f.boardIds?.length ? f.boardIds : null;
+    if (f.area) {
+      const inArea = await this.prisma.boardPerformanceConfig.findMany({
+        where: { organizationId: orgId, area: f.area },
+        select: { boardId: true },
+      });
+      const ids = inArea.map((c) => c.boardId);
+      boardIds = boardIds ? boardIds.filter((id) => ids.includes(id)) : ids;
+    }
+    if (!boardIds) {
+      throw new BadRequestException('Filtre por área ou fluxo para ver o fluxo do trabalho.');
+    }
+    const boards = await this.prisma.board.findMany({
+      where: { id: { in: boardIds.slice(0, FLOW_MAX_BOARDS) }, organizationId: orgId },
+      select: { id: true, name: true, color: true },
+      orderBy: { name: 'asc' },
+    });
+    if (boards.length === 0) {
+      return { period: { from: f.from.toISOString(), to: f.to.toISOString() }, boards: [] };
+    }
+    const ids = boards.map((b) => b.id);
+    const lookback = new Date(f.from.getTime() - FLOW_LOOKBACK_DAYS * 86_400_000);
+
+    const [presences, moves, versionRows] = await Promise.all([
+      this.prisma.cardPresence.findMany({
+        where: {
+          boardId: { in: ids },
+          addedAt: { gte: lookback, lte: f.to },
+          card: { deletedAt: null },
+        },
+        select: { cardId: true, boardId: true, addedAt: true },
+      }),
+      this.prisma.activity.findMany({
+        where: {
+          organizationId: orgId,
+          boardId: { in: ids },
+          type: 'CARD_MOVED',
+          origin: { not: 'IMPORT' },
+          createdAt: { gte: lookback, lte: f.to },
+          cardId: { not: null },
+        },
+        select: { boardId: true, cardId: true, payload: true, createdAt: true },
+      }),
+      this.prisma.boardPerformanceConfigVersion.findMany({
+        where: { boardId: { in: ids } },
+        select: {
+          boardId: true,
+          effectiveFrom: true,
+          createdAt: true,
+          columns: true,
+          transitionOverrides: true,
+        },
+      }),
+    ]);
+
+    const versionsBy = new Map<string, PerformanceConfigVersionLike[]>();
+    for (const v of versionRows) {
+      const arr = versionsBy.get(v.boardId) ?? [];
+      arr.push({
+        effectiveFrom: v.effectiveFrom,
+        createdAt: v.createdAt,
+        columns: (Array.isArray(v.columns)
+          ? v.columns
+          : []) as unknown as PerformanceColumnConfig[],
+        transitionOverrides: (Array.isArray(v.transitionOverrides)
+          ? v.transitionOverrides
+          : []) as unknown as TransitionOverride[],
+      });
+      versionsBy.set(v.boardId, arr);
+    }
+
+    const now = new Date();
+    const out: FlowBoardMetrics[] = [];
+    for (const b of boards) {
+      const versions = versionsBy.get(b.id) ?? [];
+      const current = pickVersionAtNow(versions, now);
+      const waitingLists = (current?.columns ?? [])
+        .filter((c) => c.category === 'AGUARDANDO')
+        .map((c) => c.listId);
+      const waitingNow = waitingLists.length
+        ? await this.prisma.cardPresence.count({
+            where: {
+              boardId: b.id,
+              listId: { in: waitingLists },
+              removedAt: null,
+              card: {
+                deletedAt: null,
+                isArchived: false,
+                status: { notIn: ['COMPLETED', 'CANCELED'] },
+              },
+            },
+          })
+        : 0;
+
+      const counters = computeFlowCounters({
+        from: f.from,
+        to: f.to,
+        versions,
+        starts: presences
+          .filter((p) => p.boardId === b.id)
+          .map((p) => ({ cardId: p.cardId, at: p.addedAt })),
+        moves: moves
+          .filter((m) => m.boardId === b.id)
+          .flatMap((m) => {
+            const p = (m.payload ?? {}) as { fromListId?: unknown; toListId?: unknown };
+            return typeof p.fromListId === 'string' && typeof p.toListId === 'string' && m.cardId
+              ? [
+                  {
+                    cardId: m.cardId,
+                    fromListId: p.fromListId,
+                    toListId: p.toListId,
+                    at: m.createdAt,
+                  },
+                ]
+              : [];
+          }),
+      });
+
+      const stageIds = [...counters.stageHours.keys()];
+      const lists = stageIds.length
+        ? await this.prisma.list.findMany({
+            where: { id: { in: stageIds } },
+            select: { id: true, name: true, position: true },
+          })
+        : [];
+      const listMap = new Map(lists.map((l) => [l.id, l]));
+      const round = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
+
+      out.push({
+        board: b,
+        level: performanceConfigLevel(current?.columns),
+        received: counters.received,
+        started: counters.started,
+        waitingEntries: counters.waitingEntries,
+        waitingNow,
+        returned: counters.returned,
+        completed: counters.completed,
+        reopened: counters.reopened,
+        avgFirstResponseHours: round(counters.avgFirstResponseHours),
+        avgCycleHours: round(counters.avgCycleHours),
+        stages: stageIds
+          .map((id) => {
+            const s = counters.stageHours.get(id)!;
+            return {
+              listId: id,
+              name: listMap.get(id)?.name ?? '(coluna removida)',
+              avgHours: Math.round((s.total / s.samples) * 10) / 10,
+              samples: s.samples,
+              position: listMap.get(id)?.position ?? Number.MAX_SAFE_INTEGER,
+            };
+          })
+          .sort((x, y) => x.position - y.position)
+          .map(({ position: _p, ...rest }) => rest),
+      });
+    }
+    return { period: { from: f.from.toISOString(), to: f.to.toISOString() }, boards: out };
+  }
+
   /** Drill-down: eventos que compoem um numero, mais recentes primeiro. */
   async events(
     tenant: TenantContext,
@@ -404,4 +580,11 @@ export class PerformanceReportService {
       .sort((x, y) => y.lastActionAt.localeCompare(x.lastActionAt));
     return { total: items.length, items };
   }
+}
+
+function pickVersionAtNow(
+  versions: readonly PerformanceConfigVersionLike[],
+  now: Date,
+): PerformanceConfigVersionLike | null {
+  return pickVersionAt(versions, now);
 }

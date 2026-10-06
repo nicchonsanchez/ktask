@@ -36,6 +36,7 @@ import { orgMembersQuery } from '@/lib/queries/cards';
 import { contactsQueries } from '@/lib/queries/contacts';
 import { goalsQuery, performanceQueries, type PerformanceParams } from '@/lib/queries/performance';
 import { GoalProgressCard } from '@/components/performance/goals';
+import { FlowSection } from '@/components/performance/flow-section';
 import { periodRange, type PeriodPreset } from '@/lib/performance-period';
 import { UserAvatar } from '@/components/user-avatar';
 import {
@@ -518,6 +519,9 @@ export default function DesempenhoPage() {
               {summaryQ.data.daily.length <= 31 && <DailyTable data={summaryQ.data.daily} />}
             </section>
           )}
+
+          {/* Fluxo do trabalho por quadro (Fase 5, spec §15) */}
+          {!selectedUser && <FlowSection params={params} />}
 
           {/* Visao individual (spec §12) */}
           {selectedUser && (

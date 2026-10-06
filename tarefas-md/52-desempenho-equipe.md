@@ -1157,6 +1157,28 @@ iniciados, concluídos, reabertos, aguardando cliente (categoria
 entre `CARD_MOVED` consecutivos do mesmo card — dá pra calcular porque o
 histórico de moves é completo).
 
+#### Fase 5 — execução (06/10/2026, branch `feat/desempenho-equipe`)
+
+- [ ] 5.1 Configurar os fluxos reais de Atendimento e Desenvolvimento —
+      dado de produção, feito pelo Lucas na tela central após o deploy.
+- [x] 5.2 `GET /performance/flow` (OWNER/ADMIN, exige área ou fluxos):
+      por quadro — recebidos, iniciados (1ª saída da Entrada), foram p/
+      aguardando, aguardando agora, devolvidos (retrocessos), concluídos,
+      reabertos, tempo até 1º atendimento, tempo até concluir e **tempo médio
+      em cada etapa** (CARD_MOVED consecutivos, lookback de 180 dias pra saber
+      desde quando o card estava na coluna).
+- Decisão: indicadores do **fluxo** contam movimentos de qualquer origem
+  exceto importação (tempo em coluna é fato). O relatório **por pessoa**
+  continua só com ações humanas. Quadro sem configuração mostra só fatos
+  (recebidos e tempo por etapa) + aviso.
+- [x] UI: seção "Fluxo do trabalho" na aba (aparece com filtro de área ou
+      fluxo), cartão por quadro com barras de tempo por etapa.
+- [x] Testes: 5 unitários do cálculo (jornada completa, devolução/reabertura,
+      histórico fora do período, sem config, card sem entrada conhecida) +
+      smoke E2E 16/16 com API real (inclui conclusão por automação contando no
+      fluxo e não no relatório por pessoa).
+- [ ] Conferência visual da seção "Fluxo do trabalho" — anotada (não crucial).
+
 ### Fase 6 — Evolução (fora deste plano; só registrado)
 
 Exportação CSV/Excel/PDF (relevante: o Giovanni não tem conta e recebe

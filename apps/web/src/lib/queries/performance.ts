@@ -8,6 +8,7 @@ import type {
   PerformanceBoardSummaryDto,
   PerformanceCardsResponse,
   PerformanceEventsResponse,
+  PerformanceFlowResponse,
   PerformanceMetric,
   PerformanceSummaryResponse,
   UpsertBoardPerformanceConfigRequest,
@@ -49,6 +50,11 @@ export const performanceQueries = {
       api.get<PerformanceEventsResponse>(
         `/api/v1/performance/events${qs(params, { metric, page, pageSize: 50 })}`,
       ),
+  }),
+  /** Fase 5: fluxo do trabalho por quadro (exige area ou fluxos no filtro). */
+  flow: (params: PerformanceParams) => ({
+    queryKey: ['performance', 'flow', params] as const,
+    queryFn: () => api.get<PerformanceFlowResponse>(`/api/v1/performance/flow${qs(params)}`),
   }),
   cards: (params: PerformanceParams) => ({
     queryKey: ['performance', 'cards', params] as const,
