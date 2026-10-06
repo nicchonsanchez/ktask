@@ -44,6 +44,8 @@ export interface DerivedPerformanceEvent extends RawPerformanceEvent {
   contactDone: boolean;
   isMeetingHeld: boolean;
   isProposalSent: boolean;
+  /** Fase 4: entrou em coluna marcada como "reunião agendada". */
+  isMeetingScheduled: boolean;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
@@ -80,6 +82,7 @@ export function deriveEvent(
     contactDone: false,
     isMeetingHeld: false,
     isProposalSent: false,
+    isMeetingScheduled: false,
   };
 
   if (e.type === 'COMMERCIAL_ACTIVITY_LOGGED') {
@@ -108,6 +111,11 @@ export function deriveEvent(
       base.conclusion = c.conclusion;
       base.isCompletion = c.movementClass === 'CONCLUSAO';
       base.isReopen = c.isReopen;
+      if (version) {
+        const meeting = (id: string) =>
+          version.columns.some((col) => col.listId === id && col.meetingScheduled === true);
+        base.isMeetingScheduled = meeting(toListId) && !meeting(fromListId);
+      }
     } else {
       base.movementClass = 'NAO_CLASSIFICADA';
     }
@@ -140,6 +148,8 @@ export function emptyCounters(): PerformanceCounters {
     contactsDone: 0,
     meetingsHeld: 0,
     proposalsSent: 0,
+    meetingsScheduled: 0,
+    completionsPositive: 0,
   };
 }
 
@@ -151,6 +161,7 @@ export function aggregate(events: readonly DerivedPerformanceEvent[]): Performan
   const c = emptyCounters();
   const cards = new Set<string>();
   const completedCards = new Set<string>();
+  const positiveCards = new Set<string>();
   for (const e of events) {
     c.actions++;
     if (e.cardId) cards.add(e.cardId);
@@ -168,11 +179,16 @@ export function aggregate(events: readonly DerivedPerformanceEvent[]): Performan
       else if (e.movementClass === 'TRANSFERENCIA') c.transfers++;
       else if (e.movementClass === 'NAO_CLASSIFICADA') c.unclassifiedMoves++;
     }
-    if (e.isCompletion && e.cardId) completedCards.add(e.cardId);
+    if (e.isCompletion && e.cardId) {
+      completedCards.add(e.cardId);
+      if (e.conclusion !== 'NEGATIVA') positiveCards.add(e.cardId);
+    }
+    if (e.isMeetingScheduled) c.meetingsScheduled++;
     if (e.isReopen) c.reopens++;
   }
   c.cardsWorked = cards.size;
   c.completions = completedCards.size;
+  c.completionsPositive = positiveCards.size;
   return c;
 }
 
@@ -198,6 +214,8 @@ export function matchesMetric(e: DerivedPerformanceEvent, metric: PerformanceMet
       return e.isContact;
     case 'CONTACTS_DONE':
       return e.isContact && e.contactDone;
+    case 'MEETINGS_SCHEDULED':
+      return e.isMeetingScheduled;
   }
 }
 

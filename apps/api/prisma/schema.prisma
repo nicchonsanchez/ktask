@@ -331,6 +331,7 @@ model User {
   linkedContact             Contact?               @relation("ContactUser")
   performanceConfigVersions BoardPerformanceConfigVersion[] @relation("PerformanceConfigVersionCreator")
   cardInteractions          CardInteraction[]
+  performanceGoalsCreated   PerformanceGoal[]               @relation("PerformanceGoalCreator")
 
   @@index([email])
 }
@@ -475,6 +476,7 @@ model Organization {
   whatsappOutbox     WhatsappOutbox[]
   performanceConfigs BoardPerformanceConfig[]
   cardInteractions   CardInteraction[]
+  performanceGoals   PerformanceGoal[]
 
   @@index([slug])
 }
@@ -1744,4 +1746,48 @@ model CardInteraction {
   @@index([organizationId, occurredAt])
   @@index([cardId, occurredAt])
   @@index([boardId, occurredAt])
+}
+
+/// Doc 52 (Fase 4, D10): meta configuravel pelo gestor (Dono/Admin).
+/// Metrica de resultado + alcance (pessoa/area/fluxo) + periodo. O alvo
+/// fica versionado em PerformanceGoalTarget (periodo passado e medido
+/// contra o alvo que valia na epoca). Progresso calculado na leitura com o
+/// mesmo motor do relatorio — nada e gravado por evento.
+model PerformanceGoal {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  /// GOAL_METRICS em @ktask/contracts (String pra evoluir sem migration).
+  metric         String
+  /// 'USER' | 'AREA' | 'BOARD'
+  scopeType      String
+  /// userId, chave de area ou boardId conforme scopeType.
+  scopeId        String
+  /// 'DAY' | 'WEEK' | 'MONTH'
+  period         String
+  isActive       Boolean   @default(true)
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                    @relation("PerformanceGoalCreator", fields: [createdById], references: [id])
+  targets      PerformanceGoalTarget[]
+
+  @@index([organizationId, isActive])
+}
+
+/// Alvo com vigencia. Mudar o alvo cria linha nova.
+model PerformanceGoalTarget {
+  id            String   @id @default(cuid())
+  goalId        String
+  target        Int
+  effectiveFrom DateTime
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  goal PerformanceGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, effectiveFrom])
 }

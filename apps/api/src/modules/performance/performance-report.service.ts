@@ -61,7 +61,8 @@ export class PerformanceReportService {
   }
 
   /** Carrega e deriva os eventos do periodo conforme filtros. */
-  private async loadEvents(
+  /** Tambem usado pelas metas (Fase 4) com o mesmo filtro. */
+  async loadEvents(
     tenant: TenantContext,
     f: PerformanceFilters,
   ): Promise<{

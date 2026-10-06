@@ -1,5 +1,8 @@
 import type {
   CardInteractionsResponse,
+  CreateGoalRequest,
+  GoalDto,
+  UpdateGoalRequest,
   PerformanceArea,
   PerformanceBoardConfigDto,
   PerformanceBoardSummaryDto,
@@ -60,6 +63,24 @@ export const performanceQueries = {
     queryFn: () => api.get<PerformanceBoardConfigDto>(`/api/v1/performance/config/${boardId}`),
   }),
 };
+
+/** Fase 4: metas com progresso. */
+export const goalsQuery = () => ({
+  queryKey: ['performance', 'goals'] as const,
+  queryFn: () => api.get<GoalDto[]>('/api/v1/performance/goals'),
+});
+
+export function createGoal(body: CreateGoalRequest) {
+  return api.post<GoalDto>('/api/v1/performance/goals', body);
+}
+
+export function updateGoal(id: string, body: UpdateGoalRequest) {
+  return api.patch<GoalDto>(`/api/v1/performance/goals/${id}`, body);
+}
+
+export function deleteGoal(id: string) {
+  return api.delete<{ ok: true }>(`/api/v1/performance/goals/${id}`);
+}
 
 /** Fase 3: registros de contato do card + se os botoes aparecem. */
 export const cardInteractionsQuery = (cardId: string, boardId: string) => ({

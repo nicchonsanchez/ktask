@@ -34,7 +34,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { boardsQueries } from '@/lib/queries/boards';
 import { orgMembersQuery } from '@/lib/queries/cards';
 import { contactsQueries } from '@/lib/queries/contacts';
-import { performanceQueries, type PerformanceParams } from '@/lib/queries/performance';
+import { goalsQuery, performanceQueries, type PerformanceParams } from '@/lib/queries/performance';
+import { GoalProgressCard } from '@/components/performance/goals';
 import { periodRange, type PeriodPreset } from '@/lib/performance-period';
 import { UserAvatar } from '@/components/user-avatar';
 import {
@@ -153,6 +154,7 @@ export default function DesempenhoPage() {
   );
 
   const summaryQ = useQuery({ ...performanceQueries.summary(params), enabled: allowed });
+  const goalsQ = useQuery({ ...goalsQuery(), enabled: allowed });
 
   const [drill, setDrill] = useState<{
     metric: PerformanceMetric;
@@ -210,6 +212,36 @@ export default function DesempenhoPage() {
           <Settings2 size={13} /> Configurar relatórios
         </Link>
       </div>
+
+      {/* Metas ativas (Fase 4, D10) */}
+      {(goalsQ.data ?? []).some((g) => g.isActive) && (
+        <section className="flex flex-col gap-2">
+          <header className="flex items-center justify-between">
+            <h2 className="text-fg-muted text-xs font-semibold uppercase tracking-wide">Metas</h2>
+            <Link
+              href="/indicadores/desempenho/metas"
+              className="text-primary text-xs hover:underline"
+            >
+              Gerenciar metas
+            </Link>
+          </header>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {(goalsQ.data ?? [])
+              .filter((g) => g.isActive)
+              .map((g) => (
+                <GoalProgressCard key={g.id} goal={g} />
+              ))}
+          </div>
+        </section>
+      )}
+      {goalsQ.data && !goalsQ.data.some((g) => g.isActive) && (
+        <Link
+          href="/indicadores/desempenho/metas"
+          className="text-primary w-fit text-xs hover:underline"
+        >
+          Criar metas
+        </Link>
+      )}
 
       <PerformanceFilters
         value={filters}
@@ -296,7 +328,7 @@ export default function DesempenhoPage() {
               <h2 className="text-fg-muted text-xs font-semibold uppercase tracking-wide">
                 Comercial
               </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
                 <Kpi
                   icon={<PhoneCall size={14} />}
                   label="Registros de contato"
@@ -309,6 +341,12 @@ export default function DesempenhoPage() {
                   value={summaryQ.data.totals.contactsDone}
                   accent="text-emerald-600"
                   onClick={() => setDrill({ metric: 'CONTACTS_DONE' })}
+                />
+                <Kpi
+                  icon={<Presentation size={14} />}
+                  label="Reuniões agendadas"
+                  value={summaryQ.data.totals.meetingsScheduled}
+                  onClick={() => setDrill({ metric: 'MEETINGS_SCHEDULED' })}
                 />
                 <Kpi
                   icon={<Presentation size={14} />}

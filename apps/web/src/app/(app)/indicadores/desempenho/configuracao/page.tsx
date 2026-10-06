@@ -350,6 +350,15 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
                 onChange={(e) => setCol(l.id, { counted: e.target.checked })}
               />
             </td>
+            <td className="px-2 text-center">
+              <input
+                aria-label={`Reunião agendada: ${l.name}`}
+                title="Entrar nesta coluna conta como reunião agendada"
+                type="checkbox"
+                checked={c.meetingScheduled === true}
+                onChange={(e) => setCol(l.id, { meetingScheduled: e.target.checked || undefined })}
+              />
+            </td>
           </>
         )}
       </tr>
@@ -418,6 +427,7 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
                   <th className="px-2 font-medium">Categoria</th>
                   <th className="px-2 font-medium">Ordem</th>
                   <th className="px-2 text-center font-medium">Contabilizar</th>
+                  <th className="px-2 text-center font-medium">Reunião agendada</th>
                 </>
               )}
             </tr>
@@ -426,7 +436,7 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
           {old.length > 0 && (
             <tbody>
               <tr>
-                <td colSpan={advanced ? 5 : 2} className="pt-2">
+                <td colSpan={advanced ? 6 : 2} className="pt-2">
                   <button
                     type="button"
                     onClick={() => setShowOld((v) => !v)}

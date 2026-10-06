@@ -1125,6 +1125,29 @@ KPI no alcance/período da meta). Semana = seg–dom no fuso da org.
 (criar, ativar/desativar, mudar alvo, histórico de alvos).
 4.5 Validar com o Lucas as metas reais do Comercial (resposta da P1).
 
+#### Fase 4 — execução (06/10/2026, branch `feat/desempenho-equipe`)
+
+- [x] 4.1 Migration `20261006160000_performance_goals` (2 tabelas novas).
+- [x] 4.2 `GET|POST /performance/goals`, `PATCH|DELETE /performance/goals/:id`
+      (OWNER/ADMIN). Só métricas de resultado (`GOAL_METRICS`); alcance
+      validado (pessoa da org, área válida, fluxo da org).
+- [x] 4.3 Progresso com o mesmo motor do relatório (`loadEvents` +
+      `aggregate`), período atual + 3 anteriores, semana segunda–domingo no
+      fuso da org. Alvo versionado: muda a partir do período atual; editar 2x
+      no mesmo período substitui (não empilha). Meta cuja métrica depende de
+      configuração mostra o que falta (não mostra 0).
+- [x] Métricas novas: "Reuniões agendadas" (entrada em coluna marcada na
+      config avançada — checkbox por coluna) e "Fechamentos" (finalizações
+      positivas, exclui conclusão negativa). KPI + drill-down no relatório.
+- [x] 4.4 UI: seção "Metas" na aba (barras, histórico) + página
+      `/indicadores/desempenho/metas` (criar, alvo, ativar/desativar,
+      remover).
+- [x] 4.5 Script `scripts/ops/seed-metas-exemplo.mjs` (via API, idempotente,
+      `--dry-run`) com as 6 metas da seção 12.1. **Rodar em produção só com
+      autorização**, após o deploy.
+- [x] Testes: 154 unitários (períodos, alvo versionado, reuniões, fechamentos) + smoke E2E 26/26 (script cria 6 e não duplica, avisos de config,
+      valores, versionamento por período, 403 GESTOR, validações, relatório) + conferência visual (aba e página de metas, console sem erros).
+
 ### Fase 5 — Outras áreas
 
 5.1 Configurar fluxos de Atendimento e Desenvolvimento (só config).

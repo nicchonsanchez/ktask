@@ -120,6 +120,43 @@ describe('registro de contato (Fase 3)', () => {
   });
 });
 
+describe('Fase 4: reuniao agendada e fechamentos positivos', () => {
+  const VM: PerformanceConfigVersionLike = {
+    ...V,
+    columns: [
+      ...V.columns,
+      {
+        listId: 'reuniao',
+        category: 'EM_ANDAMENTO',
+        progressOrder: 4,
+        counted: true,
+        meetingScheduled: true,
+      },
+      { listId: 'perdido', category: 'CONCLUSAO_NEGATIVA', progressOrder: null, counted: true },
+    ],
+  };
+  const vm = new Map([['b1', [VM]]]);
+
+  it('entrada na coluna de reuniao conta; mover dentro/para fora nao', () => {
+    const c = aggregate(
+      [move('interatividade', 'reuniao'), move('reuniao', 'negociacao')].map((e) =>
+        deriveEvent(e, vm),
+      ),
+    );
+    expect(c.meetingsScheduled).toBe(1);
+  });
+
+  it('fechamento positivo exclui conclusao negativa', () => {
+    const c = aggregate(
+      [
+        move('negociacao', 'finalizado', { cardId: 'c1' }),
+        move('negociacao', 'perdido', { cardId: 'c2' }),
+      ].map((e) => deriveEvent(e, vm)),
+    );
+    expect(c).toMatchObject({ completions: 2, completionsPositive: 1 });
+  });
+});
+
 describe('isValidAction', () => {
   it('vincular card a outro fluxo nao conta como criacao', () => {
     expect(isValidAction(ev('CARD_CREATED', { linkedFromBoardId: 'b9' }))).toBe(false);
@@ -154,6 +191,8 @@ describe('aggregate', () => {
       contactsDone: 0,
       meetingsHeld: 0,
       proposalsSent: 0,
+      meetingsScheduled: 0,
+      completionsPositive: 1,
     });
   });
 

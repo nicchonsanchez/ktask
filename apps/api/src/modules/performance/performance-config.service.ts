@@ -27,7 +27,13 @@ function canonicalColumns(v: unknown): string {
   const arr = (Array.isArray(v) ? v : []) as PerformanceColumnConfig[];
   return JSON.stringify(
     arr
-      .map((c) => [c.listId, c.category ?? null, c.progressOrder ?? null, c.counted])
+      .map((c) => [
+        c.listId,
+        c.category ?? null,
+        c.progressOrder ?? null,
+        c.counted,
+        c.meetingScheduled === true,
+      ])
       .sort((x, y) => String(x[0]).localeCompare(String(y[0]))),
   );
 }
@@ -298,7 +304,11 @@ export class PerformanceConfigService {
     // Normaliza: so guarda colunas com algo configurado (categoria, ordem
     // ou counted=false). Evita versao "inflada" sem informacao.
     const columns = body.columns.filter(
-      (c) => c.category !== null || c.progressOrder !== null || c.counted === false,
+      (c) =>
+        c.category !== null ||
+        c.progressOrder !== null ||
+        c.counted === false ||
+        c.meetingScheduled === true,
     );
 
     await this.prisma.$transaction(async (tx) => {

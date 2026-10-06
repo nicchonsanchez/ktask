@@ -8,6 +8,7 @@ import { ContactLoggingController } from './contact-logging.controller';
 import { ContactLoggingService } from './contact-logging.service';
 
 import { PerformanceConfigService } from './performance-config.service';
+import { PerformanceGoalsService } from './performance-goals.service';
 import { PerformanceController } from './performance.controller';
 import { PerformanceReportService } from './performance-report.service';
 
@@ -19,6 +20,7 @@ import { PerformanceReportService } from './performance-report.service';
     PerformanceConfigService,
     PerformanceReportService,
     ContactLoggingService,
+    PerformanceGoalsService,
     TenantGuard,
   ],
   exports: [PerformanceConfigService, ContactLoggingService],

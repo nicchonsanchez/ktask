@@ -1,6 +1,20 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  CreateGoalSchema,
+  UpdateGoalSchema,
+  type CreateGoalRequest,
+  type UpdateGoalRequest,
   PerformanceEventsQuerySchema,
   PerformanceFiltersSchema,
   UpsertBoardPerformanceConfigSchema,
@@ -17,6 +31,7 @@ import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator';
 import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 
 import { PerformanceConfigService } from './performance-config.service';
+import { PerformanceGoalsService } from './performance-goals.service';
 import { PerformanceReportService, type PerformanceFilters } from './performance-report.service';
 
 const csv = (s?: string) =>
@@ -51,7 +66,43 @@ export class PerformanceController {
   constructor(
     private readonly report: PerformanceReportService,
     private readonly config: PerformanceConfigService,
+    private readonly goals: PerformanceGoalsService,
   ) {}
+
+  // ---- Metas (Fase 4) ----
+
+  @Get('goals')
+  @ApiOperation({ summary: 'Metas com progresso (período atual + 3 anteriores)' })
+  listGoals(@CurrentOrg() org: TenantContext) {
+    return this.goals.list(org);
+  }
+
+  @Post('goals')
+  @ApiOperation({ summary: 'Cria meta (métrica de resultado, alcance, período, alvo)' })
+  createGoal(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Body(new ZodValidationPipe(CreateGoalSchema)) body: CreateGoalRequest,
+  ) {
+    return this.goals.create(user.userId, org, body);
+  }
+
+  @Patch('goals/:id')
+  @ApiOperation({ summary: 'Renomeia, ativa/desativa ou muda o alvo (versionado)' })
+  updateGoal(
+    @CurrentUser() user: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateGoalSchema)) body: UpdateGoalRequest,
+  ) {
+    return this.goals.update(user.userId, org, id, body);
+  }
+
+  @Delete('goals/:id')
+  @ApiOperation({ summary: 'Remove meta (soft delete)' })
+  removeGoal(@CurrentOrg() org: TenantContext, @Param('id') id: string) {
+    return this.goals.remove(org, id);
+  }
 
   @Get('summary')
   @ApiOperation({ summary: 'KPIs, resumo por colaborador e série diária (OWNER/ADMIN)' })

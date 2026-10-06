@@ -83,6 +83,8 @@ export const PerformanceColumnConfigSchema = z.object({
   category: PerformanceColumnCategorySchema.nullable(),
   progressOrder: z.number().int().min(0).max(1000).nullable(),
   counted: z.boolean(),
+  /** Fase 4: entrar nesta coluna conta como "reunião agendada". */
+  meetingScheduled: z.boolean().optional(),
 });
 export type PerformanceColumnConfig = z.infer<typeof PerformanceColumnConfigSchema>;
 
@@ -181,6 +183,7 @@ export const PerformanceMetricSchema = z.enum([
   'NAO_CLASSIFICADA',
   'CONTACTS',
   'CONTACTS_DONE',
+  'MEETINGS_SCHEDULED',
 ]);
 export type PerformanceMetric = z.infer<typeof PerformanceMetricSchema>;
 
@@ -222,6 +225,10 @@ export interface PerformanceCounters {
   contactsDone: number;
   meetingsHeld: number;
   proposalsSent: number;
+  /** Fase 4: entradas em coluna marcada como reunião agendada. */
+  meetingsScheduled: number;
+  /** Cards distintos concluídos com resultado positivo. */
+  completionsPositive: number;
 }
 
 export interface PerformanceUserRef {
@@ -453,4 +460,100 @@ export interface CardInteractionsResponse {
   /** Fluxo onde o registro sera gravado (null quando desabilitado). */
   boardId: string | null;
   items: CardInteractionDto[];
+}
+
+// ---------------------------------------------------------------------------
+// Metas (Fase 4, D10)
+// ---------------------------------------------------------------------------
+
+/** So metricas de resultado podem virar meta (D10: nada facil de inflar). */
+export const GOAL_METRICS = [
+  'CONTACTS_DONE',
+  'MEETINGS_SCHEDULED',
+  'MEETINGS_HELD',
+  'PROPOSALS_SENT',
+  'ADVANCES',
+  'COMPLETIONS',
+] as const;
+export const GoalMetricSchema = z.enum(GOAL_METRICS);
+export type GoalMetric = z.infer<typeof GoalMetricSchema>;
+
+export const GOAL_METRIC_LABELS: Record<GoalMetric, string> = {
+  CONTACTS_DONE: 'Contatos realizados',
+  MEETINGS_SCHEDULED: 'Reuniões agendadas',
+  MEETINGS_HELD: 'Reuniões realizadas',
+  PROPOSALS_SENT: 'Propostas enviadas',
+  ADVANCES: 'Avanços no funil',
+  COMPLETIONS: 'Fechamentos (finalizações positivas)',
+};
+
+/** Campo de PerformanceCounters usado por cada metrica de meta. */
+export const GOAL_METRIC_COUNTER: Record<GoalMetric, keyof PerformanceCounters> = {
+  CONTACTS_DONE: 'contactsDone',
+  MEETINGS_SCHEDULED: 'meetingsScheduled',
+  MEETINGS_HELD: 'meetingsHeld',
+  PROPOSALS_SENT: 'proposalsSent',
+  ADVANCES: 'advances',
+  COMPLETIONS: 'completionsPositive',
+};
+
+export const GoalScopeTypeSchema = z.enum(['USER', 'AREA', 'BOARD']);
+export type GoalScopeType = z.infer<typeof GoalScopeTypeSchema>;
+
+export const GoalPeriodSchema = z.enum(['DAY', 'WEEK', 'MONTH']);
+export type GoalPeriod = z.infer<typeof GoalPeriodSchema>;
+
+export const GOAL_PERIOD_LABELS: Record<GoalPeriod, string> = {
+  DAY: 'Diária',
+  WEEK: 'Semanal',
+  MONTH: 'Mensal',
+};
+
+export const CreateGoalSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  metric: GoalMetricSchema,
+  scopeType: GoalScopeTypeSchema,
+  /** userId, chave de area (PERFORMANCE_AREAS) ou boardId. */
+  scopeId: z.string().min(1).max(40),
+  period: GoalPeriodSchema,
+  target: z.number().int().min(1).max(100_000),
+  isActive: z.boolean().optional(),
+});
+export type CreateGoalRequest = z.infer<typeof CreateGoalSchema>;
+
+export const UpdateGoalSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    isActive: z.boolean().optional(),
+    /** Novo alvo: cria versao (vale a partir do periodo atual). */
+    target: z.number().int().min(1).max(100_000).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nada para alterar.' });
+export type UpdateGoalRequest = z.infer<typeof UpdateGoalSchema>;
+
+export interface GoalPeriodProgress {
+  /** Inicio do periodo (YYYY-MM-DD no fuso da org). */
+  start: string;
+  /** Fim do periodo (YYYY-MM-DD, inclusive). */
+  end: string;
+  value: number;
+  target: number;
+}
+
+export interface GoalDto {
+  id: string;
+  name: string;
+  metric: GoalMetric;
+  scopeType: GoalScopeType;
+  scopeId: string;
+  /** Nome legivel do alcance (pessoa, area ou fluxo). */
+  scopeLabel: string;
+  period: GoalPeriod;
+  isActive: boolean;
+  target: number;
+  /** Periodo atual primeiro, depois os 3 anteriores. */
+  progress: GoalPeriodProgress[];
+  /** Mensagem quando a metrica depende de configuracao que falta. */
+  needsConfig: string | null;
+  createdAt: string;
 }
