@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -29,13 +30,23 @@ export default function IndicadoresLayout({ children }: { children: React.ReactN
     staleTime: 5 * 60_000,
   });
   const tabs = canViewPerformanceReport(orgQ.data?.myRole) ? [...TABS, PERFORMANCE_TAB] : TABS;
+  // No celular as abas rolam na horizontal: garante que a ativa fique visivel.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const active = navRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    active?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname, tabs.length]);
 
   return (
     <div className="flex flex-col">
       <header className="border-border/60 bg-bg sticky top-[52px] z-20 border-b">
         <div className="container flex flex-col gap-1 pb-0 pt-4">
           <h1 className="text-fg text-lg font-semibold">Indicadores da organização</h1>
-          <nav role="tablist" className="-mb-px mt-2 flex items-stretch gap-1 overflow-x-auto">
+          <nav
+            ref={navRef}
+            role="tablist"
+            className="-mb-px mt-2 flex items-stretch gap-1 overflow-x-auto"
+          >
             {tabs.map((tab) => {
               const active = pathname.startsWith(tab.href);
               return (

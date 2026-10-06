@@ -226,11 +226,13 @@ export default function DesempenhoPage() {
               Gerenciar metas
             </Link>
           </header>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-3">
             {(goalsQ.data ?? [])
               .filter((g) => g.isActive)
               .map((g) => (
-                <GoalProgressCard key={g.id} goal={g} />
+                <div key={g.id} className="w-[85%] shrink-0 snap-start sm:w-auto">
+                  <GoalProgressCard goal={g} />
+                </div>
               ))}
           </div>
         </section>

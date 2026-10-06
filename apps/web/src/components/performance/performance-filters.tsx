@@ -42,7 +42,7 @@ export function PerformanceFilters({
         : `${value.boardIds.length} fluxos`;
 
   return (
-    <div className="border-border/60 bg-bg sticky top-[52px] z-10 -mx-4 flex flex-wrap items-center gap-2 border-b px-4 py-2 sm:-mx-0 sm:rounded-md sm:border">
+    <div className="border-border/60 bg-bg -mx-4 flex flex-wrap items-center gap-2 border-b px-4 py-2 sm:sticky sm:top-[52px] sm:z-10 sm:-mx-0 sm:rounded-md sm:border">
       <div className="bg-bg-muted inline-flex flex-wrap items-center rounded-md p-0.5">
         {PERIOD_PRESETS.map((p) => (
           <button
