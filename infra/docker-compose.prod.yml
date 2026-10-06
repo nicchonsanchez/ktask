@@ -64,8 +64,13 @@ services:
     networks: [ktask]
 
   # Init: cria bucket + policy anonima de leitura (idempotente)
+  # Profile 'init': so roda na instalacao inicial da VM
+  #   docker compose -f infra/docker-compose.prod.yml --env-file infra/prod.env --profile init up minio-init
+  # Fora do deploy normal porque a imagem minio/mc saiu do Docker Hub
+  # (pull 404 em 06/10/2026 derrubou o Deploy #420) e o bucket ja existe.
   minio-init:
     image: minio/mc:latest
+    profiles: ['init']
     depends_on:
       minio:
         condition: service_healthy
