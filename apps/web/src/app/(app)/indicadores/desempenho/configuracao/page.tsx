@@ -145,6 +145,9 @@ export default function ConfiguracaoRelatoriosPage() {
                   {b.area && (
                     <span className="text-fg-muted">{PERFORMANCE_AREA_LABELS[b.area]}</span>
                   )}
+                  {b.contactLoggingEnabled && (
+                    <span className="text-fg-muted hidden sm:inline">· Registro de contato</span>
+                  )}
                   {b.conclusionLists.length > 0 && (
                     <span className="text-fg-muted hidden max-w-[280px] truncate sm:inline">
                       Finalizado: {b.conclusionLists.map((l) => l.name).join(', ')}
@@ -188,6 +191,7 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
   const [cols, setCols] = useState<ColState>({});
   const [overrides, setOverrides] = useState<TransitionOverride[]>([]);
   const [area, setArea] = useState<PerformanceArea | ''>('');
+  const [contactLogging, setContactLogging] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [showOld, setShowOld] = useState(false);
   const [vigencia, setVigencia] = useState<'now' | 'since'>('now');
@@ -200,6 +204,7 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
     setCols(toState(q.data));
     setOverrides(q.data.currentVersion?.transitionOverrides ?? []);
     setArea(q.data.area ?? '');
+    setContactLogging(q.data.contactLoggingEnabled);
     setAdvanced((q.data.currentVersion?.columns ?? []).some((c) => c.progressOrder !== null));
     // Primeira configuracao: sugere valer desde o inicio do historico.
     const first = !q.data.currentVersion && q.data.historyStartsAt;
@@ -211,6 +216,7 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
     mutationFn: () =>
       saveBoardPerformanceConfig(boardId, {
         area: area || null,
+        contactLoggingEnabled: contactLogging,
         columns: Object.values(cols),
         transitionOverrides: overrides,
         effectiveFrom:
@@ -369,6 +375,17 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
               </option>
             ))}
           </select>
+        </label>
+        <label
+          className="flex items-center gap-1.5"
+          title="Mostra botões opcionais (Ligação, WhatsApp, E-mail, Reunião, Proposta...) na caixa de comentário dos cards deste fluxo. Nos outros fluxos nada muda."
+        >
+          <input
+            type="checkbox"
+            checked={contactLogging}
+            onChange={(e) => setContactLogging(e.target.checked)}
+          />
+          Registro de contato nos cards deste fluxo
         </label>
         <label className="flex items-center gap-1.5">
           <input

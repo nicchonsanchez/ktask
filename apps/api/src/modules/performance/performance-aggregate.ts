@@ -1,4 +1,11 @@
-import type { MovementClass, PerformanceCounters, PerformanceMetric } from '@ktask/contracts';
+import {
+  interactionOutcome,
+  INTERACTION_TYPES,
+  type InteractionType,
+  type MovementClass,
+  type PerformanceCounters,
+  type PerformanceMetric,
+} from '@ktask/contracts';
 
 import {
   classifyMovement,
@@ -32,6 +39,11 @@ export interface DerivedPerformanceEvent extends RawPerformanceEvent {
   isCompletion: boolean;
   isReopen: boolean;
   isComment: boolean;
+  /** Fase 3: registro de contato (Activity COMMERCIAL_ACTIVITY_LOGGED). */
+  isContact: boolean;
+  contactDone: boolean;
+  isMeetingHeld: boolean;
+  isProposalSent: boolean;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
@@ -64,7 +76,24 @@ export function deriveEvent(
     isCompletion: false,
     isReopen: false,
     isComment: e.type === 'COMMENT_ADDED',
+    isContact: false,
+    contactDone: false,
+    isMeetingHeld: false,
+    isProposalSent: false,
   };
+
+  if (e.type === 'COMMERCIAL_ACTIVITY_LOGGED') {
+    const type = str(p.type);
+    const outcome = str(p.outcome);
+    if (type && outcome && (INTERACTION_TYPES as readonly string[]).includes(type)) {
+      const t = type as InteractionType;
+      base.isContact = true;
+      base.contactDone = interactionOutcome(t, outcome)?.done ?? false;
+      base.isMeetingHeld = t === 'MEETING' && outcome === 'HELD';
+      base.isProposalSent = t === 'PROPOSAL' && outcome === 'SENT';
+    }
+    return base;
+  }
 
   if (e.type === 'CARD_MOVED') {
     const fromListId = str(p.fromListId);
@@ -107,6 +136,10 @@ export function emptyCounters(): PerformanceCounters {
     reopens: 0,
     comments: 0,
     unclassifiedMoves: 0,
+    contacts: 0,
+    contactsDone: 0,
+    meetingsHeld: 0,
+    proposalsSent: 0,
   };
 }
 
@@ -122,6 +155,12 @@ export function aggregate(events: readonly DerivedPerformanceEvent[]): Performan
     c.actions++;
     if (e.cardId) cards.add(e.cardId);
     if (e.isComment) c.comments++;
+    if (e.isContact) {
+      c.contacts++;
+      if (e.contactDone) c.contactsDone++;
+      if (e.isMeetingHeld) c.meetingsHeld++;
+      if (e.isProposalSent) c.proposalsSent++;
+    }
     if (e.isMove) {
       c.moves++;
       if (e.movementClass === 'AVANCO') c.advances++;
@@ -155,6 +194,10 @@ export function matchesMetric(e: DerivedPerformanceEvent, metric: PerformanceMet
       return e.isReopen;
     case 'COMMENTS':
       return e.isComment;
+    case 'CONTACTS':
+      return e.isContact;
+    case 'CONTACTS_DONE':
+      return e.isContact && e.contactDone;
   }
 }
 

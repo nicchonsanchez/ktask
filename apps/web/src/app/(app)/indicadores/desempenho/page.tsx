@@ -6,6 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  CalendarClock,
+  FileText,
+  PhoneCall,
+  PhoneOutgoing,
+  Presentation,
   ArrowDownLeft,
   ArrowRightLeft,
   ArrowUpRight,
@@ -54,7 +59,14 @@ import {
 const DEFAULT_TZ = 'America/Sao_Paulo';
 const PRESETS: PeriodPreset[] = ['today', 'yesterday', '7d', '15d', '30d', '90d', 'custom'];
 
-type ChartMetric = 'actions' | 'cardsWorked' | 'moves' | 'advances' | 'completions' | 'comments';
+type ChartMetric =
+  | 'actions'
+  | 'cardsWorked'
+  | 'moves'
+  | 'advances'
+  | 'completions'
+  | 'comments'
+  | 'contactsDone';
 const CHART_METRICS: Array<{ key: ChartMetric; label: string }> = [
   { key: 'actions', label: 'Ações' },
   { key: 'cardsWorked', label: 'Cards trabalhados' },
@@ -62,6 +74,7 @@ const CHART_METRICS: Array<{ key: ChartMetric; label: string }> = [
   { key: 'advances', label: 'Avanços' },
   { key: 'completions', label: 'Finalizações' },
   { key: 'comments', label: 'Comentários' },
+  { key: 'contactsDone', label: 'Contatos realizados' },
 ];
 
 function readFilters(sp: URLSearchParams): PerformanceFilterState {
@@ -275,6 +288,57 @@ export default function DesempenhoPage() {
             />
           </section>
 
+          {/* Comercial (Fase 3, spec §14) — so com registros ou filtro Comercial */}
+          {(summaryQ.data.totals.contacts > 0 ||
+            summaryQ.data.followUps.pending > 0 ||
+            filters.area === 'COMERCIAL') && (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-fg-muted text-xs font-semibold uppercase tracking-wide">
+                Comercial
+              </h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <Kpi
+                  icon={<PhoneCall size={14} />}
+                  label="Registros de contato"
+                  value={summaryQ.data.totals.contacts}
+                  onClick={() => setDrill({ metric: 'CONTACTS' })}
+                />
+                <Kpi
+                  icon={<PhoneOutgoing size={14} />}
+                  label="Contatos realizados"
+                  value={summaryQ.data.totals.contactsDone}
+                  accent="text-emerald-600"
+                  onClick={() => setDrill({ metric: 'CONTACTS_DONE' })}
+                />
+                <Kpi
+                  icon={<Presentation size={14} />}
+                  label="Reuniões realizadas"
+                  value={summaryQ.data.totals.meetingsHeld}
+                  onClick={() => setDrill({ metric: 'CONTACTS' })}
+                />
+                <Kpi
+                  icon={<FileText size={14} />}
+                  label="Propostas enviadas"
+                  value={summaryQ.data.totals.proposalsSent}
+                  onClick={() => setDrill({ metric: 'CONTACTS' })}
+                />
+                <StaticKpi
+                  icon={<CalendarClock size={14} />}
+                  label="Follow-ups pendentes"
+                  value={summaryQ.data.followUps.pending}
+                  hint="tarefas de retorno em aberto agora"
+                />
+                <StaticKpi
+                  icon={<CalendarClock size={14} />}
+                  label="Follow-ups vencidos"
+                  value={summaryQ.data.followUps.overdue}
+                  hint="aparecem na Home de quem registrou"
+                  accent="text-red-500"
+                />
+              </div>
+            </section>
+          )}
+
           {/* Aviso de fluxo sem classificacao (spec §5.8) */}
           {summaryQ.data.unconfiguredBoards.length > 0 && (
             <section className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
@@ -335,6 +399,9 @@ export default function DesempenhoPage() {
                         <th className="px-2 text-right font-medium">Avanços</th>
                         <th className="px-2 text-right font-medium">Finalizações</th>
                         <th className="px-2 text-right font-medium">Comentários</th>
+                        {summaryQ.data.totals.contacts > 0 && (
+                          <th className="px-2 text-right font-medium">Contatos</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-border/40 divide-y">
@@ -374,6 +441,8 @@ export default function DesempenhoPage() {
                             {cell('AVANCO', counters.advances)}
                             {cell('FINALIZACOES', counters.completions)}
                             {cell('COMMENTS', counters.comments)}
+                            {summaryQ.data.totals.contacts > 0 &&
+                              cell('CONTACTS_DONE', counters.contactsDone)}
                           </tr>
                         );
                       })}
@@ -477,6 +546,30 @@ function Kpi({
       </span>
       <span className="text-fg text-xl font-semibold tabular-nums">{value}</span>
     </button>
+  );
+}
+
+function StaticKpi({
+  icon,
+  label,
+  value,
+  hint,
+  accent = 'text-primary',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  hint: string;
+  accent?: string;
+}) {
+  return (
+    <div className="border-border/60 bg-bg flex flex-col gap-1 rounded-lg border p-3" title={hint}>
+      <span className={`flex items-center gap-1.5 text-[11px] font-medium ${accent}`}>
+        {icon}
+        <span className="text-fg-muted truncate">{label}</span>
+      </span>
+      <span className="text-fg text-xl font-semibold tabular-nums">{value}</span>
+    </div>
   );
 }
 

@@ -1084,6 +1084,37 @@ tal — exige marcar "coluna de reunião" na config; decidido em 13.1: métricas
 propostas enviadas, conclusões positivas/negativas, follow-ups
 pendentes/vencidos. **Sem** taxa de conversão (spec §14).
 
+#### Fase 3 — execução (06/10/2026, branch `feat/desempenho-equipe`)
+
+- [x] 3.1 Migrations `20261006150000_commercial_activity_types` (3 valores
+      de `ActivityType`) e `20261006150100_card_interaction` (tabela nova).
+- [x] 3.2 `POST /comments` aceita `interaction` opcional: validado ANTES do
+      comentário (fluxo desligado/resultado inválido → 400 e nenhum
+      comentário criado), gravado logo depois. `CommentsService` intocado.
+      `GET /cards/:id/interactions?boardId=` (habilita botões + selos),
+      `PATCH|DELETE /interactions/:id` (autor ou Dono/Admin/Gestor, auditado).
+- [x] 3.3 Botões na caixa de comentário (componente separado, só em fluxo
+      ligado), selo no comentário, timeline formata os 3 tipos novos e não
+      duplica o registro que já aparece como selo.
+- [x] 3.4 "Retornar em [data]" (quando não atendeu / retornar depois /
+      pendente) cria tarefa no checklist "Follow-ups" via `ChecklistsService`
+      (assignee = quem registrou → aparece na Home).
+- [x] 3.5 Relatório: registros de contato, contatos realizados, reuniões
+      realizadas, propostas enviadas, follow-ups pendentes/vencidos (agora),
+      coluna "Contatos" por colaborador, métrica no gráfico. Usa o estado
+      atual do registro (correção/exclusão refletem). Toggle por fluxo na
+      tela central.
+- [x] Testes: 141 unitários (inclui regra multi-fluxo D9) + smoke E2E 27/27
+      (regressão do comentário normal, fluxo desligado, validações,
+      follow-up, multi-fluxo, MEMBER registra mas não vê relatório,
+      correção/exclusão, apagar comentário mantém registro) + conferência
+      visual da caixa de comentário.
+- [ ] "Reuniões agendadas" por entrada em coluna (precisa marcar a coluna
+      na config) — fica pra Fase 4 junto com a meta `MEETINGS_SCHEDULED`.
+- Achado pré-existente (não corrigido): o modal do card dispara aviso de
+  acessibilidade do Radix ("DialogContent requires a DialogTitle",
+  `card-modal.tsx:97`) — só no console de dev, sem efeito funcional.
+
 ### Fase 4 — Metas (D10)
 
 4.1 Migration D (`PerformanceGoal` + `PerformanceGoalTarget`).

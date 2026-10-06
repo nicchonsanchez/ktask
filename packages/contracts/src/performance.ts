@@ -157,6 +157,7 @@ export const PERFORMANCE_ACTION_TYPES = [
   'CARD_CONTACT_LINKED',
   'TIME_ENTRY_STOPPED',
   'TIME_ENTRY_CREATED',
+  'COMMERCIAL_ACTIVITY_LOGGED',
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -178,6 +179,8 @@ export const PerformanceMetricSchema = z.enum([
   'REABERTURAS',
   'COMMENTS',
   'NAO_CLASSIFICADA',
+  'CONTACTS',
+  'CONTACTS_DONE',
 ]);
 export type PerformanceMetric = z.infer<typeof PerformanceMetricSchema>;
 
@@ -213,6 +216,12 @@ export interface PerformanceCounters {
   comments: number;
   /** Movimentacoes em fluxo/coluna sem configuracao vigente (nao inferidas). */
   unclassifiedMoves: number;
+  /** Fase 3: registros de contato (qualquer resultado). */
+  contacts: number;
+  /** Registros com resultado que conta como contato realizado. */
+  contactsDone: number;
+  meetingsHeld: number;
+  proposalsSent: number;
 }
 
 export interface PerformanceUserRef {
@@ -229,6 +238,8 @@ export interface PerformanceSummaryResponse {
   daily: Array<{ day: string; counters: PerformanceCounters }>;
   /** Fluxos com movimentacoes no periodo sem classificacao vigente. */
   unconfiguredBoards: Array<{ id: string; name: string; unclassifiedMoves: number }>;
+  /** Follow-ups (tarefas criadas por registro de contato) em aberto agora. */
+  followUps: { pending: number; overdue: number };
 }
 
 export interface PerformanceEventItem {
@@ -316,4 +327,130 @@ export function performanceConfigLevel(
   if (columns.some((c) => c.progressOrder !== null)) return 'FULL';
   if (columns.some((c) => c.category && CONCLUSION_CATEGORIES.includes(c.category))) return 'BASIC';
   return 'NONE';
+}
+
+// ---------------------------------------------------------------------------
+// Registro de contato (Fase 3, D9) — spec §9, rotulos exatos
+// ---------------------------------------------------------------------------
+
+export const INTERACTION_TYPES = [
+  'CALL',
+  'WHATSAPP',
+  'EMAIL',
+  'MEETING',
+  'FOLLOW_UP',
+  'PROPOSAL',
+  'OTHER',
+] as const;
+export const InteractionTypeSchema = z.enum(INTERACTION_TYPES);
+export type InteractionType = z.infer<typeof InteractionTypeSchema>;
+
+export const INTERACTION_TYPE_LABELS: Record<InteractionType, string> = {
+  CALL: 'Ligação',
+  WHATSAPP: 'WhatsApp',
+  EMAIL: 'E-mail',
+  MEETING: 'Reunião',
+  FOLLOW_UP: 'Follow-up',
+  PROPOSAL: 'Proposta',
+  OTHER: 'Outro',
+};
+
+/**
+ * Resultados possiveis por tipo (spec §9). `done` = conta como "contato
+ * realizado" nos indicadores. OTHER aceita qualquer um da lista generica.
+ */
+export const INTERACTION_OUTCOMES: Record<
+  InteractionType,
+  ReadonlyArray<{ key: string; label: string; done: boolean }>
+> = {
+  CALL: [
+    { key: 'DONE', label: 'Realizado', done: true },
+    { key: 'NO_ANSWER', label: 'Não respondeu', done: false },
+    { key: 'CALL_BACK', label: 'Retornar depois', done: false },
+  ],
+  WHATSAPP: [
+    { key: 'DONE', label: 'Realizado', done: true },
+    { key: 'NO_ANSWER', label: 'Não respondeu', done: false },
+    { key: 'INTERESTED', label: 'Interessado', done: true },
+    { key: 'NOT_INTERESTED', label: 'Sem interesse', done: true },
+  ],
+  EMAIL: [
+    { key: 'SENT', label: 'Enviado', done: true },
+    { key: 'REPLY_RECEIVED', label: 'Retorno recebido', done: true },
+  ],
+  MEETING: [
+    { key: 'HELD', label: 'Realizada', done: true },
+    { key: 'NOT_HELD', label: 'Não realizada', done: false },
+  ],
+  FOLLOW_UP: [
+    { key: 'DONE', label: 'Realizado', done: true },
+    { key: 'PENDING', label: 'Pendente', done: false },
+  ],
+  PROPOSAL: [
+    { key: 'SENT', label: 'Enviada', done: true },
+    { key: 'REVISED', label: 'Revisada', done: true },
+  ],
+  OTHER: [
+    { key: 'DONE', label: 'Realizado', done: true },
+    { key: 'NOT_DONE', label: 'Não realizado', done: false },
+  ],
+};
+
+export function interactionOutcome(type: InteractionType, outcome: string) {
+  return INTERACTION_OUTCOMES[type].find((o) => o.key === outcome) ?? null;
+}
+
+/** Registro enviado junto com o comentario (campo opcional `interaction`). */
+export const InteractionInputSchema = z
+  .object({
+    type: InteractionTypeSchema,
+    outcome: z.string().min(1).max(40),
+    /** Rotulo livre quando type = OTHER. */
+    customLabel: z.string().trim().max(60).optional(),
+    contactId: z.string().cuid().optional(),
+    /** YYYY-MM-DD: cria tarefa de follow-up pra quem registrou. */
+    followUpDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    /** Fluxo pelo qual o card foi aberto (regra multi-fluxo, D9). */
+    boardId: z.string().cuid().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (!interactionOutcome(v.type, v.outcome)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outcome'],
+        message: 'Resultado inválido para este tipo de registro.',
+      });
+    }
+    if (v.type === 'OTHER' && !v.customLabel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['customLabel'],
+        message: 'Informe o tipo do registro.',
+      });
+    }
+  });
+export type InteractionInput = z.infer<typeof InteractionInputSchema>;
+
+export interface CardInteractionDto {
+  id: string;
+  commentId: string | null;
+  boardId: string;
+  type: InteractionType;
+  outcome: string;
+  customLabel: string | null;
+  occurredAt: string;
+  user: { id: string; name: string } | null;
+  followUpItemId: string | null;
+}
+
+/** GET /cards/:cardId/interactions — habilita os botoes + selos. */
+export interface CardInteractionsResponse {
+  /** true = mostrar os botoes de registro na caixa de comentario deste card. */
+  enabled: boolean;
+  /** Fluxo onde o registro sera gravado (null quando desabilitado). */
+  boardId: string | null;
+  items: CardInteractionDto[];
 }

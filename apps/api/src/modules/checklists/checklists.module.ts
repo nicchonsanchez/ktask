@@ -9,5 +9,7 @@ import { ChecklistsService } from './checklists.service';
   imports: [BoardsModule, NotificationsModule, AutomationsModule],
   controllers: [ChecklistsController],
   providers: [ChecklistsService],
+  // Doc 52 (Fase 3): follow-up do registro de contato reusa addItem.
+  exports: [ChecklistsService],
 })
 export class ChecklistsModule {}

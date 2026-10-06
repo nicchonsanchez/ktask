@@ -64,7 +64,11 @@ export class PerformanceReportService {
   private async loadEvents(
     tenant: TenantContext,
     f: PerformanceFilters,
-  ): Promise<{ events: DerivedPerformanceEvent[]; timezone: string }> {
+  ): Promise<{
+    events: DerivedPerformanceEvent[];
+    timezone: string;
+    boardScope: string[] | null;
+  }> {
     this.config.assertCanManage(tenant);
     this.validateRange(f);
     const orgId = tenant.organizationId;
@@ -85,7 +89,7 @@ export class PerformanceReportService {
       const ids = inArea.map((c) => c.boardId);
       boardScope = boardScope ? boardScope.filter((id) => ids.includes(id)) : ids;
     }
-    if (boardScope && boardScope.length === 0) return { events: [], timezone };
+    if (boardScope && boardScope.length === 0) return { events: [], timezone, boardScope };
 
     // Cliente: cards vinculados a empresa (CardContact).
     let cardScope: string[] | null = null;
@@ -95,7 +99,7 @@ export class PerformanceReportService {
         select: { cardId: true },
       });
       cardScope = links.map((l) => l.cardId);
-      if (cardScope.length === 0) return { events: [], timezone };
+      if (cardScope.length === 0) return { events: [], timezone, boardScope };
     }
 
     const where: Prisma.ActivityWhereInput = {
@@ -151,12 +155,33 @@ export class PerformanceReportService {
       byBoard.set(v.boardId, arr);
     }
 
-    const events = raw.filter(isValidAction).map((r) => deriveEvent(r, byBoard));
-    return { events, timezone };
+    // Fase 3: registros de contato usam o estado ATUAL do CardInteraction
+    // (corrigido -> vale o novo tipo/resultado; excluido -> nao conta).
+    const interactionIds = raw
+      .filter((r) => r.type === 'COMMERCIAL_ACTIVITY_LOGGED')
+      .map((r) => (r.payload as { interactionId?: unknown } | null)?.interactionId)
+      .filter((x): x is string => typeof x === 'string');
+    const interactions = interactionIds.length
+      ? await this.prisma.cardInteraction.findMany({
+          where: { id: { in: interactionIds } },
+          select: { id: true, type: true, outcome: true, deletedAt: true },
+        })
+      : [];
+    const interactionMap = new Map(interactions.map((i) => [i.id, i]));
+    const current = raw.flatMap((r) => {
+      if (r.type !== 'COMMERCIAL_ACTIVITY_LOGGED') return [r];
+      const id = (r.payload as { interactionId?: unknown } | null)?.interactionId;
+      const i = typeof id === 'string' ? interactionMap.get(id) : undefined;
+      if (!i || i.deletedAt) return [];
+      return [{ ...r, payload: { ...(r.payload as object), type: i.type, outcome: i.outcome } }];
+    });
+
+    const events = current.filter(isValidAction).map((r) => deriveEvent(r, byBoard));
+    return { events, timezone, boardScope };
   }
 
   async summary(tenant: TenantContext, f: PerformanceFilters): Promise<PerformanceSummaryResponse> {
-    const { events, timezone } = await this.loadEvents(tenant, f);
+    const { events, timezone, boardScope } = await this.loadEvents(tenant, f);
 
     // Por colaborador
     const byUserMap = new Map<string, DerivedPerformanceEvent[]>();
@@ -216,7 +241,40 @@ export class PerformanceReportService {
       unconfiguredBoards: unBoards
         .map((b) => ({ id: b.id, name: b.name, unclassifiedMoves: unclassified.get(b.id) ?? 0 }))
         .sort((a, b) => b.unclassifiedMoves - a.unclassifiedMoves),
+      followUps: await this.openFollowUps(tenant.organizationId, f, boardScope),
     };
+  }
+
+  /**
+   * Fase 3: follow-ups (tarefas criadas pelo registro de contato) em aberto
+   * AGORA, pros colaboradores/fluxos filtrados. Independe do periodo.
+   */
+  private async openFollowUps(
+    organizationId: string,
+    f: PerformanceFilters,
+    boardScope: string[] | null,
+  ): Promise<{ pending: number; overdue: number }> {
+    const links = await this.prisma.cardInteraction.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        followUpItemId: { not: null },
+        ...(f.userIds?.length ? { userId: { in: f.userIds } } : {}),
+        ...(boardScope ? { boardId: { in: boardScope } } : {}),
+        card: { deletedAt: null, isArchived: false },
+      },
+      select: { followUpItemId: true },
+    });
+    const ids = links.map((l) => l.followUpItemId).filter((x): x is string => !!x);
+    if (ids.length === 0) return { pending: 0, overdue: 0 };
+    const now = new Date();
+    const [pending, overdue] = await Promise.all([
+      this.prisma.checklistItem.count({ where: { id: { in: ids }, isDone: false } }),
+      this.prisma.checklistItem.count({
+        where: { id: { in: ids }, isDone: false, dueDate: { lt: now } },
+      }),
+    ]);
+    return { pending, overdue };
   }
 
   /** Drill-down: eventos que compoem um numero, mais recentes primeiro. */

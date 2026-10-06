@@ -92,6 +92,34 @@ describe('deriveEvent', () => {
   });
 });
 
+describe('registro de contato (Fase 3)', () => {
+  const contact = (type: string, outcome: string) =>
+    deriveEvent(ev('COMMERCIAL_ACTIVITY_LOGGED', { type, outcome }), versions);
+
+  it('conta registros e so os realizados como contato realizado', () => {
+    const c = aggregate([
+      contact('CALL', 'NO_ANSWER'),
+      contact('CALL', 'DONE'),
+      contact('MEETING', 'HELD'),
+      contact('PROPOSAL', 'SENT'),
+      contact('EMAIL', 'SENT'),
+    ]);
+    expect(c).toMatchObject({ contacts: 5, contactsDone: 4, meetingsHeld: 1, proposalsSent: 1 });
+    expect(c.actions).toBe(5);
+  });
+
+  it('tipo/resultado desconhecido nao conta como contato realizado', () => {
+    expect(contact('FAX', 'DONE').isContact).toBe(false);
+    expect(contact('CALL', 'XYZ').contactDone).toBe(false);
+  });
+
+  it('drill-down CONTACTS / CONTACTS_DONE', () => {
+    const evs = [contact('CALL', 'NO_ANSWER'), contact('CALL', 'DONE')];
+    expect(evs.filter((e) => matchesMetric(e, 'CONTACTS'))).toHaveLength(2);
+    expect(evs.filter((e) => matchesMetric(e, 'CONTACTS_DONE'))).toHaveLength(1);
+  });
+});
+
 describe('isValidAction', () => {
   it('vincular card a outro fluxo nao conta como criacao', () => {
     expect(isValidAction(ev('CARD_CREATED', { linkedFromBoardId: 'b9' }))).toBe(false);
@@ -122,6 +150,10 @@ describe('aggregate', () => {
       reopens: 0,
       comments: 1,
       unclassifiedMoves: 1,
+      contacts: 0,
+      contactsDone: 0,
+      meetingsHeld: 0,
+      proposalsSent: 0,
     });
   });
 

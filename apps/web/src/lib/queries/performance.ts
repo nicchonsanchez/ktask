@@ -1,4 +1,5 @@
 import type {
+  CardInteractionsResponse,
   PerformanceArea,
   PerformanceBoardConfigDto,
   PerformanceBoardSummaryDto,
@@ -59,6 +60,15 @@ export const performanceQueries = {
     queryFn: () => api.get<PerformanceBoardConfigDto>(`/api/v1/performance/config/${boardId}`),
   }),
 };
+
+/** Fase 3: registros de contato do card + se os botoes aparecem. */
+export const cardInteractionsQuery = (cardId: string, boardId: string) => ({
+  queryKey: ['performance', 'interactions', cardId, boardId] as const,
+  queryFn: () =>
+    api.get<CardInteractionsResponse>(
+      `/api/v1/cards/${cardId}/interactions?boardId=${encodeURIComponent(boardId)}`,
+    ),
+});
 
 export function saveBoardPerformanceConfig(
   boardId: string,

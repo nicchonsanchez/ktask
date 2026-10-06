@@ -150,6 +150,10 @@ enum ActivityType {
   MEMBER_SUSPENDED
   MEMBER_UNSUSPENDED
   MEMBER_REMOVED
+  /// Doc 52 (Fase 3): registro de contato comercial (CardInteraction).
+  COMMERCIAL_ACTIVITY_LOGGED
+  COMMERCIAL_ACTIVITY_UPDATED
+  COMMERCIAL_ACTIVITY_DELETED
 }
 
 /// Doc 52: quem originou a Activity. Permite ao relatorio de Desempenho
@@ -326,6 +330,7 @@ model User {
   /// o User aparece como entrada de Contact com identidade vinda do User.
   linkedContact             Contact?               @relation("ContactUser")
   performanceConfigVersions BoardPerformanceConfigVersion[] @relation("PerformanceConfigVersionCreator")
+  cardInteractions          CardInteraction[]
 
   @@index([email])
 }
@@ -469,6 +474,7 @@ model Organization {
   managementBoards   ManagementBoard[]
   whatsappOutbox     WhatsappOutbox[]
   performanceConfigs BoardPerformanceConfig[]
+  cardInteractions   CardInteraction[]
 
   @@index([slug])
 }
@@ -742,6 +748,7 @@ model Card {
   presences      CardPresence[]
   approvals      CardApproval[]
   contacts       CardContact[]
+  interactions   CardInteraction[]
 
   @@unique([organizationId, shortCode])
   @@index([organizationId])
@@ -968,6 +975,7 @@ model Contact {
   children     Contact[]     @relation("ContactPerson")
   user         User?         @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
   cards        CardContact[]
+  interactions CardInteraction[]
 
   @@index([organizationId, type])
   @@index([organizationId, name])
@@ -1131,6 +1139,7 @@ model Comment {
   parent      Comment?          @relation("CommentReply", fields: [parentCommentId], references: [id], onDelete: SetNull)
   replies     Comment[]         @relation("CommentReply")
   reactions   CommentReaction[]
+  interaction CardInteraction?
 
   @@index([cardId, createdAt])
   @@index([parentCommentId])
@@ -1696,4 +1705,43 @@ model BoardPerformanceConfigVersion {
 
   @@index([boardId, effectiveFrom])
   @@index([configId, effectiveFrom])
+}
+
+/// Doc 52 (Fase 3, D9): registro de trabalho comercial no card SEM
+/// movimentacao (ligacao, WhatsApp, e-mail, reuniao, follow-up, proposta).
+/// Criado junto com um comentario (botoes opcionais na caixa de comentario,
+/// so em fluxos com BoardPerformanceConfig.contactLoggingEnabled).
+/// Tipos/resultados validados em @ktask/contracts (String pra evoluir sem
+/// migration). Soft delete: o registro de trabalho e auditavel.
+model CardInteraction {
+  id             String    @id @default(cuid())
+  organizationId String
+  cardId         String
+  /// Fluxo onde foi registrado (snapshot — card multi-fluxo).
+  boardId        String
+  userId         String
+  type           String
+  outcome        String
+  customLabel    String?
+  /// Comentario onde o registro foi feito. Apagar o comentario (soft
+  /// delete) nao apaga o registro.
+  commentId      String?   @unique
+  contactId      String?
+  occurredAt     DateTime  @default(now())
+  /// Tarefa de follow-up criada (ChecklistItem atribuido a quem registrou).
+  followUpItemId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  card         Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+  comment      Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@index([cardId, occurredAt])
+  @@index([boardId, occurredAt])
 }

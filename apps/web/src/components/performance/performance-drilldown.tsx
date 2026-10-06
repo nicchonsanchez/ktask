@@ -34,6 +34,8 @@ export const METRIC_LABELS: Record<PerformanceMetric, string> = {
   REABERTURAS: 'Reaberturas',
   COMMENTS: 'Comentários',
   NAO_CLASSIFICADA: 'Movimentações não classificadas',
+  CONTACTS: 'Registros de contato',
+  CONTACTS_DONE: 'Contatos realizados',
 };
 
 const timeFmt = (iso: string, timeZone: string) =>
