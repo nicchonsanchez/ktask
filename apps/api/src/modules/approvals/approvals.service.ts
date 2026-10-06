@@ -860,6 +860,19 @@ export class ApprovalsService {
         },
       });
 
+      // Doc 52: registra cada movimentacao feita pela decisao como
+      // CARD_MOVED (antes ficava so dentro de sideEffects). origin=APPROVAL
+      // pra o relatorio de desempenho nao contar como acao manual e pra
+      // checagem de "interferencia humana" do undo ignorar.
+      await this.logApprovalMoves(tx, {
+        organizationId: a.organizationId,
+        cardId: a.cardId,
+        actorId: decider.decidedById,
+        approvalId,
+        kind: 'approval.move',
+        moves,
+      });
+
       return { approval: result, card };
     });
 
@@ -971,6 +984,54 @@ export class ApprovalsService {
     return updated.approval;
   }
 
+  /**
+   * Doc 52: grava 1 Activity CARD_MOVED por movimentacao causada por uma
+   * decisao de aprovacao (ou pelo undo dela), no mesmo shape de payload do
+   * move manual (fromListId/toListId + nomes) — a timeline do card passa a
+   * exibir "moveu da coluna X para Y". origin=APPROVAL: nao conta como acao
+   * manual no relatorio e e ignorada pela checagem de interferencia do undo.
+   * Roda dentro da transacao da decisao/undo. No-op sem moves.
+   */
+  private async logApprovalMoves(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string;
+      cardId: string;
+      actorId: string | null;
+      approvalId: string;
+      kind: 'approval.move' | 'approval.revert_move';
+      moves: Array<{ boardId: string; fromListId: string; toListId: string }>;
+    },
+  ) {
+    if (params.moves.length === 0) return;
+    const listIds = Array.from(new Set(params.moves.flatMap((m) => [m.fromListId, m.toListId])));
+    const lists = await tx.list.findMany({
+      where: { id: { in: listIds } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(lists.map((l) => [l.id, l.name]));
+    await tx.activity.createMany({
+      data: params.moves.map((m) => ({
+        organizationId: params.organizationId,
+        boardId: m.boardId,
+        cardId: params.cardId,
+        actorId: params.actorId,
+        type: 'CARD_MOVED' as const,
+        origin: 'APPROVAL' as const,
+        payload: {
+          cardId: params.cardId,
+          fromListId: m.fromListId,
+          toListId: m.toListId,
+          fromListName: nameById.get(m.fromListId) ?? null,
+          toListName: nameById.get(m.toListId) ?? null,
+          inFlow: m.boardId,
+          kind: params.kind,
+          approvalId: params.approvalId,
+        },
+      })),
+    });
+  }
+
   // ============================================================
   // Undo
   // ============================================================
@@ -1022,6 +1083,10 @@ export class ApprovalsService {
           cardId: approval.cardId,
           createdAt: { gt: approval.decidedAt },
           automationRunId: null,
+          // Doc 52: so acao humana. Exclui automacao (antes passava porque
+          // automationRunId nunca era preenchido), sistema e os CARD_MOVED
+          // gravados pela propria decisao (origin APPROVAL).
+          origin: 'USER',
           actorId: { not: null },
           type: { in: ['CARD_MOVED', 'CARD_UPDATED', 'CARD_ARCHIVED', 'CARD_COMPLETED'] },
           NOT: {
@@ -1056,6 +1121,8 @@ export class ApprovalsService {
         });
       }
 
+      // Doc 52: moves efetivamente revertidos (pra registrar CARD_MOVED).
+      const revertedMoves: Array<{ boardId: string; fromListId: string; toListId: string }> = [];
       for (const m of movesToRevert) {
         const presence = await tx.cardPresence.findUnique({
           where: { cardId_boardId: { cardId: approval.cardId, boardId: m.boardId } },
@@ -1083,6 +1150,8 @@ export class ApprovalsService {
           where: { cardId_boardId: { cardId: approval.cardId, boardId: m.boardId } },
           data: { listId: m.fromListId, position: revertPos },
         });
+        // Volta de toList -> fromList (sentido inverso ao da decisao).
+        revertedMoves.push({ boardId: m.boardId, fromListId: m.toListId, toListId: m.fromListId });
         // Sync Card.listId legacy se for board primary
         const cardLegacy = await tx.card.findUnique({
           where: { id: approval.cardId },
@@ -1123,6 +1192,15 @@ export class ApprovalsService {
             reason: body.reason?.trim() || null,
           },
         },
+      });
+
+      await this.logApprovalMoves(tx, {
+        organizationId: approval.organizationId,
+        cardId: approval.cardId,
+        actorId: userId,
+        approvalId,
+        kind: 'approval.revert_move',
+        moves: revertedMoves,
       });
 
       return r;

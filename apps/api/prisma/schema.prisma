@@ -152,6 +152,19 @@ enum ActivityType {
   MEMBER_REMOVED
 }
 
+/// Doc 52: quem originou a Activity. Permite ao relatorio de Desempenho
+/// da Equipe contar so acoes humanas (automacao nao conta pro colaborador).
+/// Default USER: a grande maioria dos pontos de escrita sao acoes de
+/// usuario; os caminhos nao-humanos (engine, status sync, importador,
+/// efeitos de aprovacao) setam explicitamente.
+enum ActivityOrigin {
+  USER
+  AUTOMATION
+  SYSTEM
+  APPROVAL
+  IMPORT
+}
+
 enum AutomationTrigger {
   CARD_ENTERED
   CARD_LEFT
@@ -312,6 +325,7 @@ model User {
   /// Contact vinculado (1:1 via Contact.userId). Quando existe, no CRM
   /// o User aparece como entrada de Contact com identidade vinda do User.
   linkedContact             Contact?               @relation("ContactUser")
+  performanceConfigVersions BoardPerformanceConfigVersion[] @relation("PerformanceConfigVersionCreator")
 
   @@index([email])
 }
@@ -454,6 +468,7 @@ model Organization {
   importMappings     OrgImportMapping[]
   managementBoards   ManagementBoard[]
   whatsappOutbox     WhatsappOutbox[]
+  performanceConfigs BoardPerformanceConfig[]
 
   @@index([slug])
 }
@@ -543,6 +558,7 @@ model Board {
   cardPresences           CardPresence[]
   favorites               BoardFavorite[]
   managementColumnSources ManagementColumnSource[]
+  performanceConfig       BoardPerformanceConfig?
 
   @@index([organizationId, isArchived])
 }
@@ -1153,6 +1169,10 @@ model Activity {
   /// Crítico pra o fluxo de undo de aprovação: sabemos diferenciar
   /// "humano interveio" de "automação encadeada disparou".
   automationRunId String?
+  /// Doc 52: origem da acao (USER/AUTOMATION/SYSTEM/APPROVAL/IMPORT).
+  /// actorId continua com o significado de sempre (inclusive o criador da
+  /// automacao, pra timeline nao mudar); relatorios filtram por origin.
+  origin          ActivityOrigin @default(USER)
   createdAt       DateTime     @default(now())
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1164,6 +1184,8 @@ model Activity {
   @@index([cardId, createdAt])
   @@index([boardId, createdAt])
   @@index([automationRunId])
+  /// Doc 52: relatorio por pessoa no periodo.
+  @@index([organizationId, actorId, createdAt])
 }
 
 // ==================== Notifications ====================
@@ -1621,4 +1643,57 @@ model ManagementColumnSource {
   @@unique([columnId, boardId, listId])
   @@index([columnId])
   @@index([listId])
+}
+
+// ==================== Desempenho da Equipe (doc 52) ====================
+// Camada gerencial de interpretacao dos eventos (Activity). NAO altera o
+// board operacional: nomes, colunas, isFinalList e cards ficam intocados.
+// Ver tarefas-md/52-desempenho-equipe.md.
+
+/// Configuracao gerencial de um fluxo pro relatorio de Desempenho.
+/// Os dados de classificacao vivem em versoes imutaveis (abaixo).
+model BoardPerformanceConfig {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  boardId               String   @unique
+  /// 'COMERCIAL' | 'ATENDIMENTO' | 'DESENVOLVIMENTO' | 'OUTRA' (validado
+  /// em @ktask/contracts). String pra permitir evolucao sem migration.
+  area                  String?
+  /// D9: mostra os botoes de registro de contato na caixa de comentario
+  /// dos cards deste fluxo. Default false = nada muda pros usuarios.
+  contactLoggingEnabled Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board        Board                           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  versions     BoardPerformanceConfigVersion[]
+
+  @@index([organizationId, area])
+}
+
+/// Versao imutavel da classificacao de colunas. Nunca e editada: salvar
+/// cria versao nova. Cada evento e classificado pela versao com maior
+/// effectiveFrom <= evento.createdAt — editar a config nao reclassifica o
+/// passado, salvo retroatividade explicita (effectiveFrom no passado,
+/// registrada com autor).
+model BoardPerformanceConfigVersion {
+  id                  String   @id @default(cuid())
+  configId            String
+  organizationId      String
+  boardId             String
+  effectiveFrom       DateTime
+  /// [{ listId, category: string|null, progressOrder: number|null, counted: boolean }]
+  columns             Json
+  /// [{ fromListId, toListId, movementClass }]
+  transitionOverrides Json     @default("[]")
+  note                String?
+  createdById         String
+  createdAt           DateTime @default(now())
+
+  config    BoardPerformanceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  createdBy User                   @relation("PerformanceConfigVersionCreator", fields: [createdById], references: [id])
+
+  @@index([boardId, effectiveFrom])
+  @@index([configId, effectiveFrom])
 }

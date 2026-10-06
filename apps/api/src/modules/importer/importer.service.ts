@@ -725,6 +725,7 @@ export class ImporterService {
 
       await this.prisma.activity.create({
         data: {
+          origin: 'IMPORT', // doc 52
           organizationId: tenant.organizationId,
           boardId,
           cardId: existing.id,
@@ -918,6 +919,7 @@ export class ImporterService {
 
     await this.prisma.activity.create({
       data: {
+        origin: 'IMPORT', // doc 52
         organizationId: tenant.organizationId,
         boardId,
         cardId: card.id,
@@ -1529,6 +1531,7 @@ export class ImporterService {
     // Activity de criacao
     await this.prisma.activity.create({
       data: {
+        origin: 'IMPORT', // doc 52
         organizationId: tenant.organizationId,
         boardId,
         cardId: card.id,
