@@ -762,7 +762,7 @@ vigente na data — spec §5.8: **não inferir**).
 2. existe override (from,to) na versão            → classe do override
 3. from ou to com counted = false                 → NEUTRA (fora do progresso)
 4. to ∈ CONCLUSAO_* e from ∉ CONCLUSAO_*          → CONCLUSAO (+ subtipo)
-5. from ∈ CONCLUSAO_* e to ∉ CONCLUSAO_*          → REABERTURA → conta como RETROCESSO
+5. from ∈ CONCLUSAO_* e to CONFIGURADA ∉ CONCLUSAO_* → REABERTURA → conta como RETROCESSO
 6. to = FLUXO_PARALELO ou from = FLUXO_PARALELO   → TRANSFERENCIA
 7. ambos com progressOrder:
      to > from → AVANCO ; to < from → RETROCESSO ; igual → NEUTRA
@@ -1035,6 +1035,34 @@ Equipe" (incluindo o que conta como ação e por que automações não contam).
 2.6 Configurar, **junto com o Lucas**, os fluxos do Comercial e Atendimento
 em produção (é dado de negócio — decisão dele). Mínimo: coluna de
 finalizado do Relações Institucionais.
+
+#### Fase 2 — execução (06/10/2026, branch `feat/desempenho-equipe`)
+
+- [x] 2.1 Config: `GET /performance/config`, `GET|POST /performance/config/:boardId`
+      (POST cria versão; o cliente web não tem PUT). Salvar só área sem
+      mudar colunas não cria versão nova (comparação canônica — jsonb
+      reordena chaves).
+- [x] 2.2 Relatório: `GET /performance/summary|events|cards` (OWNER/ADMIN,
+      read-only, período máx. 366 dias, dias no fuso da org).
+- [x] 2.3 Tela central `/indicadores/desempenho/configuracao` (nível básico + avançado, colunas antigas do histórico, vigência, histórico de
+      versões). Liga/desliga do registro de contato fica pra Fase 3 (sem
+      efeito antes dela).
+- [x] 2.4 Aba `/indicadores/desempenho`: filtros na URL (período no fuso da
+      org, área, fluxos múltiplos, colaborador, cliente), 8 KPIs clicáveis,
+      aviso de fluxo sem classificação, resumo por colaborador (alfabético),
+      evolução diária com seletor, tabela por dia, visão individual,
+      drill-down (card abre pelo `?card=` existente).
+- [x] Testes: 41 unitários (classificador, agregação, fuso) + smoke E2E
+      28/28 com API real (permissão 403 p/ GESTOR, automação fora, básico
+      sem inferência, versionamento, filtros, drill-down, telas antigas 200) + build de produção do web OK + conferência visual das 2 telas.
+- Bugs pegos pelo E2E e corrigidos: (1) duas versões com a mesma vigência
+  → agora vale a salva por último; (2) nível básico contava
+  "Finalizado → coluna não configurada" como reabertura → regra 6 do
+  classificador só considera reabertura se o destino estiver configurado
+  (reabertura por status continua contando sempre).
+- [ ] 2.5 Central de Ajuda (2 artigos) — pendente.
+- [ ] 2.6 Configurar os fluxos com o Lucas — depende do deploy.
+- [ ] Conferência visual em celular (largura pequena) — anotado, não crucial.
 
 ### Fase 3 — Comercial
 

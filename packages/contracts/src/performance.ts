@@ -158,3 +158,162 @@ export const PERFORMANCE_ACTION_TYPES = [
   'TIME_ENTRY_STOPPED',
   'TIME_ENTRY_CREATED',
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Relatorio (Fase 2)
+// ---------------------------------------------------------------------------
+
+/** Periodo maximo de uma consulta do relatorio (dias). */
+export const PERFORMANCE_MAX_RANGE_DAYS = 366;
+
+/** Metricas com drill-down (cada numero do relatorio abre os eventos). */
+export const PerformanceMetricSchema = z.enum([
+  'ACTIONS',
+  'CARDS',
+  'MOVES',
+  'AVANCO',
+  'RETROCESSO',
+  'TRANSFERENCIA',
+  'FINALIZACOES',
+  'REABERTURAS',
+  'COMMENTS',
+  'NAO_CLASSIFICADA',
+]);
+export type PerformanceMetric = z.infer<typeof PerformanceMetricSchema>;
+
+/** Filtros comuns (query string). Listas como CSV. */
+export const PerformanceFiltersSchema = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  boardIds: z.string().optional(),
+  userIds: z.string().optional(),
+  area: PerformanceAreaSchema.optional(),
+  companyId: z.string().optional(),
+});
+export type PerformanceFiltersQuery = z.infer<typeof PerformanceFiltersSchema>;
+
+export const PerformanceEventsQuerySchema = PerformanceFiltersSchema.extend({
+  metric: PerformanceMetricSchema,
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type PerformanceEventsQuery = z.infer<typeof PerformanceEventsQuerySchema>;
+
+export interface PerformanceCounters {
+  /** Cards distintos com ao menos 1 acao valida. */
+  cardsWorked: number;
+  actions: number;
+  moves: number;
+  advances: number;
+  retreats: number;
+  transfers: number;
+  /** Cards distintos levados a conclusao (D: cards distintos, drill-down mostra eventos). */
+  completions: number;
+  reopens: number;
+  comments: number;
+  /** Movimentacoes em fluxo/coluna sem configuracao vigente (nao inferidas). */
+  unclassifiedMoves: number;
+}
+
+export interface PerformanceUserRef {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface PerformanceSummaryResponse {
+  period: { from: string; to: string; timezone: string };
+  totals: PerformanceCounters;
+  byUser: Array<{ user: PerformanceUserRef; counters: PerformanceCounters }>;
+  /** Um item por dia do periodo (fuso da org), inclusive dias zerados. */
+  daily: Array<{ day: string; counters: PerformanceCounters }>;
+  /** Fluxos com movimentacoes no periodo sem classificacao vigente. */
+  unconfiguredBoards: Array<{ id: string; name: string; unclassifiedMoves: number }>;
+}
+
+export interface PerformanceEventItem {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  actor: { id: string; name: string; email: string; avatarUrl: string | null } | null;
+  card: { id: string; title: string; shortCode: string } | null;
+  board: { id: string; name: string; color: string | null } | null;
+  fromListName: string | null;
+  toListName: string | null;
+  movementClass: MovementClass | null;
+  conclusion: 'POSITIVA' | 'NEGATIVA' | null;
+  isCompletion: boolean;
+  isReopen: boolean;
+}
+
+export interface PerformanceEventsResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: PerformanceEventItem[];
+}
+
+export interface PerformanceCardsResponse {
+  total: number;
+  items: Array<{
+    card: { id: string; title: string; shortCode: string };
+    board: { id: string; name: string; color: string | null } | null;
+    actions: number;
+    lastActionAt: string;
+  }>;
+}
+
+// ---------------------------------------------------------------------------
+// Configuracao (tela central, D8)
+// ---------------------------------------------------------------------------
+
+export type PerformanceConfigLevel = 'NONE' | 'BASIC' | 'FULL';
+
+export interface PerformanceConfigVersionDto {
+  id: string;
+  effectiveFrom: string;
+  columns: PerformanceColumnConfig[];
+  transitionOverrides: TransitionOverride[];
+  note: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string } | null;
+}
+
+export interface PerformanceBoardSummaryDto {
+  board: { id: string; name: string; color: string | null };
+  area: PerformanceArea | null;
+  contactLoggingEnabled: boolean;
+  level: PerformanceConfigLevel;
+  conclusionLists: Array<{ id: string; name: string; category: PerformanceColumnCategory }>;
+  currentVersion: { id: string; effectiveFrom: string } | null;
+}
+
+export interface PerformanceBoardConfigDto {
+  board: { id: string; name: string; color: string | null };
+  area: PerformanceArea | null;
+  contactLoggingEnabled: boolean;
+  /** Colunas atuais (ordem do board) + antigas que aparecem no historico. */
+  lists: Array<{
+    id: string;
+    name: string;
+    position: number | null;
+    isFinalList: boolean;
+    isBacklog: boolean;
+    status: 'ACTIVE' | 'ARCHIVED' | 'TRASHED' | 'HISTORY_ONLY';
+    movesInHistory: number;
+  }>;
+  currentVersion: PerformanceConfigVersionDto | null;
+  versions: PerformanceConfigVersionDto[];
+  /** Data da 1a movimentacao do fluxo (sugestao pra retroatividade). */
+  historyStartsAt: string | null;
+}
+
+export function performanceConfigLevel(
+  columns: readonly PerformanceColumnConfig[] | null | undefined,
+): PerformanceConfigLevel {
+  if (!columns || columns.length === 0) return 'NONE';
+  if (columns.some((c) => c.progressOrder !== null)) return 'FULL';
+  if (columns.some((c) => c.category && CONCLUSION_CATEGORIES.includes(c.category))) return 'BASIC';
+  return 'NONE';
+}

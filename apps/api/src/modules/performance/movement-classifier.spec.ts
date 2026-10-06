@@ -138,10 +138,11 @@ describe('classifyMovement — nivel basico (so coluna de finalizado, D8)', () =
     expect(classifyMovement('negociacao', 'finalizado', BASIC).movementClass).toBe('CONCLUSAO');
   });
 
-  it('detecta reabertura', () => {
-    expect(classifyMovement('finalizado', 'ligando', BASIC)).toMatchObject({
-      movementClass: 'RETROCESSO',
-      isReopen: true,
+  it('saida do finalizado pra coluna nao configurada: nao infere (pode ser transferencia)', () => {
+    // Caso real: FINALIZADO -> MARKETING antes de Marketing ser marcado como paralelo
+    expect(classifyMovement('finalizado', 'marketing', BASIC)).toMatchObject({
+      movementClass: 'NAO_CLASSIFICADA',
+      isReopen: false,
     });
   });
 
@@ -173,6 +174,21 @@ describe('pickVersionAt — vigencia (spec §18: sem reclassificacao silenciosa)
 
   it('evento depois da nova versao usa a nova', () => {
     expect(pickVersionAt([v1, v2], new Date('2026-09-02T00:00:00Z'))?.id).toBe('v2');
+  });
+
+  it('empate de vigencia: vale a versao salva por ultimo', () => {
+    const basic = {
+      id: 'basic',
+      effectiveFrom: v1.effectiveFrom,
+      createdAt: new Date('2026-10-06T10:00:00Z'),
+    };
+    const full = {
+      id: 'full',
+      effectiveFrom: v1.effectiveFrom,
+      createdAt: new Date('2026-10-06T11:00:00Z'),
+    };
+    expect(pickVersionAt([full, basic], new Date('2026-06-01T00:00:00Z'))?.id).toBe('full');
+    expect(pickVersionAt([basic, full], new Date('2026-06-01T00:00:00Z'))?.id).toBe('full');
   });
 
   it('limite inclusivo: evento exatamente no effectiveFrom usa a versao', () => {

@@ -19,6 +19,8 @@ import {
 
 export interface PerformanceConfigVersionLike {
   effectiveFrom: Date;
+  /** Desempate entre versoes com a mesma vigencia: a salva por ultimo vale. */
+  createdAt?: Date;
   columns: PerformanceColumnConfig[];
   transitionOverrides: TransitionOverride[];
 }
@@ -42,17 +44,25 @@ function result(
 }
 
 /**
- * Escolhe a versao vigente num instante: maior effectiveFrom <= at.
+ * Escolhe a versao vigente num instante: maior effectiveFrom <= at; em
+ * empate de vigencia, a salva por ultimo (createdAt) — ex.: salvar o nivel
+ * basico "desde maio" e depois o completo tambem "desde maio".
  * Aceita a lista em qualquer ordem. Null = fluxo nao configurado na data.
  */
-export function pickVersionAt<T extends { effectiveFrom: Date }>(
+export function pickVersionAt<T extends { effectiveFrom: Date; createdAt?: Date }>(
   versions: readonly T[],
   at: Date,
 ): T | null {
   let best: T | null = null;
   for (const v of versions) {
     if (v.effectiveFrom.getTime() > at.getTime()) continue;
-    if (!best || v.effectiveFrom.getTime() > best.effectiveFrom.getTime()) best = v;
+    if (!best) {
+      best = v;
+      continue;
+    }
+    const dv = v.effectiveFrom.getTime() - best.effectiveFrom.getTime();
+    const dc = (v.createdAt?.getTime() ?? 0) - (best.createdAt?.getTime() ?? 0);
+    if (dv > 0 || (dv === 0 && dc > 0)) best = v;
   }
   return best;
 }
@@ -98,8 +108,10 @@ export function classifyMovement(
     return result('TRANSFERENCIA');
   }
 
-  // 6. Saiu de conclusao pra coluna comum: reabertura, conta como retrocesso.
-  if (isConclusion(fromCat) && !isConclusion(toCat)) {
+  // 6. Saiu de conclusao pra coluna comum CONFIGURADA: reabertura, conta
+  //    como retrocesso. Destino nao configurado (ex.: nivel basico, ou
+  //    "Marketing" ainda sem categoria) cai na regra 8: nao inferir.
+  if (isConclusion(fromCat) && to && !isConclusion(toCat)) {
     return result('RETROCESSO', { isReopen: true });
   }
 

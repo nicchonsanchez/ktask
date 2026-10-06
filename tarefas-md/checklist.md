@@ -438,7 +438,7 @@ Plano completo: [22-pagina-inicial.md](22-pagina-inicial.md). Etapas:
 Plano completo: [52-desempenho-equipe.md](52-desempenho-equipe.md). Pedido do Lucas (06/10/2026) + spec funcional v1.1. Dados de produção auditados (read-only). Decisões do Nicchon incorporadas (D6, D8–D10). Perguntas ao Lucas respondidas; metas de exemplo definidas (seção 12.1). Pronto pra Fase 1.
 
 - [~] **Fase 1 — Fundação** (implementada na branch `feat/desempenho-equipe`, 119 testes verdes; aguardando revisão + autorização de deploy): `Activity.origin` + backfill, `automationRunId` preenchido pela engine, `CARD_MOVED` em decisão/revert de aprovação, config gerencial versionada por quadro, classificador puro + testes
-- [ ] **Fase 2 — Desempenho**: aba `/indicadores/desempenho` só Dono/Admin (filtros, KPIs, resumo por colaborador, drill-down, visão individual, evolução diária) + tela central "Configuração dos relatórios"
+- [~] **Fase 2 — Desempenho** (implementada na branch; faltam artigos da Central de Ajuda e configurar fluxos com o Lucas após deploy): aba `/indicadores/desempenho` só Dono/Admin (filtros, KPIs, resumo por colaborador, drill-down, visão individual, evolução diária) + tela central "Configuração dos relatórios"
 - [ ] **Fase 3 — Comercial**: registro de contato na caixa de comentário, ligado por fluxo (`CardInteraction`) + follow-up como tarefa + KPIs comerciais
 - [ ] **Fase 4 — Metas**: metas configuráveis pelo Lucas (métrica, alcance, período, alvo, ativa/inativa) + 6 metas de exemplo calibradas no ritmo real
 - [ ] **Fase 5 — Outras áreas**: Atendimento e Desenvolvimento via configuração

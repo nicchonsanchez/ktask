@@ -41,6 +41,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { UsersViewModule } from './modules/users-view/users-view.module';
 import { SupportModule } from './modules/support/support.module';
 import { ManagementModule } from './modules/management/management.module';
+import { PerformanceModule } from './modules/performance/performance.module';
 import { ServiceProvidersModule } from './modules/service-providers/service-providers.module';
 import { WebhooksOutboundModule } from './modules/webhooks-outbound/webhooks-outbound.module';
 import { TrashModule } from './modules/trash/trash.module';
@@ -123,6 +124,7 @@ import { TrashModule } from './modules/trash/trash.module';
     UsersViewModule,
     SupportModule,
     ManagementModule,
+    PerformanceModule,
     ServiceProvidersModule,
     WebhooksOutboundModule,
     TrashModule,
