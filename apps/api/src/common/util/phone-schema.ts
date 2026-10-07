@@ -10,7 +10,7 @@ import { z } from 'zod';
  * Variantes:
  *   - PhoneRequiredSchema: obriga phone valido
  *   - PhoneOptionalSchema: aceita undefined
- *   - PhoneNullableSchema: aceita null e ""
+ *   - PhoneNullableSchema: aceita null e "" (limpa); ausente = nao mexe
  */
 export const PhoneRequiredSchema = z
   .string()
@@ -35,9 +35,11 @@ export const PhoneNullableSchema = z
   .nullable()
   .optional()
   .transform((v) => {
-    if (v === null || v === undefined || v === '') return null;
+    // Campo ausente continua ausente: PATCH parcial nao pode apagar o phone.
+    if (v === undefined) return undefined;
+    if (v === null || v === '') return null;
     return v.replace(/\D/g, '');
   })
-  .refine((v) => v === null || /^\d{10,15}$/.test(v), {
+  .refine((v) => v === undefined || v === null || /^\d{10,15}$/.test(v), {
     message: 'Telefone deve ter de 10 a 15 dígitos.',
   });

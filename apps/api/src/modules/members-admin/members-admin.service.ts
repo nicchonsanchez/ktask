@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 import {
   BadRequestException,
   ForbiddenException,
@@ -130,7 +128,8 @@ export class MembersAdminService {
 
   /**
    * Atualiza nome / phone / email (este ultimo via fluxo de confirmacao).
-   * Email nao troca direto — gera pendingEmail + envia link pro novo email.
+   * Email nao troca direto — gera pendingEmail + envia link pro novo email
+   * (Doc 53). A troca so acontece quando o user clica no link.
    */
   async update(
     actorUserId: string,
@@ -193,14 +192,6 @@ export class MembersAdminService {
       });
       if (exists) throw new BadRequestException('E-mail já em uso por outro usuário.');
       data.pendingEmail = body.email;
-      // TODO(email): enviar email de confirmacao pro novo endereco quando
-      // mailer estiver integrado (SMTP_SECURE config ja preparado).
-      // Por ora, log o token pra admin enviar manualmente.
-      const confirmToken = randomBytes(24).toString('base64url');
-      this.logger.warn(
-        `[email-change] User ${targetUserId} email change requested: ${target.email} -> ${body.email}. ` +
-          `Confirm token (TODO send email): ${confirmToken}`,
-      );
       activities.push(
         this.prisma.activity.create({
           data: {
@@ -224,6 +215,19 @@ export class MembersAdminService {
     await this.prisma.user.update({ where: { id: targetUserId }, data });
     await Promise.all(activities);
 
+    // Link vai depois de gravar pendingEmail: confirmEmailChange exige que
+    // o token bata com a pendencia atual.
+    let emailChange: { to: string; sent: boolean } | undefined;
+    if (data.pendingEmail) {
+      const { sent } = await this.auth.dispatchEmailChangeConfirmation({
+        user: { id: target.id, name: (data.name as string | undefined) ?? target.name },
+        newEmail: data.pendingEmail as string,
+        organizationId: actorTenant.organizationId,
+        requestedById: actorUserId,
+      });
+      emailChange = { to: data.pendingEmail as string, sent };
+    }
+
     // Phone mudou: emite evento pra Approvals re-vincular reviewers
     // phone-only legacy que casam com o novo phone. Listener faz o
     // backfill de forma idempotente (UPDATE só onde userId IS NULL).
@@ -233,6 +237,82 @@ export class MembersAdminService {
         newPhone: data.phone as string,
       });
     }
+
+    return { ok: true, changed: true, emailChange };
+  }
+
+  /**
+   * Doc 53: reenvia o link de confirmacao da troca de email pendente.
+   * Gera token novo e invalida os anteriores. Tambem serve pra pendencias
+   * criadas antes do Doc 53 (que nunca tiveram token).
+   */
+  async resendEmailChange(actorUserId: string, actorTenant: TenantContext, targetUserId: string) {
+    await this.assertCanModify(actorUserId, actorTenant, targetUserId);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, name: true, pendingEmail: true },
+    });
+    if (!target) throw new NotFoundException('Usuário não encontrado.');
+    if (!target.pendingEmail) {
+      throw new BadRequestException('Não há troca de e-mail pendente para este membro.');
+    }
+
+    const { sent } = await this.auth.dispatchEmailChangeConfirmation({
+      user: { id: target.id, name: target.name },
+      newEmail: target.pendingEmail,
+      organizationId: actorTenant.organizationId,
+      requestedById: actorUserId,
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        organizationId: actorTenant.organizationId,
+        actorId: actorUserId,
+        type: 'MEMBER_EMAIL_CHANGE_REQUESTED',
+        payload: {
+          targetUserId,
+          to: target.pendingEmail,
+          resend: true,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      ok: true,
+      sent,
+      message: sent
+        ? `Link de confirmação reenviado para ${target.pendingEmail}.`
+        : `Não foi possível enviar o e-mail para ${target.pendingEmail}. Tente de novo mais tarde.`,
+    };
+  }
+
+  /** Doc 53: cancela a troca de email pendente e invalida os links enviados. */
+  async cancelEmailChange(actorUserId: string, actorTenant: TenantContext, targetUserId: string) {
+    await this.assertCanModify(actorUserId, actorTenant, targetUserId);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, pendingEmail: true },
+    });
+    if (!target) throw new NotFoundException('Usuário não encontrado.');
+    if (!target.pendingEmail) {
+      return { ok: true, changed: false };
+    }
+
+    await this.prisma.user.update({ where: { id: targetUserId }, data: { pendingEmail: null } });
+    await this.auth.invalidateEmailChangeTokens(targetUserId);
+    await this.prisma.activity.create({
+      data: {
+        organizationId: actorTenant.organizationId,
+        actorId: actorUserId,
+        type: 'MEMBER_EMAIL_CHANGE_CANCELLED',
+        payload: {
+          targetUserId,
+          to: target.pendingEmail,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
 
     return { ok: true, changed: true };
   }

@@ -233,6 +233,75 @@ export class MailService implements OnModuleInit, OnModuleDestroy {
       text,
     });
   }
+
+  /**
+   * Doc 53: link de confirmacao de troca de email. Vai pro NOVO endereco
+   * (prova de posse). TTL 48h, single-use.
+   */
+  async sendEmailChangeConfirmation(params: {
+    to: string;
+    name: string;
+    confirmUrl: string;
+    expiresAt: Date;
+  }): Promise<boolean> {
+    const { to, name, confirmUrl, expiresAt } = params;
+    const expiresStr = expiresAt.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+    });
+
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Confirmar novo e-mail — KTask</title></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f4f4f5; margin:0; padding:24px;">
+  <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:8px; padding:32px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+      <div style="width:40px; height:40px; background:#6D28D9; color:#fff; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:18px;">K</div>
+      <h1 style="margin:0; font-size:18px; color:#111;">Confirmar novo e-mail</h1>
+    </div>
+    <p style="color:#333; line-height:1.6; margin:0 0 16px;">
+      Olá, <strong>${escapeHtml(name)}</strong>.
+    </p>
+    <p style="color:#555; line-height:1.6; margin:0 0 24px;">
+      Um administrador pediu pra trocar o e-mail da sua conta KTask para <strong>${escapeHtml(to)}</strong>. Pra concluir, confirme no botão abaixo. O link vale até <strong>${expiresStr}</strong>.
+    </p>
+    <p style="text-align:center; margin:0 0 24px;">
+      <a href="${confirmUrl}" style="display:inline-block; background:#6D28D9; color:#fff; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Confirmar novo e-mail</a>
+    </p>
+    <p style="color:#888; font-size:12px; line-height:1.5; margin:0 0 8px;">
+      Ou copie e cole este link no navegador:<br>
+      <a href="${confirmUrl}" style="color:#6D28D9; word-break:break-all;">${confirmUrl}</a>
+    </p>
+    <p style="color:#888; font-size:12px; margin:24px 0 0;">
+      Depois de confirmar, você passa a entrar no KTask com este e-mail. A senha continua a mesma. Se você não esperava esta mensagem, ignore — nada muda na sua conta.
+    </p>
+  </div>
+</body>
+</html>`.trim();
+
+    const text = [
+      `Olá ${name},`,
+      '',
+      `Um administrador pediu pra trocar o e-mail da sua conta KTask para ${to}.`,
+      'Pra concluir, abra o link abaixo (vale até ' + expiresStr + '):',
+      '',
+      confirmUrl,
+      '',
+      'Depois de confirmar, você passa a entrar no KTask com este e-mail. A senha continua a mesma.',
+      'Se não esperava esta mensagem, ignore — nada muda na sua conta.',
+    ].join('\n');
+
+    return this.send({
+      to,
+      subject: 'Confirme seu novo e-mail no KTask',
+      html,
+      text,
+    });
+  }
 }
 
 function escapeHtml(s: string): string {

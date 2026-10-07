@@ -13,6 +13,7 @@ import {
   Mail,
   Phone,
   Save,
+  Send,
   Shield,
   ShieldCheck,
   User as UserIcon,
@@ -22,7 +23,9 @@ import {
 import { ApiError } from '@/lib/api-client';
 import { ORG_ROLE_LABELS, type OrgRole } from '@ktask/contracts';
 import {
+  cancelEmailChange,
   forcePasswordReset,
+  resendEmailChange,
   sendPasswordResetLink,
   membersAdminQueries,
   suspendMember,
@@ -229,7 +232,14 @@ function DataTab({
   canEdit,
   onSaved,
 }: {
-  member: { id: string; name: string; email: string; phone: string | null; role: OrgRole };
+  member: {
+    id: string;
+    name: string;
+    email: string;
+    pendingEmail: string | null;
+    phone: string | null;
+    role: OrgRole;
+  };
   canEdit: boolean;
   onSaved: () => void;
 }) {
@@ -239,6 +249,8 @@ function DataTab({
   const [role, setRole] = useState<OrgRole>(member.role);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Doc 53: resultado do envio do link de confirmacao (troca, reenvio).
+  const [emailNotice, setEmailNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const updateMut = useMutation({
     mutationFn: () => {
@@ -249,13 +261,51 @@ function DataTab({
       if (phoneNorm !== member.phone) input.phone = phoneNorm;
       return updateMember(member.id, input);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       setSavedAt(Date.now());
       setError(null);
+      if (res.emailChange) {
+        // Email so troca apos confirmacao: campo volta pro atual, senao o
+        // form segue "sujo" e convida a salvar de novo.
+        setEmail(member.email);
+        setEmailNotice(
+          res.emailChange.sent
+            ? {
+                ok: true,
+                text: `Link de confirmação enviado para ${res.emailChange.to}. O e-mail só muda depois que o membro clicar no link.`,
+              }
+            : {
+                ok: false,
+                text: `Troca registrada, mas o e-mail para ${res.emailChange.to} não pôde ser enviado. Use "Reenviar link".`,
+              },
+        );
+      }
       onSaved();
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Erro ao salvar.');
+    },
+  });
+
+  const resendMut = useMutation({
+    mutationFn: () => resendEmailChange(member.id),
+    onSuccess: (res) => {
+      setEmailNotice({ ok: res.sent, text: res.message });
+      onSaved();
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Erro ao reenviar link.');
+    },
+  });
+
+  const cancelEmailMut = useMutation({
+    mutationFn: () => cancelEmailChange(member.id),
+    onSuccess: () => {
+      setEmailNotice(null);
+      onSaved();
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Erro ao cancelar troca.');
     },
   });
 
@@ -296,9 +346,55 @@ function DataTab({
           className="border-border bg-bg w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none disabled:opacity-60"
         />
         <p className="text-fg-subtle mt-1 text-[11px]">
-          Mudança de e-mail dispara link de confirmação pro novo endereço (anti-sequestro). Email
-          original continua válido até confirmação.
+          Ao trocar, o novo endereço recebe um link de confirmação (válido por 48h). O e-mail atual
+          continua valendo para login até o membro clicar no link.
         </p>
+        {member.pendingEmail && (
+          <div className="bg-warning-subtle mt-2 rounded-md px-2.5 py-2 text-[12px]">
+            <p className="text-warning">
+              Aguardando confirmação de <strong>{member.pendingEmail}</strong>
+            </p>
+            {canEdit && (
+              <div className="mt-1.5 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => resendMut.mutate()}
+                  disabled={resendMut.isPending || cancelEmailMut.isPending}
+                  className="text-fg hover:text-primary inline-flex items-center gap-1 font-medium disabled:opacity-50"
+                >
+                  {resendMut.isPending ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Send size={11} />
+                  )}
+                  Reenviar link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cancelEmailMut.mutate()}
+                  disabled={resendMut.isPending || cancelEmailMut.isPending}
+                  className="text-fg-muted hover:text-danger inline-flex items-center gap-1 disabled:opacity-50"
+                >
+                  {cancelEmailMut.isPending ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <X size={11} />
+                  )}
+                  Cancelar troca
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {emailNotice && (
+          <p
+            className={`mt-2 rounded px-2 py-1 text-[11px] ${
+              emailNotice.ok ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'
+            }`}
+          >
+            {emailNotice.text}
+          </p>
+        )}
       </Field>
 
       <Field label="WhatsApp" icon={<Phone size={13} />}>
