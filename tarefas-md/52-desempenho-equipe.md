@@ -1062,7 +1062,7 @@ finalizado do Relações Institucionais.
   (reabertura por status continua contando sempre).
 - [ ] 2.5 Central de Ajuda (2 artigos) — pendente.
 - [ ] 2.6 Configurar os fluxos com o Lucas — depende do deploy.
-- [ ] Conferência visual em celular (largura pequena) — anotado, não crucial.
+- [x] Conferência visual em celular (390px, 06–07/10/2026): 3 ajustes feitos (filtros não grudam no celular, aba ativa visível, metas em faixa horizontal com recuo) e conferidos na tela.
 
 ### Fase 3 — Comercial
 
@@ -1177,7 +1177,7 @@ histórico de moves é completo).
       histórico fora do período, sem config, card sem entrada conhecida) +
       smoke E2E 16/16 com API real (inclui conclusão por automação contando no
       fluxo e não no relatório por pessoa).
-- [ ] Conferência visual da seção "Fluxo do trabalho" — anotada (não crucial).
+- [x] Conferência visual da seção "Fluxo do trabalho" (celular, 06/10/2026).
 
 ### Fase 6 — Evolução (fora deste plano; só registrado)
 
