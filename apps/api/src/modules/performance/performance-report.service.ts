@@ -1,0 +1,590 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import {
+  performanceConfigLevel,
+  PERFORMANCE_ACTION_TYPES,
+  PERFORMANCE_MAX_RANGE_DAYS,
+  type FlowBoardMetrics,
+  type PerformanceFlowResponse,
+  type PerformanceArea,
+  type PerformanceCardsResponse,
+  type PerformanceColumnConfig,
+  type PerformanceEventsResponse,
+  type PerformanceMetric,
+  type PerformanceSummaryResponse,
+  type TransitionOverride,
+} from '@ktask/contracts';
+
+import { PrismaService } from '@/common/prisma/prisma.service';
+import type { TenantContext } from '@/common/tenant/tenant.types';
+
+import { pickVersionAt, type PerformanceConfigVersionLike } from './movement-classifier';
+import {
+  aggregate,
+  dayKey,
+  daysBetween,
+  deriveEvent,
+  isValidAction,
+  matchesMetric,
+  type DerivedPerformanceEvent,
+} from './performance-aggregate';
+import { PerformanceConfigService } from './performance-config.service';
+import { computeFlowCounters } from './flow-metrics';
+
+/** Quanto historico antes do periodo usar pra saber desde quando o card esta na coluna. */
+const FLOW_LOOKBACK_DAYS = 180;
+const FLOW_MAX_BOARDS = 20;
+
+export interface PerformanceFilters {
+  from: Date;
+  to: Date;
+  boardIds?: string[];
+  userIds?: string[];
+  area?: PerformanceArea;
+  companyId?: string;
+}
+
+/**
+ * Doc 52 — relatorio "Desempenho da Equipe".
+ *
+ * Fonte: Activity com origin = USER (automacao, sistema, aprovacao e
+ * importacao nao contam pra ninguem). Read-only: nenhum metodo escreve.
+ */
+@Injectable()
+export class PerformanceReportService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: PerformanceConfigService,
+  ) {}
+
+  private validateRange(f: PerformanceFilters) {
+    if (Number.isNaN(f.from.getTime()) || Number.isNaN(f.to.getTime())) {
+      throw new BadRequestException('Período inválido.');
+    }
+    if (f.from > f.to) throw new BadRequestException('Início do período depois do fim.');
+    const days = (f.to.getTime() - f.from.getTime()) / 86_400_000;
+    if (days > PERFORMANCE_MAX_RANGE_DAYS) {
+      throw new BadRequestException(`Período máximo de ${PERFORMANCE_MAX_RANGE_DAYS} dias.`);
+    }
+  }
+
+  /** Carrega e deriva os eventos do periodo conforme filtros. */
+  /** Tambem usado pelas metas (Fase 4) com o mesmo filtro. */
+  async loadEvents(
+    tenant: TenantContext,
+    f: PerformanceFilters,
+  ): Promise<{
+    events: DerivedPerformanceEvent[];
+    timezone: string;
+    boardScope: string[] | null;
+  }> {
+    this.config.assertCanManage(tenant);
+    this.validateRange(f);
+    const orgId = tenant.organizationId;
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { timezone: true },
+    });
+    const timezone = org?.timezone || 'America/Sao_Paulo';
+
+    // Escopo de fluxos: filtro explicito ∩ area (via configuracao gerencial).
+    let boardScope: string[] | null = f.boardIds?.length ? f.boardIds : null;
+    if (f.area) {
+      const inArea = await this.prisma.boardPerformanceConfig.findMany({
+        where: { organizationId: orgId, area: f.area },
+        select: { boardId: true },
+      });
+      const ids = inArea.map((c) => c.boardId);
+      boardScope = boardScope ? boardScope.filter((id) => ids.includes(id)) : ids;
+    }
+    if (boardScope && boardScope.length === 0) return { events: [], timezone, boardScope };
+
+    // Cliente: cards vinculados a empresa (CardContact).
+    let cardScope: string[] | null = null;
+    if (f.companyId) {
+      const links = await this.prisma.cardContact.findMany({
+        where: { contactId: f.companyId, contact: { organizationId: orgId } },
+        select: { cardId: true },
+      });
+      cardScope = links.map((l) => l.cardId);
+      if (cardScope.length === 0) return { events: [], timezone, boardScope };
+    }
+
+    const where: Prisma.ActivityWhereInput = {
+      organizationId: orgId,
+      origin: 'USER',
+      createdAt: { gte: f.from, lte: f.to },
+      type: { in: [...PERFORMANCE_ACTION_TYPES] },
+      actorId: f.userIds?.length ? { in: f.userIds } : { not: null },
+      boardId: boardScope ? { in: boardScope } : { not: null },
+      cardId: cardScope ? { in: cardScope } : { not: null },
+    };
+
+    const raw = await this.prisma.activity.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        type: true,
+        payload: true,
+        boardId: true,
+        cardId: true,
+        actorId: true,
+        createdAt: true,
+      },
+    });
+
+    const boardIds = [...new Set(raw.map((r) => r.boardId).filter((b): b is string => !!b))];
+    const versions = boardIds.length
+      ? await this.prisma.boardPerformanceConfigVersion.findMany({
+          where: { boardId: { in: boardIds } },
+          select: {
+            boardId: true,
+            effectiveFrom: true,
+            createdAt: true,
+            columns: true,
+            transitionOverrides: true,
+          },
+        })
+      : [];
+    const byBoard = new Map<string, PerformanceConfigVersionLike[]>();
+    for (const v of versions) {
+      const arr = byBoard.get(v.boardId) ?? [];
+      arr.push({
+        effectiveFrom: v.effectiveFrom,
+        createdAt: v.createdAt,
+        columns: (Array.isArray(v.columns)
+          ? v.columns
+          : []) as unknown as PerformanceColumnConfig[],
+        transitionOverrides: (Array.isArray(v.transitionOverrides)
+          ? v.transitionOverrides
+          : []) as unknown as TransitionOverride[],
+      });
+      byBoard.set(v.boardId, arr);
+    }
+
+    // Fase 3: registros de contato usam o estado ATUAL do CardInteraction
+    // (corrigido -> vale o novo tipo/resultado; excluido -> nao conta).
+    const interactionIds = raw
+      .filter((r) => r.type === 'COMMERCIAL_ACTIVITY_LOGGED')
+      .map((r) => (r.payload as { interactionId?: unknown } | null)?.interactionId)
+      .filter((x): x is string => typeof x === 'string');
+    const interactions = interactionIds.length
+      ? await this.prisma.cardInteraction.findMany({
+          where: { id: { in: interactionIds } },
+          select: { id: true, type: true, outcome: true, deletedAt: true },
+        })
+      : [];
+    const interactionMap = new Map(interactions.map((i) => [i.id, i]));
+    const current = raw.flatMap((r) => {
+      if (r.type !== 'COMMERCIAL_ACTIVITY_LOGGED') return [r];
+      const id = (r.payload as { interactionId?: unknown } | null)?.interactionId;
+      const i = typeof id === 'string' ? interactionMap.get(id) : undefined;
+      if (!i || i.deletedAt) return [];
+      return [{ ...r, payload: { ...(r.payload as object), type: i.type, outcome: i.outcome } }];
+    });
+
+    const events = current.filter(isValidAction).map((r) => deriveEvent(r, byBoard));
+    return { events, timezone, boardScope };
+  }
+
+  async summary(tenant: TenantContext, f: PerformanceFilters): Promise<PerformanceSummaryResponse> {
+    const { events, timezone, boardScope } = await this.loadEvents(tenant, f);
+
+    // Por colaborador
+    const byUserMap = new Map<string, DerivedPerformanceEvent[]>();
+    for (const e of events) {
+      if (!e.actorId) continue;
+      const arr = byUserMap.get(e.actorId) ?? [];
+      arr.push(e);
+      byUserMap.set(e.actorId, arr);
+    }
+    const users = byUserMap.size
+      ? await this.prisma.user.findMany({
+          where: { id: { in: [...byUserMap.keys()] } },
+          select: { id: true, name: true, avatarUrl: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    // Ordem alfabetica (acompanhamento, nao ranking — spec §11).
+    const byUser = [...byUserMap.entries()]
+      .map(([id, evs]) => ({
+        user: userMap.get(id) ?? { id, name: 'Usuário removido', avatarUrl: null },
+        counters: aggregate(evs),
+      }))
+      .sort((a, b) => a.user.name.localeCompare(b.user.name, 'pt-BR'));
+
+    // Por dia (fuso da org), inclusive dias sem nada
+    const byDay = new Map<string, DerivedPerformanceEvent[]>();
+    for (const e of events) {
+      const k = dayKey(e.createdAt, timezone);
+      const arr = byDay.get(k) ?? [];
+      arr.push(e);
+      byDay.set(k, arr);
+    }
+    const daily = daysBetween(f.from, f.to, timezone).map((day) => ({
+      day,
+      counters: aggregate(byDay.get(day) ?? []),
+    }));
+
+    // Fluxos com movimentacoes nao classificadas (spec §5.8: avisar)
+    const unclassified = new Map<string, number>();
+    for (const e of events) {
+      if (e.isMove && e.movementClass === 'NAO_CLASSIFICADA' && e.boardId) {
+        unclassified.set(e.boardId, (unclassified.get(e.boardId) ?? 0) + 1);
+      }
+    }
+    const unBoards = unclassified.size
+      ? await this.prisma.board.findMany({
+          where: { id: { in: [...unclassified.keys()] } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    return {
+      period: { from: f.from.toISOString(), to: f.to.toISOString(), timezone },
+      totals: aggregate(events),
+      byUser,
+      daily,
+      unconfiguredBoards: unBoards
+        .map((b) => ({ id: b.id, name: b.name, unclassifiedMoves: unclassified.get(b.id) ?? 0 }))
+        .sort((a, b) => b.unclassifiedMoves - a.unclassifiedMoves),
+      followUps: await this.openFollowUps(tenant.organizationId, f, boardScope),
+    };
+  }
+
+  /**
+   * Fase 3: follow-ups (tarefas criadas pelo registro de contato) em aberto
+   * AGORA, pros colaboradores/fluxos filtrados. Independe do periodo.
+   */
+  private async openFollowUps(
+    organizationId: string,
+    f: PerformanceFilters,
+    boardScope: string[] | null,
+  ): Promise<{ pending: number; overdue: number }> {
+    const links = await this.prisma.cardInteraction.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        followUpItemId: { not: null },
+        ...(f.userIds?.length ? { userId: { in: f.userIds } } : {}),
+        ...(boardScope ? { boardId: { in: boardScope } } : {}),
+        card: { deletedAt: null, isArchived: false },
+      },
+      select: { followUpItemId: true },
+    });
+    const ids = links.map((l) => l.followUpItemId).filter((x): x is string => !!x);
+    if (ids.length === 0) return { pending: 0, overdue: 0 };
+    const now = new Date();
+    const [pending, overdue] = await Promise.all([
+      this.prisma.checklistItem.count({ where: { id: { in: ids }, isDone: false } }),
+      this.prisma.checklistItem.count({
+        where: { id: { in: ids }, isDone: false, dueDate: { lt: now } },
+      }),
+    ]);
+    return { pending, overdue };
+  }
+
+  /**
+   * Fase 5 (spec §15) — indicadores do FLUXO por quadro (Atendimento,
+   * Desenvolvimento...). Movimentos de qualquer origem exceto importacao:
+   * tempo numa coluna e fato, independe de quem moveu. Read-only.
+   */
+  async flow(tenant: TenantContext, f: PerformanceFilters): Promise<PerformanceFlowResponse> {
+    this.config.assertCanManage(tenant);
+    this.validateRange(f);
+    const orgId = tenant.organizationId;
+
+    let boardIds = f.boardIds?.length ? f.boardIds : null;
+    if (f.area) {
+      const inArea = await this.prisma.boardPerformanceConfig.findMany({
+        where: { organizationId: orgId, area: f.area },
+        select: { boardId: true },
+      });
+      const ids = inArea.map((c) => c.boardId);
+      boardIds = boardIds ? boardIds.filter((id) => ids.includes(id)) : ids;
+    }
+    if (!boardIds) {
+      throw new BadRequestException('Filtre por área ou fluxo para ver o fluxo do trabalho.');
+    }
+    const boards = await this.prisma.board.findMany({
+      where: { id: { in: boardIds.slice(0, FLOW_MAX_BOARDS) }, organizationId: orgId },
+      select: { id: true, name: true, color: true },
+      orderBy: { name: 'asc' },
+    });
+    if (boards.length === 0) {
+      return { period: { from: f.from.toISOString(), to: f.to.toISOString() }, boards: [] };
+    }
+    const ids = boards.map((b) => b.id);
+    const lookback = new Date(f.from.getTime() - FLOW_LOOKBACK_DAYS * 86_400_000);
+
+    const [presences, moves, versionRows] = await Promise.all([
+      this.prisma.cardPresence.findMany({
+        where: {
+          boardId: { in: ids },
+          addedAt: { gte: lookback, lte: f.to },
+          card: { deletedAt: null },
+        },
+        select: { cardId: true, boardId: true, addedAt: true },
+      }),
+      this.prisma.activity.findMany({
+        where: {
+          organizationId: orgId,
+          boardId: { in: ids },
+          type: 'CARD_MOVED',
+          origin: { not: 'IMPORT' },
+          createdAt: { gte: lookback, lte: f.to },
+          cardId: { not: null },
+        },
+        select: { boardId: true, cardId: true, payload: true, createdAt: true },
+      }),
+      this.prisma.boardPerformanceConfigVersion.findMany({
+        where: { boardId: { in: ids } },
+        select: {
+          boardId: true,
+          effectiveFrom: true,
+          createdAt: true,
+          columns: true,
+          transitionOverrides: true,
+        },
+      }),
+    ]);
+
+    const versionsBy = new Map<string, PerformanceConfigVersionLike[]>();
+    for (const v of versionRows) {
+      const arr = versionsBy.get(v.boardId) ?? [];
+      arr.push({
+        effectiveFrom: v.effectiveFrom,
+        createdAt: v.createdAt,
+        columns: (Array.isArray(v.columns)
+          ? v.columns
+          : []) as unknown as PerformanceColumnConfig[],
+        transitionOverrides: (Array.isArray(v.transitionOverrides)
+          ? v.transitionOverrides
+          : []) as unknown as TransitionOverride[],
+      });
+      versionsBy.set(v.boardId, arr);
+    }
+
+    const now = new Date();
+    const out: FlowBoardMetrics[] = [];
+    for (const b of boards) {
+      const versions = versionsBy.get(b.id) ?? [];
+      const current = pickVersionAtNow(versions, now);
+      const waitingLists = (current?.columns ?? [])
+        .filter((c) => c.category === 'AGUARDANDO')
+        .map((c) => c.listId);
+      const waitingNow = waitingLists.length
+        ? await this.prisma.cardPresence.count({
+            where: {
+              boardId: b.id,
+              listId: { in: waitingLists },
+              removedAt: null,
+              card: {
+                deletedAt: null,
+                isArchived: false,
+                status: { notIn: ['COMPLETED', 'CANCELED'] },
+              },
+            },
+          })
+        : 0;
+
+      const counters = computeFlowCounters({
+        from: f.from,
+        to: f.to,
+        versions,
+        starts: presences
+          .filter((p) => p.boardId === b.id)
+          .map((p) => ({ cardId: p.cardId, at: p.addedAt })),
+        moves: moves
+          .filter((m) => m.boardId === b.id)
+          .flatMap((m) => {
+            const p = (m.payload ?? {}) as { fromListId?: unknown; toListId?: unknown };
+            return typeof p.fromListId === 'string' && typeof p.toListId === 'string' && m.cardId
+              ? [
+                  {
+                    cardId: m.cardId,
+                    fromListId: p.fromListId,
+                    toListId: p.toListId,
+                    at: m.createdAt,
+                  },
+                ]
+              : [];
+          }),
+      });
+
+      const stageIds = [...counters.stageHours.keys()];
+      const lists = stageIds.length
+        ? await this.prisma.list.findMany({
+            where: { id: { in: stageIds } },
+            select: { id: true, name: true, position: true },
+          })
+        : [];
+      const listMap = new Map(lists.map((l) => [l.id, l]));
+      const round = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
+
+      out.push({
+        board: b,
+        level: performanceConfigLevel(current?.columns),
+        received: counters.received,
+        started: counters.started,
+        waitingEntries: counters.waitingEntries,
+        waitingNow,
+        returned: counters.returned,
+        completed: counters.completed,
+        reopened: counters.reopened,
+        avgFirstResponseHours: round(counters.avgFirstResponseHours),
+        avgCycleHours: round(counters.avgCycleHours),
+        stages: stageIds
+          .map((id) => {
+            const s = counters.stageHours.get(id)!;
+            return {
+              listId: id,
+              name: listMap.get(id)?.name ?? '(coluna removida)',
+              avgHours: Math.round((s.total / s.samples) * 10) / 10,
+              samples: s.samples,
+              position: listMap.get(id)?.position ?? Number.MAX_SAFE_INTEGER,
+            };
+          })
+          .sort((x, y) => x.position - y.position)
+          .map(({ position: _p, ...rest }) => rest),
+      });
+    }
+    return { period: { from: f.from.toISOString(), to: f.to.toISOString() }, boards: out };
+  }
+
+  /** Drill-down: eventos que compoem um numero, mais recentes primeiro. */
+  async events(
+    tenant: TenantContext,
+    f: PerformanceFilters,
+    metric: PerformanceMetric,
+    page: number,
+    pageSize: number,
+  ): Promise<PerformanceEventsResponse> {
+    const { events } = await this.loadEvents(tenant, f);
+    const matched = events.filter((e) => matchesMetric(e, metric)).reverse();
+    const slice = matched.slice((page - 1) * pageSize, page * pageSize);
+
+    const cardIds = [...new Set(slice.map((e) => e.cardId).filter((x): x is string => !!x))];
+    const boardIds = [...new Set(slice.map((e) => e.boardId).filter((x): x is string => !!x))];
+    const actorIds = [...new Set(slice.map((e) => e.actorId).filter((x): x is string => !!x))];
+    const listIds = [
+      ...new Set(slice.flatMap((e) => [e.fromListId, e.toListId]).filter((x): x is string => !!x)),
+    ];
+    const [cards, boards, actors, lists] = await Promise.all([
+      cardIds.length
+        ? this.prisma.card.findMany({
+            where: { id: { in: cardIds } },
+            select: { id: true, title: true, shortCode: true },
+          })
+        : [],
+      boardIds.length
+        ? this.prisma.board.findMany({
+            where: { id: { in: boardIds } },
+            select: { id: true, name: true, color: true },
+          })
+        : [],
+      actorIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: actorIds } },
+            select: { id: true, name: true, email: true, avatarUrl: true },
+          })
+        : [],
+      listIds.length
+        ? this.prisma.list.findMany({
+            where: { id: { in: listIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+    const cardMap = new Map(cards.map((c) => [c.id, c]));
+    const boardMap = new Map(boards.map((b) => [b.id, b]));
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
+    const listMap = new Map(lists.map((l) => [l.id, l.name]));
+
+    return {
+      total: matched.length,
+      page,
+      pageSize,
+      items: slice.map((e) => {
+        const p = (e.payload && typeof e.payload === 'object' ? e.payload : {}) as Record<
+          string,
+          unknown
+        >;
+        const name = (id: string | null, fallback: unknown) =>
+          (id && listMap.get(id)) || (typeof fallback === 'string' ? fallback : null);
+        return {
+          id: e.id,
+          type: e.type,
+          payload: p,
+          createdAt: e.createdAt.toISOString(),
+          actor: e.actorId ? (actorMap.get(e.actorId) ?? null) : null,
+          card: e.cardId ? (cardMap.get(e.cardId) ?? null) : null,
+          board: e.boardId ? (boardMap.get(e.boardId) ?? null) : null,
+          fromListName: e.isMove ? name(e.fromListId, p.fromListName) : null,
+          toListName: e.isMove ? name(e.toListId, p.toListName) : null,
+          movementClass: e.movementClass,
+          conclusion: e.conclusion,
+          isCompletion: e.isCompletion,
+          isReopen: e.isReopen,
+        };
+      }),
+    };
+  }
+
+  /** Drill-down de "Cards trabalhados": cards distintos com nº de acoes. */
+  async cards(tenant: TenantContext, f: PerformanceFilters): Promise<PerformanceCardsResponse> {
+    const { events } = await this.loadEvents(tenant, f);
+    const agg = new Map<string, { boardId: string | null; actions: number; last: Date }>();
+    for (const e of events) {
+      if (!e.cardId) continue;
+      const cur = agg.get(e.cardId) ?? { boardId: e.boardId, actions: 0, last: e.createdAt };
+      cur.actions++;
+      if (e.createdAt > cur.last) {
+        cur.last = e.createdAt;
+        cur.boardId = e.boardId;
+      }
+      agg.set(e.cardId, cur);
+    }
+    const ids = [...agg.keys()];
+    const [cards, boards] = await Promise.all([
+      ids.length
+        ? this.prisma.card.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, title: true, shortCode: true },
+          })
+        : [],
+      this.prisma.board.findMany({
+        where: {
+          id: {
+            in: [
+              ...new Set([...agg.values()].map((v) => v.boardId).filter((x): x is string => !!x)),
+            ],
+          },
+        },
+        select: { id: true, name: true, color: true },
+      }),
+    ]);
+    const boardMap = new Map(boards.map((b) => [b.id, b]));
+    const items = cards
+      .map((c) => {
+        const a = agg.get(c.id)!;
+        return {
+          card: c,
+          board: a.boardId ? (boardMap.get(a.boardId) ?? null) : null,
+          actions: a.actions,
+          lastActionAt: a.last.toISOString(),
+        };
+      })
+      .sort((x, y) => y.lastActionAt.localeCompare(x.lastActionAt));
+    return { total: items.length, items };
+  }
+}
+
+function pickVersionAtNow(
+  versions: readonly PerformanceConfigVersionLike[],
+  now: Date,
+): PerformanceConfigVersionLike | null {
+  return pickVersionAt(versions, now);
+}

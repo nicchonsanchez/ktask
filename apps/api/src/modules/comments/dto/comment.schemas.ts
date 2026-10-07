@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { InteractionInputSchema } from '@ktask/contracts';
 
 /**
  * No MVP aceitamos duas formas:
@@ -16,6 +17,11 @@ export const CreateCommentSchema = z.object({
    * pra raiz — threads ficam sempre com 1 nivel de indentacao.
    */
   parentCommentId: z.string().cuid().optional(),
+  /**
+   * Doc 52 (Fase 3): registro de contato opcional (botoes na caixa de
+   * comentario, so em fluxos habilitados). Ausente = comportamento de sempre.
+   */
+  interaction: InteractionInputSchema.optional(),
 });
 export type CreateCommentRequest = z.infer<typeof CreateCommentSchema>;
 

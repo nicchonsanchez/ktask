@@ -41,6 +41,17 @@ import { UserAvatar } from '@/components/user-avatar';
 import { useConfirm } from '@/components/ui/dialogs';
 import { useAuthStore } from '@/stores/auth-store';
 import { MentionTextarea } from './mention-textarea';
+import { cardInteractionsQuery } from '@/lib/queries/performance';
+import {
+  ContactLogBadge,
+  ContactLogPicker,
+  EMPTY_CONTACT_LOG,
+  contactLogLabel,
+  contactLogReady,
+  toInteractionInput,
+  type ContactLogDraft,
+} from '@/components/performance/contact-log';
+import type { CardInteractionDto } from '@ktask/contracts';
 
 type TabKey = 'all' | 'comments' | 'mine' | 'records';
 
@@ -86,6 +97,21 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  // Doc 52 (Fase 3): registro de contato opcional. So aparece se o fluxo do
+  // card tiver o recurso ligado; se a consulta falhar, nada muda na caixa.
+  const [contactLog, setContactLog] = useState<ContactLogDraft>(EMPTY_CONTACT_LOG);
+  const contactQ = useQuery({
+    ...cardInteractionsQuery(cardId, boardId),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const contactEnabled = contactQ.data?.enabled === true;
+  const contactReady = contactEnabled && contactLogReady(contactLog);
+  const interactionByComment = useMemo(() => {
+    const m = new Map<string, CardInteractionDto>();
+    for (const i of contactQ.data?.items ?? []) if (i.commentId) m.set(i.commentId, i);
+    return m;
+  }, [contactQ.data]);
   const fileImageRef = useRef<HTMLInputElement>(null);
   const fileAnyRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
@@ -114,15 +140,27 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
 
   async function handleSubmit() {
     const trimmed = text.trim();
-    if (trimmed.length === 0 && pending.length === 0) return;
+    if (trimmed.length === 0 && pending.length === 0 && !contactReady) return;
     setSubmitting(true);
     setError(null);
     try {
       // Cria comment (mesmo se só tiver anexos, mandamos texto vazio com 1 espaço
       // pra o backend aceitar — alternativa: ajustar backend pra aceitar body vazio
       // se houver anexos. Por agora, se só anexos, mando "[anexo]" como placeholder)
-      const placeholder = trimmed.length > 0 ? trimmed : '[anexo]';
-      const created = await createComment({ cardId, plainText: placeholder });
+      const placeholder =
+        trimmed.length > 0
+          ? trimmed
+          : contactReady
+            ? contactLogLabel(contactLog.type!, contactLog.outcome!, contactLog.customLabel)
+            : '[anexo]';
+      const interaction = contactReady
+        ? toInteractionInput(contactLog, contactQ.data?.boardId ?? null)
+        : undefined;
+      const created = await createComment({
+        cardId,
+        plainText: placeholder,
+        ...(interaction ? { interaction } : {}),
+      });
       // Sobe anexos sequencialmente. Se algum falhar, mostra erro mas mantém os
       // que subiram (comment já existe).
       const failed: string[] = [];
@@ -135,6 +173,10 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
       }
       setText('');
       setPending([]);
+      if (interaction) {
+        setContactLog(EMPTY_CONTACT_LOG);
+        void queryClient.invalidateQueries({ queryKey: ['performance', 'interactions', cardId] });
+      }
       invalidate();
       if (failed.length > 0) {
         setError(`Alguns anexos falharam:\n${failed.join('\n')}`);
@@ -210,10 +252,18 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
       .filter((c) => !c.deletedAt && !c.parentCommentId) // so raizes no feed
       .map<FeedItem>((c) => ({ kind: 'comment', at: c.createdAt, comment: c }));
 
+    // Doc 52: registro de contato ligado a um comentario visivel aparece
+    // como selo no proprio comentario (nao duplica na timeline).
+    const visibleCommentIds = new Set(comments.filter((c) => !c.deletedAt).map((c) => c.id));
     const activityItems = activities
       .filter(
         (a) =>
           a.type !== 'COMMENT_ADDED' && a.type !== 'COMMENT_EDITED' && a.type !== 'COMMENT_DELETED',
+      )
+      .filter(
+        (a) =>
+          a.type !== 'COMMERCIAL_ACTIVITY_LOGGED' ||
+          !visibleCommentIds.has(String((a.payload as { commentId?: unknown }).commentId ?? '')),
       )
       .map<FeedItem>((a) => ({ kind: 'activity', at: a.createdAt, activity: a }));
 
@@ -247,6 +297,7 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
         }}
         className={`flex flex-col gap-2 pb-3 ${dragActive ? 'ring-primary ring-offset-bg rounded-md ring-2 ring-offset-2' : ''}`}
       >
+        {contactEnabled && <ContactLogPicker value={contactLog} onChange={setContactLog} />}
         <MentionTextarea
           value={text}
           onChange={setText}
@@ -335,7 +386,9 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
           <Button
             type="submit"
             size="sm"
-            disabled={submitting || (text.trim().length === 0 && pending.length === 0)}
+            disabled={
+              submitting || (text.trim().length === 0 && pending.length === 0 && !contactReady)
+            }
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
             <Send size={14} />
@@ -372,6 +425,7 @@ export const TimelineFeed = forwardRef<TimelineFeedHandle, TimelineFeedProps>(fu
                 currentUserId={user?.id ?? null}
                 cardId={cardId}
                 boardId={boardId}
+                interaction={interactionByComment.get(item.comment.id)}
               />
             ) : (
               <ActivityItem key={`a-${item.activity.id}`} activity={item.activity} />
@@ -391,6 +445,8 @@ function CommentItem({
   boardId,
   /** Quando true, comment eh uma reply renderizada nested — esconde botoes redundantes (Responder). */
   nested = false,
+  /** Doc 52 (Fase 3): registro de contato feito junto deste comentario. */
+  interaction,
 }: {
   comment: CommentNode;
   replies?: CommentNode[];
@@ -398,6 +454,7 @@ function CommentItem({
   cardId: string;
   boardId: string;
   nested?: boolean;
+  interaction?: CardInteractionDto;
 }) {
   const isAuthor = currentUserId === comment.authorId;
   const queryClient = useQueryClient();
@@ -475,6 +532,7 @@ function CommentItem({
             {formatRelativeTime(comment.createdAt)}
           </span>
           {comment.editedAt && <span className="text-fg-subtle text-[11px]">· editado</span>}
+          {interaction && <ContactLogBadge interaction={interaction} />}
         </div>
         {editing ? (
           <div className="flex flex-col gap-2">

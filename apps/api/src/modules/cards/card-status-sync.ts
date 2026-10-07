@@ -99,6 +99,7 @@ export class CardStatusSyncService {
         boardId: card.boardId,
         cardId: card.id,
         actorId: null, // sistema, nao usuario
+        origin: 'SYSTEM', // doc 52: relatorio de desempenho nao conta
         type: nextStatus === 'COMPLETED' ? 'CARD_COMPLETED' : 'CARD_UPDATED',
         payload: {
           kind: 'card.status.autoSync',

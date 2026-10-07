@@ -1,3 +1,4 @@
+import type { InteractionInput } from '@ktask/contracts';
 import { api } from '@/lib/api-client';
 import type { CardListItem } from './boards';
 
@@ -561,6 +562,8 @@ export function createComment(input: {
   plainText: string;
   /** Marca este comment como reply de outro. Backend faz flatten p/ 1 nivel. */
   parentCommentId?: string;
+  /** Doc 52 (Fase 3): registro de contato opcional junto do comentario. */
+  interaction?: InteractionInput;
 }) {
   return api.post<CommentNode>('/api/v1/comments', input);
 }

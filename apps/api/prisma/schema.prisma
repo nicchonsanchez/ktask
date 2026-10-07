@@ -152,6 +152,23 @@ enum ActivityType {
   MEMBER_SUSPENDED
   MEMBER_UNSUSPENDED
   MEMBER_REMOVED
+  /// Doc 52 (Fase 3): registro de contato comercial (CardInteraction).
+  COMMERCIAL_ACTIVITY_LOGGED
+  COMMERCIAL_ACTIVITY_UPDATED
+  COMMERCIAL_ACTIVITY_DELETED
+}
+
+/// Doc 52: quem originou a Activity. Permite ao relatorio de Desempenho
+/// da Equipe contar so acoes humanas (automacao nao conta pro colaborador).
+/// Default USER: a grande maioria dos pontos de escrita sao acoes de
+/// usuario; os caminhos nao-humanos (engine, status sync, importador,
+/// efeitos de aprovacao) setam explicitamente.
+enum ActivityOrigin {
+  USER
+  AUTOMATION
+  SYSTEM
+  APPROVAL
+  IMPORT
 }
 
 enum AutomationTrigger {
@@ -315,6 +332,9 @@ model User {
   /// Contact vinculado (1:1 via Contact.userId). Quando existe, no CRM
   /// o User aparece como entrada de Contact com identidade vinda do User.
   linkedContact             Contact?               @relation("ContactUser")
+  performanceConfigVersions BoardPerformanceConfigVersion[] @relation("PerformanceConfigVersionCreator")
+  cardInteractions          CardInteraction[]
+  performanceGoalsCreated   PerformanceGoal[]               @relation("PerformanceGoalCreator")
 
   @@index([email])
 }
@@ -479,6 +499,9 @@ model Organization {
   importMappings     OrgImportMapping[]
   managementBoards   ManagementBoard[]
   whatsappOutbox     WhatsappOutbox[]
+  performanceConfigs BoardPerformanceConfig[]
+  cardInteractions   CardInteraction[]
+  performanceGoals   PerformanceGoal[]
 
   @@index([slug])
 }
@@ -568,6 +591,7 @@ model Board {
   cardPresences           CardPresence[]
   favorites               BoardFavorite[]
   managementColumnSources ManagementColumnSource[]
+  performanceConfig       BoardPerformanceConfig?
 
   @@index([organizationId, isArchived])
 }
@@ -751,6 +775,7 @@ model Card {
   presences      CardPresence[]
   approvals      CardApproval[]
   contacts       CardContact[]
+  interactions   CardInteraction[]
 
   @@unique([organizationId, shortCode])
   @@index([organizationId])
@@ -977,6 +1002,7 @@ model Contact {
   children     Contact[]     @relation("ContactPerson")
   user         User?         @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
   cards        CardContact[]
+  interactions CardInteraction[]
 
   @@index([organizationId, type])
   @@index([organizationId, name])
@@ -1140,6 +1166,7 @@ model Comment {
   parent      Comment?          @relation("CommentReply", fields: [parentCommentId], references: [id], onDelete: SetNull)
   replies     Comment[]         @relation("CommentReply")
   reactions   CommentReaction[]
+  interaction CardInteraction?
 
   @@index([cardId, createdAt])
   @@index([parentCommentId])
@@ -1178,6 +1205,10 @@ model Activity {
   /// Crítico pra o fluxo de undo de aprovação: sabemos diferenciar
   /// "humano interveio" de "automação encadeada disparou".
   automationRunId String?
+  /// Doc 52: origem da acao (USER/AUTOMATION/SYSTEM/APPROVAL/IMPORT).
+  /// actorId continua com o significado de sempre (inclusive o criador da
+  /// automacao, pra timeline nao mudar); relatorios filtram por origin.
+  origin          ActivityOrigin @default(USER)
   createdAt       DateTime     @default(now())
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1189,6 +1220,8 @@ model Activity {
   @@index([cardId, createdAt])
   @@index([boardId, createdAt])
   @@index([automationRunId])
+  /// Doc 52: relatorio por pessoa no periodo.
+  @@index([organizationId, actorId, createdAt])
 }
 
 // ==================== Notifications ====================
@@ -1646,4 +1679,140 @@ model ManagementColumnSource {
   @@unique([columnId, boardId, listId])
   @@index([columnId])
   @@index([listId])
+}
+
+// ==================== Desempenho da Equipe (doc 52) ====================
+// Camada gerencial de interpretacao dos eventos (Activity). NAO altera o
+// board operacional: nomes, colunas, isFinalList e cards ficam intocados.
+// Ver tarefas-md/52-desempenho-equipe.md.
+
+/// Configuracao gerencial de um fluxo pro relatorio de Desempenho.
+/// Os dados de classificacao vivem em versoes imutaveis (abaixo).
+model BoardPerformanceConfig {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  boardId               String   @unique
+  /// 'COMERCIAL' | 'ATENDIMENTO' | 'DESENVOLVIMENTO' | 'OUTRA' (validado
+  /// em @ktask/contracts). String pra permitir evolucao sem migration.
+  area                  String?
+  /// D9: mostra os botoes de registro de contato na caixa de comentario
+  /// dos cards deste fluxo. Default false = nada muda pros usuarios.
+  contactLoggingEnabled Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board        Board                           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  versions     BoardPerformanceConfigVersion[]
+
+  @@index([organizationId, area])
+}
+
+/// Versao imutavel da classificacao de colunas. Nunca e editada: salvar
+/// cria versao nova. Cada evento e classificado pela versao com maior
+/// effectiveFrom <= evento.createdAt — editar a config nao reclassifica o
+/// passado, salvo retroatividade explicita (effectiveFrom no passado,
+/// registrada com autor).
+model BoardPerformanceConfigVersion {
+  id                  String   @id @default(cuid())
+  configId            String
+  organizationId      String
+  boardId             String
+  effectiveFrom       DateTime
+  /// [{ listId, category: string|null, progressOrder: number|null, counted: boolean }]
+  columns             Json
+  /// [{ fromListId, toListId, movementClass }]
+  transitionOverrides Json     @default("[]")
+  note                String?
+  createdById         String
+  createdAt           DateTime @default(now())
+
+  config    BoardPerformanceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  createdBy User                   @relation("PerformanceConfigVersionCreator", fields: [createdById], references: [id])
+
+  @@index([boardId, effectiveFrom])
+  @@index([configId, effectiveFrom])
+}
+
+/// Doc 52 (Fase 3, D9): registro de trabalho comercial no card SEM
+/// movimentacao (ligacao, WhatsApp, e-mail, reuniao, follow-up, proposta).
+/// Criado junto com um comentario (botoes opcionais na caixa de comentario,
+/// so em fluxos com BoardPerformanceConfig.contactLoggingEnabled).
+/// Tipos/resultados validados em @ktask/contracts (String pra evoluir sem
+/// migration). Soft delete: o registro de trabalho e auditavel.
+model CardInteraction {
+  id             String    @id @default(cuid())
+  organizationId String
+  cardId         String
+  /// Fluxo onde foi registrado (snapshot — card multi-fluxo).
+  boardId        String
+  userId         String
+  type           String
+  outcome        String
+  customLabel    String?
+  /// Comentario onde o registro foi feito. Apagar o comentario (soft
+  /// delete) nao apaga o registro.
+  commentId      String?   @unique
+  contactId      String?
+  occurredAt     DateTime  @default(now())
+  /// Tarefa de follow-up criada (ChecklistItem atribuido a quem registrou).
+  followUpItemId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  card         Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+  comment      Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@index([cardId, occurredAt])
+  @@index([boardId, occurredAt])
+}
+
+/// Doc 52 (Fase 4, D10): meta configuravel pelo gestor (Dono/Admin).
+/// Metrica de resultado + alcance (pessoa/area/fluxo) + periodo. O alvo
+/// fica versionado em PerformanceGoalTarget (periodo passado e medido
+/// contra o alvo que valia na epoca). Progresso calculado na leitura com o
+/// mesmo motor do relatorio — nada e gravado por evento.
+model PerformanceGoal {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  /// GOAL_METRICS em @ktask/contracts (String pra evoluir sem migration).
+  metric         String
+  /// 'USER' | 'AREA' | 'BOARD'
+  scopeType      String
+  /// userId, chave de area ou boardId conforme scopeType.
+  scopeId        String
+  /// 'DAY' | 'WEEK' | 'MONTH'
+  period         String
+  isActive       Boolean   @default(true)
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                    @relation("PerformanceGoalCreator", fields: [createdById], references: [id])
+  targets      PerformanceGoalTarget[]
+
+  @@index([organizationId, isActive])
+}
+
+/// Alvo com vigencia. Mudar o alvo cria linha nova.
+model PerformanceGoalTarget {
+  id            String   @id @default(cuid())
+  goalId        String
+  target        Int
+  effectiveFrom DateTime
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  goal PerformanceGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, effectiveFrom])
 }

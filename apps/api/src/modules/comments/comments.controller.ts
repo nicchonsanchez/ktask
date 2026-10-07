@@ -9,6 +9,8 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator';
 import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 
+import { ContactLoggingService } from '@/modules/performance/contact-logging.service';
+
 import { CommentsService } from './comments.service';
 import {
   CreateCommentSchema,
@@ -36,21 +38,40 @@ function plainTextToDoc(text: string): Prisma.InputJsonValue {
 @UseGuards(TenantGuard)
 @Controller({ path: 'comments', version: '1' })
 export class CommentsController {
-  constructor(private readonly comments: CommentsService) {}
+  constructor(
+    private readonly comments: CommentsService,
+    private readonly contactLogging: ContactLoggingService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Criar comentário num card' })
-  create(
+  async create(
     @CurrentUser() user: AuthenticatedRequestContext,
     @CurrentOrg() org: TenantContext,
     @Body(new ZodValidationPipe(CreateCommentSchema)) body: CreateCommentRequest,
   ) {
-    return this.comments.create(user.userId, org, {
+    // Doc 52 (Fase 3): registro de contato opcional. Validado ANTES do
+    // comentario (erro barra tudo); gravado logo depois. Sem `interaction`,
+    // o fluxo abaixo e exatamente o de sempre.
+    const contact = body.interaction
+      ? await this.contactLogging.prepare(user.userId, org, body.cardId, body.interaction)
+      : null;
+
+    const comment = await this.comments.create(user.userId, org, {
       cardId: body.cardId,
       plainText: body.plainText,
       body: (body.body as Prisma.InputJsonValue) ?? plainTextToDoc(body.plainText),
       parentCommentId: body.parentCommentId,
     });
+
+    if (!contact || !body.interaction) return comment;
+    const interaction = await this.contactLogging.createForComment(user.userId, org, {
+      cardId: body.cardId,
+      commentId: comment.id,
+      boardId: contact.boardId,
+      input: body.interaction,
+    });
+    return { ...comment, interaction };
   }
 
   @Post(':commentId/reactions')

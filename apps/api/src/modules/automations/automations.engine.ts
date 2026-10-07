@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
@@ -59,6 +61,14 @@ interface ApprovalDecidedPayload {
 export class AutomationsEngine {
   private readonly logger = new Logger(AutomationsEngine.name);
   private readonly MAX_CHAIN_DEPTH = 5;
+
+  /**
+   * Doc 52: contexto da execucao corrente. Guarda o id da AutomationRun
+   * pra que toda Activity gravada pelos handlers carregue
+   * `origin: AUTOMATION` + `automationRunId`, sem mudar a assinatura dos
+   * handlers. Execucoes concorrentes/encadeadas tem cada uma seu contexto.
+   */
+  private readonly runContext = new AsyncLocalStorage<{ runId: string }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -254,7 +264,9 @@ export class AutomationsEngine {
     }
 
     try {
-      const result = await this.routeAction(automation, cardId, chainDepth);
+      const result = await this.runContext.run({ runId: run.id }, () =>
+        this.routeAction(automation, cardId, chainDepth),
+      );
       return await this.prisma.automationRun.update({
         where: { id: run.id },
         data: {
@@ -275,6 +287,15 @@ export class AutomationsEngine {
         },
       });
     }
+  }
+
+  /**
+   * Doc 52: marca de origem pra Activities gravadas pela engine. Fora de
+   * uma execucao (nao deveria acontecer) a origem continua AUTOMATION e
+   * so o automationRunId fica null.
+   */
+  private automationOrigin(): { origin: 'AUTOMATION'; automationRunId: string | null } {
+    return { origin: 'AUTOMATION', automationRunId: this.runContext.getStore()?.runId ?? null };
   }
 
   private async routeAction(
@@ -828,6 +849,7 @@ export class AutomationsEngine {
     // antigo ate F5). Cards.service ja faz isso no caminho manual (CARD_LEAD_CHANGED).
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: card.boardId,
         cardId,
@@ -1108,6 +1130,7 @@ export class AutomationsEngine {
 
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: card.boardId,
         cardId,
@@ -1160,6 +1183,7 @@ export class AutomationsEngine {
 
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: card.boardId,
         cardId,
@@ -1266,6 +1290,7 @@ export class AutomationsEngine {
 
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: targetList.organizationId,
         boardId: targetList.boardId,
         cardId: child.id,
@@ -1476,6 +1501,7 @@ export class AutomationsEngine {
     // pro topo/base. Agora alinhado com handleMoveCard (mesmo padrao).
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: card.boardId,
         cardId,
@@ -1559,7 +1585,7 @@ export class AutomationsEngine {
 
     const target = await this.prisma.list.findUnique({
       where: { id: config.targetListId },
-      select: { id: true, boardId: true, isArchived: true },
+      select: { id: true, boardId: true, isArchived: true, name: true },
     });
     if (!target || target.boardId !== scopeBoardId || target.isArchived) {
       return { movedToListId: null, skipped: true, reason: 'lista-invalida' };
@@ -1583,6 +1609,10 @@ export class AutomationsEngine {
     }
 
     const fromListId = presence.listId;
+    const fromList = await this.prisma.list.findUnique({
+      where: { id: fromListId },
+      select: { name: true },
+    });
 
     // Update da presence (fonte de verdade do kanban multi-fluxo).
     await this.prisma.cardPresence.update({
@@ -1608,6 +1638,7 @@ export class AutomationsEngine {
 
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: scopeBoardId,
         cardId,
@@ -1616,6 +1647,10 @@ export class AutomationsEngine {
         payload: {
           fromListId,
           toListId: target.id,
+          // Doc 52: nomes no mesmo shape do move manual — timeline passa a
+          // mostrar "moveu da coluna X para Y" tambem em moves automaticos.
+          fromListName: fromList?.name ?? null,
+          toListName: target.name,
           boardId: scopeBoardId,
           via: 'automation',
           automationId: automation.id,
@@ -1722,6 +1757,7 @@ export class AutomationsEngine {
 
     await this.prisma.activity.create({
       data: {
+        ...this.automationOrigin(),
         organizationId: card.organizationId,
         boardId: card.boardId,
         cardId,
@@ -2053,6 +2089,7 @@ export class AutomationsEngine {
     await this.prisma.activity
       .create({
         data: {
+          ...this.automationOrigin(),
           organizationId: automation.organizationId,
           cardId: card.id,
           type: 'CARD_UPDATED',

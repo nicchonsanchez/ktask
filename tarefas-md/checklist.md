@@ -430,3 +430,15 @@ Plano completo: [22-pagina-inicial.md](22-pagina-inicial.md). Etapas:
 - [ ] **Etapa 4** — interações (atualizar todas pra hoje, adicionar inline, click → abre card pai)
 - [ ] **Etapa 5** — `MiniCalendar` com pontos por dia
 - [ ] **Etapa 6** — placeholder Eventos (Fase 2)
+
+---
+
+## Desempenho da Equipe — doc 52
+
+Plano completo: [52-desempenho-equipe.md](52-desempenho-equipe.md). Pedido do Lucas (06/10/2026) + spec funcional v1.1. Dados de produção auditados (read-only). Decisões do Nicchon incorporadas (D6, D8–D10). Perguntas ao Lucas respondidas; metas de exemplo definidas (seção 12.1). Pronto pra Fase 1.
+
+- [~] **Fase 1 — Fundação** (implementada na branch `feat/desempenho-equipe`, 119 testes verdes; aguardando revisão + autorização de deploy): `Activity.origin` + backfill, `automationRunId` preenchido pela engine, `CARD_MOVED` em decisão/revert de aprovação, config gerencial versionada por quadro, classificador puro + testes
+- [~] **Fase 2 — Desempenho** (implementada na branch; faltam artigos da Central de Ajuda e configurar fluxos com o Lucas após deploy): aba `/indicadores/desempenho` só Dono/Admin (filtros, KPIs, resumo por colaborador, drill-down, visão individual, evolução diária) + tela central "Configuração dos relatórios"
+- [~] **Fase 3 — Comercial** (implementada na branch; 27/27 E2E): registro de contato na caixa de comentário, ligado por fluxo (`CardInteraction`) + follow-up como tarefa + KPIs comerciais
+- [~] **Fase 4 — Metas** (implementada na branch; 26/26 E2E; seed de exemplo pronto, roda após deploy): metas configuráveis pelo Lucas (métrica, alcance, período, alvo, ativa/inativa) + 6 metas de exemplo calibradas no ritmo real
+- [~] **Fase 5 — Outras áreas** (indicadores do fluxo implementados na branch; 16/16 E2E; configurar fluxos reais após deploy): Atendimento e Desenvolvimento via configuração

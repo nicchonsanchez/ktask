@@ -266,6 +266,25 @@ export function activityParts(a: ActivityNode): ActivityPart[] {
       return name ? ['removeu a etiqueta ', { bold: name }] : ['removeu uma etiqueta'];
     }
 
+    // Doc 52 (Fase 3): registro de contato comercial
+    case 'COMMERCIAL_ACTIVITY_LOGGED': {
+      const label = typeof p.label === 'string' ? p.label : null;
+      return label ? ['registrou contato: ', { bold: label }] : ['registrou um contato'];
+    }
+    case 'COMMERCIAL_ACTIVITY_UPDATED': {
+      const from = typeof p.from === 'string' ? p.from : null;
+      const to = typeof p.to === 'string' ? p.to : null;
+      return from && to
+        ? ['corrigiu o registro de contato de ', { bold: from }, ' para ', { bold: to }]
+        : ['corrigiu um registro de contato'];
+    }
+    case 'COMMERCIAL_ACTIVITY_DELETED': {
+      const label = typeof p.label === 'string' ? p.label : null;
+      return label
+        ? ['removeu o registro de contato ', { bold: label }]
+        : ['removeu um registro de contato'];
+    }
+
     default:
       return [SIMPLE_LABELS[a.type] ?? a.type.toLowerCase().replace(/_/g, ' ')];
   }
