@@ -974,7 +974,7 @@ backfill conferido em dev com fixtures.
 #### Fase 1 — execução (06/10/2026, branch `feat/desempenho-equipe`)
 
 - [x] 1.0 Medição em produção (read-only) — seção 2.6.
-- [x] 1.1 Migration `20261006120000_activity_origin` (enum, coluna, índice,
+- [x] 1.1 Migration `20261007000100_activity_origin` (enum, coluna, índice,
       backfill). Validada em Postgres descartável com 68 migrations
       anteriores + fixtures no formato real: 10/10 casos de backfill corretos.
 - [x] 1.2 Engine: `AsyncLocalStorage` com o id da execução; os 8
@@ -985,7 +985,7 @@ backfill conferido em dev com fixtures.
 - [x] 1.5 Importador (3 pontos) → `origin: IMPORT`.
 - [x] 1.6 Aprovações: `logApprovalMoves` (decisão e undo) +
       `origin: 'USER'` na checagem de interferência do undo.
-- [x] 1.7 Migration `20261006120100_board_performance_config` + contratos
+- [x] 1.7 Migration `20261007000200_board_performance_config` + contratos
       (`packages/contracts/src/performance.ts`).
 - [x] 1.8 Classificador puro + 23 testes (tabela da spec §5.4 literal).
 - [x] 1.9 Guarda estática (5 testes) + smoke E2E com a API real contra banco
@@ -1086,8 +1086,8 @@ pendentes/vencidos. **Sem** taxa de conversão (spec §14).
 
 #### Fase 3 — execução (06/10/2026, branch `feat/desempenho-equipe`)
 
-- [x] 3.1 Migrations `20261006150000_commercial_activity_types` (3 valores
-      de `ActivityType`) e `20261006150100_card_interaction` (tabela nova).
+- [x] 3.1 Migrations `20261007000300_commercial_activity_types` (3 valores
+      de `ActivityType`) e `20261007000400_card_interaction` (tabela nova).
 - [x] 3.2 `POST /comments` aceita `interaction` opcional: validado ANTES do
       comentário (fluxo desligado/resultado inválido → 400 e nenhum
       comentário criado), gravado logo depois. `CommentsService` intocado.
@@ -1127,7 +1127,7 @@ KPI no alcance/período da meta). Semana = seg–dom no fuso da org.
 
 #### Fase 4 — execução (06/10/2026, branch `feat/desempenho-equipe`)
 
-- [x] 4.1 Migration `20261006160000_performance_goals` (2 tabelas novas).
+- [x] 4.1 Migration `20261007000500_performance_goals` (2 tabelas novas).
 - [x] 4.2 `GET|POST /performance/goals`, `PATCH|DELETE /performance/goals/:id`
       (OWNER/ADMIN). Só métricas de resultado (`GOAL_METRICS`); alcance
       validado (pessoa da org, área válida, fluxo da org).
