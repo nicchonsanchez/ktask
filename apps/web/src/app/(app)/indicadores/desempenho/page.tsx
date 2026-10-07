@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import {
-  AlertTriangle,
   CalendarClock,
   FileText,
   PhoneCall,
@@ -376,43 +375,6 @@ export default function DesempenhoPage() {
                   hint="aparecem na Home de quem registrou"
                   accent="text-red-500"
                 />
-              </div>
-            </section>
-          )}
-
-          {/* Aviso de fluxo sem classificacao (spec §5.8) */}
-          {summaryQ.data.unconfiguredBoards.length > 0 && (
-            <section className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
-              <div className="flex flex-col gap-1">
-                <p>
-                  Classificação de progresso não configurada para este quadro:{' '}
-                  {summaryQ.data.unconfiguredBoards.map((b, i) => (
-                    <span key={b.id}>
-                      {i > 0 && ', '}
-                      <strong>{b.name}</strong> ({b.unclassifiedMoves})
-                    </span>
-                  ))}
-                  .
-                </p>
-                <p className="text-fg-muted">
-                  Essas movimentações aparecem no total, mas não como avanço, retrocesso,
-                  transferência ou finalização.{' '}
-                  <Link
-                    href="/indicadores/desempenho/configuracao"
-                    className="text-primary hover:underline"
-                  >
-                    Configurar relatórios
-                  </Link>
-                  {' · '}
-                  <button
-                    type="button"
-                    onClick={() => setDrill({ metric: 'NAO_CLASSIFICADA' })}
-                    className="text-primary hover:underline"
-                  >
-                    ver movimentações
-                  </button>
-                </p>
               </div>
             </section>
           )}
