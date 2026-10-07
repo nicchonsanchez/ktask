@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guia — Desempenho da Equipe (KTask)</title>
+<style>
+  :root {
+    --fg: #1f1d2b; --muted: #5b5870; --subtle: #8b88a0; --line: #e4e2ec; --bg: #ffffff; --soft: #f6f5fa;
+    --primary: #6d28d9; --primary-soft: #f1ebfd; --ok: #047857; --ok-soft: #e7f6ef; --warn: #b45309; --warn-soft: #fdf3e5;
+    --bad: #b91c1c; --bad-soft: #fdecec; --info: #0369a1; --info-soft: #e8f4fb;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: var(--soft); color: var(--fg); font: 15px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .page { max-width: 880px; margin: 0 auto; background: var(--bg); padding: 48px 56px 64px; }
+  header.cover { border-bottom: 3px solid var(--primary); padding-bottom: 24px; margin-bottom: 32px; }
+  .brand { color: var(--primary); font-weight: 800; letter-spacing: .5px; font-size: 14px; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 6px 0 8px; }
+  .lead { color: var(--muted); font-size: 16px; margin: 0; }
+  .meta { color: var(--subtle); font-size: 13px; margin-top: 12px; }
+  h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h2 .num { color: var(--primary); margin-right: 8px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 4px 0; }
+  strong { color: var(--fg); }
+  code, .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .toc { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 16px 22px; columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc ol { margin: 0 0 0 18px; }
+  .toc a { color: var(--fg); text-decoration: none; }
+  .box { border-radius: 10px; padding: 14px 18px; margin: 14px 0; border: 1px solid; }
+  .box p:first-child, .box ul:first-child { margin-top: 0; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .box.tip { background: var(--ok-soft); border-color: #b9e4d1; }
+  .box.warn { background: var(--warn-soft); border-color: #f2d3a6; }
+  .box.info { background: var(--info-soft); border-color: #b7dcef; }
+  .box .label { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; display: block; margin-bottom: 4px; }
+  .box.tip .label { color: var(--ok); } .box.warn .label { color: var(--warn); } .box.info .label { color: var(--info); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+  .p-ok { background: var(--ok-soft); color: var(--ok); } .p-bad { background: var(--bad-soft); color: var(--bad); }
+  .p-warn { background: var(--warn-soft); color: var(--warn); } .p-info { background: var(--info-soft); color: var(--info); }
+  .p-mut { background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  /* Esquema da tela */
+  .screen { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 16px 0; font-size: 13px; }
+  .screen .row { border-bottom: 1px dashed var(--line); padding: 10px 14px; display: flex; gap: 12px; align-items: flex-start; }
+  .screen .row:last-child { border-bottom: 0; }
+  .screen .tag { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .screen .what { flex: 1; }
+  .screen .what b { display: block; }
+  .screen .what span { color: var(--muted); }
+  .mini { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .mini .k { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: #fff; font-size: 12px; }
+  .bar { height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; margin-top: 6px; max-width: 260px; }
+  .bar i { display: block; height: 100%; background: var(--primary); }
+  .steps { counter-reset: s; list-style: none; margin-left: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 38px; margin: 12px 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 12px; }
+  @media (max-width: 700px) { .page { padding: 24px 18px 40px; } .toc { columns: 1; } h1 { font-size: 26px; } td:first-child { white-space: normal; } }
+  @media print {
+    @page { size: A4; margin: 16mm 14mm; }
+    body { background: #fff; font-size: 12.5px; }
+    .page { max-width: none; padding: 0; }
+    h2 { break-after: avoid; } h3 { break-after: avoid; }
+    .box, table, .screen, .steps > li { break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="cover">
+  <div class="brand">KTASK</div>
+  <h1>Desempenho da Equipe</h1>
+  <p class="lead">Guia completo do recurso: o que é cada parte da tela, como analisar, como configurar os fluxos, o registro de contato e as metas.</p>
+  <p class="meta">Para: Dono e Administradores do KTask &middot; Versão de 07/10/2026</p>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#o-que-e">O que é e para que serve</a></li>
+    <li><a href="#conceitos">Conceitos que você precisa saber</a></li>
+    <li><a href="#tela">A tela, parte por parte</a></li>
+    <li><a href="#analisar">Como analisar (roteiros prontos)</a></li>
+    <li><a href="#configurar">Configurar os fluxos</a></li>
+    <li><a href="#contato">Registro de contato (Comercial)</a></li>
+    <li><a href="#metas">Metas</a></li>
+    <li><a href="#fluxo">Fluxo do trabalho por quadro</a></li>
+    <li><a href="#faq">Perguntas frequentes</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<h2 id="o-que-e"><span class="num">1</span>O que é e para que serve</h2>
+<p>O <strong>Desempenho da Equipe</strong> responde, com dados rastreáveis, à pergunta: <strong>o que cada pessoa (ou equipe) fez no período?</strong> Quais cards foram trabalhados, quais movimentações aconteceram, quais representaram avanço ou conclusão, quantos contatos foram feitos e como isso se distribuiu ao longo dos dias.</p>
+<p>Ele complementa as abas que já existiam. Os Indicadores de Cards mostram <em>como está o fluxo</em> (prazo, atrasados, gargalos); o Desempenho mostra <em>o que as pessoas fizeram</em>.</p>
+<table>
+  <tr><th>Item</th><th>Detalhe</th></tr>
+  <tr><td>Onde fica</td><td>Menu <strong>Indicadores</strong> &rarr; aba <strong>Desempenho da equipe</strong></td></tr>
+  <tr><td>Quem vê</td><td>Somente <strong>Dono</strong> e <strong>Administrador</strong>. Gestores e membros não veem a aba.</td></tr>
+  <tr><td>O que permite</td><td>
+    <ul>
+      <li>Acompanhar o dia, a semana ou o mês de cada pessoa sem precisar "simular a conta";</li>
+      <li>Diferenciar volume (movimentações) de progresso real (avanços e finalizações);</li>
+      <li>Medir contatos comerciais mesmo quando o card não muda de coluna;</li>
+      <li>Criar metas e acompanhar o progresso;</li>
+      <li>Ver onde o trabalho trava em cada quadro (tempo médio em cada coluna);</li>
+      <li>Enviar o link de um relatório filtrado para outra pessoa.</li>
+    </ul>
+  </td></tr>
+  <tr><td>O que não altera</td><td>Nada nos quadros. Configurar o relatório não muda colunas, nomes, cards nem a coluna "Finalizado" do Kanban.</td></tr>
+</table>
+
+<!-- 2 -->
+<h2 id="conceitos"><span class="num">2</span>Conceitos que você precisa saber</h2>
+<table>
+  <tr><th>Termo</th><th>O que significa</th></tr>
+  <tr><td>Ação</td><td>Qualquer coisa feita por uma pessoa num card: criar, mover, comentar, editar, concluir tarefa, anexar arquivo, apontar horas, registrar contato. Visualizar não conta. Várias edições seguidas do mesmo campo em menos de 1 minuto contam como uma.</td></tr>
+  <tr><td>Card trabalhado</td><td>Card que recebeu ao menos uma ação da pessoa no período. Cada card conta <strong>uma vez</strong>, não importa quantas ações teve.</td></tr>
+  <tr><td>Movimentação</td><td>Mudança de coluna.</td></tr>
+  <tr><td>Avanço</td><td>Movimentação para uma coluna mais adiante no funil (exige a ordem configurada).</td></tr>
+  <tr><td>Retrocesso</td><td>Movimentação para uma coluna anterior, ou saída de uma coluna de conclusão (reabertura). Em fluxos de produção, é o "devolvido".</td></tr>
+  <tr><td>Transferência</td><td>Movimentação para (ou de) uma coluna de <em>fluxo paralelo</em>, como "Marketing" ou "Administrativo".</td></tr>
+  <tr><td>Finalização</td><td>Card levado a uma coluna de conclusão, ou marcado como "Concluído" no botão de status. Conta cards distintos.</td></tr>
+  <tr><td>Reabertura</td><td>Card que saiu da conclusão e voltou para o trabalho.</td></tr>
+  <tr><td>Não classificada</td><td>Movimentação num fluxo (ou coluna) ainda não configurado. Aparece no total, mas o sistema não adivinha se foi avanço.</td></tr>
+</table>
+<div class="box info">
+  <span class="label">Automação não conta</span>
+  <p>O relatório por pessoa considera <strong>somente ações feitas por pessoas</strong>. Movimentações feitas por automações, pelo sistema (conclusão automática) ou por importação não entram no número de ninguém. Antes deste recurso, o KTask registrava as ações de automação no nome de quem criou a automação: cerca de metade dos movimentos de card eram automáticos.</p>
+</div>
+
+<!-- 3 -->
+<h2 id="tela"><span class="num">3</span>A tela, parte por parte</h2>
+<p>De cima para baixo, a aba tem estas partes:</p>
+<div class="screen">
+  <div class="row"><div class="tag">1</div><div class="what"><b>Botão "Configurar relatórios"</b><span>Abre a tela central de configuração dos fluxos (seção 5).</span></div></div>
+  <div class="row"><div class="tag">2</div><div class="what"><b>Metas</b><span>Cartões com barra de progresso das metas ativas. Link "Gerenciar metas" (seção 7). No celular, viram uma faixa para deslizar.</span>
+    <div class="bar"><i style="width:62%"></i></div></div></div>
+  <div class="row"><div class="tag">3</div><div class="what"><b>Filtros</b><span>Período, área, fluxos, colaborador e cliente.</span>
+    <div class="mini"><span class="k">Hoje</span><span class="k">Ontem</span><span class="k">7 dias</span><span class="k">15 dias</span><span class="k">30 dias</span><span class="k">90 dias</span><span class="k">Personalizado</span><span class="k">Área</span><span class="k">Fluxos</span><span class="k">Colaborador</span><span class="k">Cliente</span></div></div></div>
+  <div class="row"><div class="tag">4</div><div class="what"><b>Indicadores principais</b><span>Oito números do período. Clique em qualquer um para ver os registros.</span>
+    <div class="mini"><span class="k">Cards trabalhados</span><span class="k">Ações</span><span class="k">Movimentações</span><span class="k">Avanços</span><span class="k">Retrocessos</span><span class="k">Transferências</span><span class="k">Finalizações</span><span class="k">Comentários</span></div></div></div>
+  <div class="row"><div class="tag">5</div><div class="what"><b>Comercial</b><span>Aparece quando há registros de contato, follow-ups em aberto ou filtro de área Comercial.</span>
+    <div class="mini"><span class="k">Registros de contato</span><span class="k">Contatos realizados</span><span class="k">Reuniões agendadas</span><span class="k">Reuniões realizadas</span><span class="k">Propostas enviadas</span><span class="k">Follow-ups pendentes</span><span class="k">Follow-ups vencidos</span></div></div></div>
+  <div class="row"><div class="tag">6</div><div class="what"><b>Resumo por colaborador</b><span>Uma linha por pessoa, em ordem alfabética (não é ranking). Clique no nome para abrir o histórico da pessoa; clique num número para ver os registros.</span></div></div>
+  <div class="row"><div class="tag">7</div><div class="what"><b>Evolução no período</b><span>Gráfico diário com seletor de métrica, frase-resumo ("53 movimentações = 10 avanços, 2 retrocessos…") e tabela por dia.</span></div></div>
+  <div class="row"><div class="tag">8</div><div class="what"><b>Fluxo do trabalho</b><span>Aparece com filtro de área ou de fluxo. Um cartão por quadro com recebidos, iniciados, aguardando, devolvidos, concluídos, tempo de atendimento e tempo médio em cada coluna (seção 8).</span></div></div>
+</div>
+
+<h3>Filtros em detalhe</h3>
+<ul>
+  <li><strong>Período:</strong> sempre no fuso de Brasília. "Hoje" vai de 00:00 a 23:59; "7 dias" inclui hoje e os 6 dias anteriores.</li>
+  <li><strong>Área:</strong> Comercial, Atendimento, Desenvolvimento ou Outra. Depende da área definida na configuração de cada fluxo.</li>
+  <li><strong>Fluxos:</strong> um, vários ou todos.</li>
+  <li><strong>Colaborador:</strong> ao escolher uma pessoa, a tela mostra o resumo dela e, no fim, o <strong>histórico cronológico</strong> de tudo o que ela fez.</li>
+  <li><strong>Cliente:</strong> empresas cadastradas no CRM vinculadas aos cards.</li>
+</ul>
+<div class="box tip">
+  <span class="label">Dica</span>
+  <p>Os filtros ficam no endereço da página. Filtrou "Comercial, 7 dias, Fábio"? Copie o link e envie: quem abrir (Dono/Admin) verá exatamente o mesmo recorte.</p>
+</div>
+
+<h3>Detalhamento (clicar nos números)</h3>
+<p>Todo número abre uma janela com os registros que o compõem: horário, card (clique para abrir o card), fluxo, coluna de origem e de destino e o resultado (<span class="pill p-ok">Avanço</span> <span class="pill p-bad">Retrocesso</span> <span class="pill p-info">Transferência</span> <span class="pill p-ok">Finalização</span> <span class="pill p-mut">Não classificada</span>). Em "Cards trabalhados", a lista mostra os cards com a quantidade de ações em cada um.</p>
+
+<!-- 4 -->
+<h2 id="analisar"><span class="num">4</span>Como analisar (roteiros prontos)</h2>
+
+<h3>"O que o Fábio fez hoje?"</h3>
+<ol class="steps">
+  <li>Período <strong>Hoje</strong>, Colaborador <strong>Fábio</strong>.</li>
+  <li>Leia os números: cards trabalhados (amplitude), ações (volume), contatos realizados (Comercial).</li>
+  <li>Role até <strong>Histórico</strong>: a lista mostra, em ordem, cada movimentação, comentário e contato do dia.</li>
+</ol>
+
+<h3>Relatório da semana do Comercial (para enviar ao Giovanni)</h3>
+<ol class="steps">
+  <li>Período <strong>7 dias</strong>, Área <strong>Comercial</strong>.</li>
+  <li>Compare <strong>Movimentações</strong> com <strong>Avanços</strong> e <strong>Finalizações</strong>: muito movimento com pouco avanço indica cards indo e voltando.</li>
+  <li>No bloco Comercial, veja <strong>Contatos realizados</strong>, <strong>Reuniões agendadas</strong> e <strong>Propostas enviadas</strong>.</li>
+  <li>Use a tabela por dia para ver a distribuição na semana.</li>
+  <li>Copie o link da página e envie.</li>
+</ol>
+
+<h3>"Onde o Atendimento está travando?"</h3>
+<ol class="steps">
+  <li>Área <strong>Atendimento</strong>, período <strong>30 dias</strong>.</li>
+  <li>Em <strong>Fluxo do trabalho</strong>, olhe o cartão de cada quadro: a barra mais longa em "Tempo médio em cada etapa" mostra onde os cards ficam mais tempo parados (por exemplo, aprovação do cliente).</li>
+  <li>Veja <strong>Devolvidos</strong> (retrabalho) e <strong>Aguardando agora</strong> (o que depende do cliente).</li>
+</ol>
+
+<div class="box warn">
+  <span class="label">Leia com contexto</span>
+  <p>Os números são para acompanhar, não para ranquear. Uma pessoa com poucas movimentações pode ter feito o trabalho mais difícil do período. Antes de concluir algo, abra o detalhamento e veja os cards.</p>
+</div>
+
+<!-- 5 -->
+<h2 id="configurar"><span class="num">5</span>Configurar os fluxos</h2>
+<p>Cada quadro tem colunas próprias, então o KTask não adivinha o que é avanço ou conclusão: alguém precisa dizer, uma vez por fluxo. Sem configuração, o fluxo aparece só com os números básicos (cards trabalhados, ações, movimentações).</p>
+<p>Onde: botão <strong>Configurar relatórios</strong> na aba Desempenho. A lista mostra todos os fluxos e o status de cada um:</p>
+<p><span class="pill p-mut">Não configurado</span> <span class="pill p-info">Finalizado definido</span> <span class="pill p-ok">Funil completo</span></p>
+
+<h3>Nível básico (o mínimo)</h3>
+<ol class="steps">
+  <li>Clique no fluxo para abrir.</li>
+  <li><strong>Área:</strong> escolha Comercial, Atendimento, Desenvolvimento ou Outra.</li>
+  <li><strong>Finalizado nas análises:</strong> na coluna que significa "terminou bem", escolha <span class="pill p-ok">Finalizado (positivo)</span>. Se houver uma coluna de perda (ex.: "Perdido"), escolha <span class="pill p-bad">Finalizado (negativo)</span>. As demais ficam com "—". Pode haver mais de uma coluna positiva.</li>
+  <li><strong>Vale a partir de:</strong> na primeira vez, marque <strong>Desde</strong> com uma data antiga (ex.: 01/05/2026) para classificar também o histórico.</li>
+  <li>Clique em <strong>Salvar configuração</strong>.</li>
+</ol>
+<p>Com isso, o fluxo passa a contar <strong>Finalizações</strong> e <strong>Reaberturas</strong>.</p>
+
+<h3>Nível avançado (funil completo)</h3>
+<p>Marque <strong>Configuração avançada</strong> para ver mais campos por coluna:</p>
+<table>
+  <tr><th>Campo</th><th>Para que serve</th></tr>
+  <tr><td>Categoria</td><td>O papel da coluna no processo (tabela abaixo).</td></tr>
+  <tr><td>Ordem</td><td>A sequência do funil (1, 2, 3…). Ir para uma ordem maior é avanço; para uma menor, retrocesso; para a mesma ordem, neutro. Colunas paralelas e de espera podem ficar sem ordem. Use <strong>Sugerir ordem</strong> para preencher pela posição e depois ajuste.</td></tr>
+  <tr><td>Contabilizar</td><td>Desmarque para colunas que não fazem parte do trabalho (ex.: "Informações", "Cards permanentes"). Movimentos envolvendo essas colunas ficam neutros.</td></tr>
+  <tr><td>Reunião agendada</td><td>Marque na coluna de reunião (ex.: "Reunião Agendada"). Cada entrada nela conta como uma reunião agendada.</td></tr>
+  <tr><td>Exceções de transição</td><td>Para caminhos que fogem da ordem. Ex.: "Finalizado &rarr; Marketing = Transferência". A exceção vale mais que a ordem.</td></tr>
+</table>
+
+<h3>Categorias</h3>
+<table>
+  <tr><th>Categoria</th><th>Quando usar</th><th>Exemplo</th></tr>
+  <tr><td>Entrada</td><td>Onde o trabalho chega e espera para começar. Sair dela pela primeira vez conta como "iniciado".</td><td>Backlog, Novo Lead, Demandas</td></tr>
+  <tr><td>Em andamento</td><td>Etapas de trabalho.</td><td>Ligando, Design, Em andamento</td></tr>
+  <tr><td>Aguardando cliente/terceiro</td><td>Quando a bola está com outra pessoa.</td><td>Aprovação, Aguardando retorno</td></tr>
+  <tr><td>Pausado</td><td>Trabalho parado de propósito.</td><td>Stand by</td></tr>
+  <tr><td>Conclusão positiva</td><td>Terminou bem.</td><td>Ganho, Finalizado</td></tr>
+  <tr><td>Conclusão negativa</td><td>Terminou sem sucesso.</td><td>Perdido, Cancelado</td></tr>
+  <tr><td>Fluxo paralelo</td><td>Desvio para outra área ou agrupamento fora do funil. Conta como transferência.</td><td>Marketing, Administrativo, eventos</td></tr>
+</table>
+
+<h3>Registro de contato e área</h3>
+<p>Na mesma tela: <strong>Registro de contato nos cards deste fluxo</strong> liga os botões de contato na caixa de comentário dos cards daquele fluxo (seção 6). A <strong>área</strong> serve para o filtro de área do relatório e das metas.</p>
+
+<h3>"Agora" ou "Desde"?</h3>
+<table>
+  <tr><th>Opção</th><th>Efeito</th><th>Quando usar</th></tr>
+  <tr><td>Desde [data]</td><td>A configuração vale também para o passado, a partir da data. O histórico é reclassificado.</td><td>Primeira configuração do fluxo, ou correção de um engano.</td></tr>
+  <tr><td>Agora</td><td>Vale daqui em diante. Os números dos períodos anteriores não mudam.</td><td>Mudança de processo (ex.: o funil ganhou uma coluna nova).</td></tr>
+</table>
+<p>Cada salvamento vira uma <strong>versão</strong>, listada em "Histórico de versões" com data, autor e observação. Nada se perde.</p>
+
+<div class="box tip">
+  <span class="label">Exemplo: Relações Institucionais Kharis</span>
+  <ul>
+    <li>Área <strong>Comercial</strong>, registro de contato <strong>ligado</strong>.</li>
+    <li>Ordem: Novo Lead / Backlog (1, Entrada) &rarr; Ligando (2) &rarr; Interatividade (3) &rarr; Reunião Agendada (4, marcar "Reunião agendada") &rarr; Negociação (5) &rarr; FINALIZADO /GABRIELA E FERNADA (6, Conclusão positiva).</li>
+    <li>Follow up: Aguardando. Marketing e Administrativo: Fluxo paralelo.</li>
+    <li>A coluna "Concluído" (vazia, no meio do quadro): desmarcar "Contabilizar".</li>
+  </ul>
+</div>
+<div class="box info">
+  <span class="label">Configurou errado?</span>
+  <p>Não quebra nada. No pior caso, os números ficam incompletos (ex.: uma conclusão não contada). Corrija e salve de novo com "Desde" a data original; o histórico é recalculado com a regra certa.</p>
+</div>
+
+<!-- 6 -->
+<h2 id="contato"><span class="num">6</span>Registro de contato (Comercial)</h2>
+<p>Serve para registrar trabalho comercial que <strong>não muda o card de coluna</strong>, como uma ligação sem resposta. Sem isso, esse trabalho não apareceria em nenhum relatório.</p>
+<h3>Como usar (para o time comercial)</h3>
+<ol class="steps">
+  <li>Abra o card (num fluxo com o recurso ligado) e vá à caixa de comentário.</li>
+  <li>Acima da caixa aparecem os tipos: <strong>Ligação, WhatsApp, E-mail, Reunião, Follow-up, Proposta, Outro</strong>. Clique no tipo.</li>
+  <li>Escolha o resultado. Para "Não respondeu", "Retornar depois" ou "Pendente", aparece <strong>Retornar em [data]</strong>: preenchendo, o KTask cria uma tarefa de retorno para você, que aparece na sua página inicial.</li>
+  <li>Escreva o comentário normalmente (pode marcar o @gestor) e envie. Se não escrever nada, o texto vira o próprio registro ("Ligação · Não respondeu").</li>
+</ol>
+<p>O comentário ganha um selo (ex.: <span class="pill p-ok">Ligação · Realizado</span>). Os botões são opcionais: comentar sem escolher tipo funciona como sempre.</p>
+<table>
+  <tr><th>Tipo</th><th>Resultados (em verde, contam como "contato realizado")</th></tr>
+  <tr><td>Ligação</td><td><span class="pill p-ok">Realizado</span> <span class="pill p-warn">Não respondeu</span> <span class="pill p-warn">Retornar depois</span></td></tr>
+  <tr><td>WhatsApp</td><td><span class="pill p-ok">Realizado</span> <span class="pill p-warn">Não respondeu</span> <span class="pill p-ok">Interessado</span> <span class="pill p-ok">Sem interesse</span></td></tr>
+  <tr><td>E-mail</td><td><span class="pill p-ok">Enviado</span> <span class="pill p-ok">Retorno recebido</span></td></tr>
+  <tr><td>Reunião</td><td><span class="pill p-ok">Realizada</span> <span class="pill p-warn">Não realizada</span></td></tr>
+  <tr><td>Follow-up</td><td><span class="pill p-ok">Realizado</span> <span class="pill p-warn">Pendente</span></td></tr>
+  <tr><td>Proposta</td><td><span class="pill p-ok">Enviada</span> <span class="pill p-ok">Revisada</span></td></tr>
+  <tr><td>Outro</td><td>Tipo livre (escrever qual) &middot; <span class="pill p-ok">Realizado</span> <span class="pill p-warn">Não realizado</span></td></tr>
+</table>
+<p><strong>No relatório:</strong> "Registros de contato" conta todos; "Contatos realizados" só os verdes. "Reuniões realizadas" e "Propostas enviadas" vêm daqui. Corrigir ou excluir um registro atualiza o relatório. Apagar o comentário não apaga o registro de trabalho.</p>
+<div class="box info">
+  <span class="label">Cards em mais de um fluxo</span>
+  <p>Os botões aparecem se o card estiver em pelo menos um fluxo com o recurso ligado. O contato é gravado no fluxo pelo qual o card foi aberto (se estiver ligado); senão, no fluxo principal do card.</p>
+</div>
+
+<!-- 7 -->
+<h2 id="metas"><span class="num">7</span>Metas</h2>
+<p>Em <strong>Gerenciar metas</strong> (seção Metas da aba) você cria metas independentes e acompanha o progresso em barras.</p>
+<table>
+  <tr><th>Campo</th><th>Opções</th></tr>
+  <tr><td>Nome</td><td>Livre (ex.: "Contatos da semana — Fábio").</td></tr>
+  <tr><td>Métrica</td><td>Contatos realizados &middot; Reuniões agendadas &middot; Reuniões realizadas &middot; Propostas enviadas &middot; Avanços no funil &middot; Fechamentos (finalizações positivas)</td></tr>
+  <tr><td>Alcance</td><td>Uma <strong>pessoa</strong>, uma <strong>área</strong> ou um <strong>fluxo</strong>.</td></tr>
+  <tr><td>Período</td><td>Diária, semanal (segunda a domingo) ou mensal.</td></tr>
+  <tr><td>Alvo</td><td>O número a atingir.</td></tr>
+</table>
+<ul>
+  <li><strong>A barra</strong> mostra o período atual (fica verde ao atingir o alvo). Abaixo, os 3 períodos anteriores.</li>
+  <li><strong>Mudar o alvo</strong> vale a partir do período atual; os anteriores continuam comparados com o alvo que valia na época.</li>
+  <li><strong>Ativar/desativar:</strong> metas inativas saem do painel, mas não são apagadas.</li>
+  <li><strong>Aviso no lugar do número:</strong> se a métrica depende de algo não configurado (ex.: "Reuniões agendadas" sem coluna marcada), a meta diz o que falta em vez de mostrar 0.</li>
+</ul>
+<div class="box warn">
+  <span class="label">Por que só essas métricas?</span>
+  <p>Metas sobre "ações" ou "movimentações" são fáceis de inflar (comentar ou arrastar card só para bater número). Por isso só métricas de resultado podem virar meta.</p>
+</div>
+
+<!-- 8 -->
+<h2 id="fluxo"><span class="num">8</span>Fluxo do trabalho por quadro</h2>
+<p>Pensado para Atendimento e Desenvolvimento, mas vale para qualquer quadro. Aparece ao filtrar por área ou fluxo. Mede <strong>o quadro, não a pessoa</strong>, por isso inclui movimentações de automação.</p>
+<table>
+  <tr><th>Indicador</th><th>O que é</th></tr>
+  <tr><td>Recebidos</td><td>Cards que entraram no fluxo no período.</td></tr>
+  <tr><td>Iniciados</td><td>Cards que saíram da coluna de Entrada pela primeira vez.</td></tr>
+  <tr><td>Aguardando agora</td><td>Cards ativos hoje em colunas "Aguardando cliente/terceiro".</td></tr>
+  <tr><td>Foram p/ aguardando</td><td>Quantas vezes cards entraram em colunas de espera no período.</td></tr>
+  <tr><td>Devolvidos</td><td>Retrocessos no período (retrabalho).</td></tr>
+  <tr><td>Concluídos / Reabertos</td><td>Entradas e saídas das colunas de conclusão.</td></tr>
+  <tr><td>1º atendimento</td><td>Tempo médio entre o card entrar no fluxo e sair da Entrada.</td></tr>
+  <tr><td>Tempo até concluir</td><td>Tempo médio entre entrar no fluxo e chegar à conclusão.</td></tr>
+  <tr><td>Tempo em cada etapa</td><td>Quanto tempo, em média, os cards ficaram em cada coluna (contando as saídas no período). A barra maior é o gargalo.</td></tr>
+</table>
+<p>Em quadros sem configuração, aparecem só <strong>Recebidos</strong> e <strong>Tempo em cada etapa</strong>, que não dependem de classificação.</p>
+
+<!-- 9 -->
+<h2 id="faq"><span class="num">9</span>Perguntas frequentes</h2>
+<h3>Por que Avanços aparece zerado?</h3>
+<p>O fluxo não tem a ordem do funil configurada (nível avançado). Sem ordem, o sistema não sabe o que é avançar. As movimentações aparecem como "não classificadas", contadas no total.</p>
+<h3>Os números são diferentes dos "Indicadores de cards". Está errado?</h3>
+<p>Não: medem coisas diferentes. "Finalizados" nos Indicadores de Cards conta todo card concluído, inclusive por automação. "Finalizações" no Desempenho conta só conclusões feitas por pessoas, segundo as colunas de finalizado configuradas.</p>
+<h3>Um card que está em dois fluxos conta duas vezes?</h3>
+<p>Não em "Cards trabalhados": cada card conta uma vez no período. Cada movimentação é registrada no fluxo em que aconteceu.</p>
+<h3>Mudei a configuração e os números antigos mudaram. Por quê?</h3>
+<p>A configuração foi salva com "Desde" uma data passada, o que reclassifica o histórico. Para não mexer no passado, use "Agora". O histórico de versões mostra quem salvou e quando.</p>
+<h3>A conclusão automática (quando o card chega à coluna final) conta para alguém?</h3>
+<p>Não. É uma ação do sistema. Conta para a pessoa a movimentação que ela fez para a coluna de conclusão.</p>
+<h3>Os horários estão certos?</h3>
+<p>Sim, tudo é calculado no fuso de Brasília. Uma ação às 22h30 conta no próprio dia.</p>
+<h3>Gestores podem ver o próprio desempenho?</h3>
+<p>Hoje, não: a aba é só para Dono e Administrador. Se for preciso liberar para alguém específico, isso pode ser feito como permissão individual, sem mudar papéis.</p>
+
+<footer>
+  KTask &middot; Guia do recurso Desempenho da Equipe &middot; documentação técnica em <code>tarefas-md/52-desempenho-equipe.md</code>
+</footer>
+</div>
+</body>
+</html>
