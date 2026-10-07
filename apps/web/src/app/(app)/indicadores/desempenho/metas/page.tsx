@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, Target, Trash2 } from 'lucide-react';
 import { Button } from '@ktask/ui';
 import {
   canViewPerformanceReport,
@@ -25,6 +25,14 @@ import { orgMembersQuery } from '@/lib/queries/cards';
 import { createGoal, deleteGoal, goalsQuery, updateGoal } from '@/lib/queries/performance';
 import { useConfirm, useNotify } from '@/components/ui/dialogs';
 import { GoalProgressCard } from '@/components/performance/goals';
+import {
+  EmptyState,
+  fieldCls,
+  Panel,
+  SectionHeading,
+  Segmented,
+  Spinner,
+} from '@/components/performance/ui';
 
 /**
  * Doc 52 (Fase 4, D10) — gestao das metas (Dono/Admin). So metricas de
@@ -32,8 +40,6 @@ import { GoalProgressCard } from '@/components/performance/goals';
  * atual; periodos passados continuam medidos contra o alvo da epoca.
  */
 
-const selectCls =
-  'border-border bg-bg text-fg rounded-md border px-2 py-1 text-xs focus:outline-none';
 const SCOPE_LABELS: Record<GoalScopeType, string> = {
   USER: 'Pessoa',
   AREA: 'Área',
@@ -81,7 +87,7 @@ export default function MetasPage() {
   if (orgQ.isLoading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 size={20} className="text-fg-muted animate-spin" />
+        <Spinner />
       </div>
     );
   }
@@ -105,144 +111,177 @@ export default function MetasPage() {
   const canCreate = name.trim().length > 0 && !!scopeId && Number(target) >= 1;
 
   return (
-    <div className="container flex flex-col gap-5 py-5">
-      <div className="flex flex-col gap-1">
+    <div className="container flex flex-col gap-6 py-6">
+      <div className="flex flex-col gap-2">
         <Link
           href="/indicadores/desempenho"
-          className="text-fg-muted hover:text-fg inline-flex w-fit items-center gap-1 text-xs"
+          className="text-fg-muted hover:text-fg inline-flex w-fit items-center gap-1 text-xs font-medium"
         >
-          <ArrowLeft size={12} /> Desempenho da equipe
+          <ArrowLeft size={14} /> Desempenho da equipe
         </Link>
-        <h2 className="text-fg text-base font-semibold">Metas</h2>
-        <p className="text-fg-muted max-w-3xl text-xs">
+        <h2 className="text-fg text-xl font-semibold tracking-tight">Metas</h2>
+        <p className="text-fg-muted max-w-3xl text-sm">
           Metas sobre resultados (contatos, reuniões, propostas, avanços e fechamentos). O progresso
           usa os mesmos números do relatório. Mudar o alvo vale a partir do período atual; os
           períodos anteriores continuam comparados com o alvo que valia na época.
         </p>
       </div>
 
-      {/* Nova meta */}
-      <section className="border-border/60 bg-bg flex flex-col gap-3 rounded-lg border p-4">
-        <h3 className="text-fg text-sm font-semibold">Nova meta</h3>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <input
-            aria-label="Nome da meta"
-            value={name}
-            maxLength={120}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nome (ex.: Contatos da semana)"
-            className={`${selectCls} w-56`}
-          />
-          <select
-            aria-label="Métrica"
-            value={metric}
-            onChange={(e) => setMetric(e.target.value as GoalMetric)}
-            className={selectCls}
-          >
-            {GOAL_METRICS.map((m) => (
-              <option key={m} value={m}>
-                {GOAL_METRIC_LABELS[m]}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Alcance"
-            value={scopeType}
-            onChange={(e) => {
-              setScopeType(e.target.value as GoalScopeType);
-              setScopeId('');
-            }}
-            className={selectCls}
-          >
-            {(Object.keys(SCOPE_LABELS) as GoalScopeType[]).map((s) => (
-              <option key={s} value={s}>
-                {SCOPE_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Quem/qual"
-            value={scopeId}
-            onChange={(e) => setScopeId(e.target.value)}
-            className={`${selectCls} max-w-[200px]`}
-          >
-            <option value="">Selecione…</option>
-            {scopeOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Período"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as GoalPeriod)}
-            className={selectCls}
-          >
-            {(Object.keys(GOAL_PERIOD_LABELS) as GoalPeriod[]).map((p) => (
-              <option key={p} value={p}>
-                {GOAL_PERIOD_LABELS[p]}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-1">
-            Alvo
+      <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+        {/* Nova meta */}
+        <Panel
+          title="Nova meta"
+          icon={<Plus size={14} />}
+          className="lg:sticky lg:top-[160px]"
+          bodyClassName="flex flex-col gap-4"
+        >
+          <Field label="Nome">
             <input
-              aria-label="Alvo"
-              type="number"
-              min={1}
-              max={100000}
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              className={`${selectCls} w-20`}
+              aria-label="Nome da meta"
+              value={name}
+              maxLength={120}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nome (ex.: Contatos da semana)"
+              className={`${fieldCls} w-full`}
             />
-          </label>
+          </Field>
+          <Field label="Métrica">
+            <select
+              aria-label="Métrica"
+              value={metric}
+              onChange={(e) => setMetric(e.target.value as GoalMetric)}
+              className={`${fieldCls} w-full`}
+            >
+              {GOAL_METRICS.map((m) => (
+                <option key={m} value={m}>
+                  {GOAL_METRIC_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Alcance">
+            <Segmented
+              ariaLabel="Alcance"
+              value={scopeType}
+              onChange={(v) => {
+                setScopeType(v);
+                setScopeId('');
+              }}
+              options={(Object.keys(SCOPE_LABELS) as GoalScopeType[]).map((k) => ({
+                key: k,
+                label: SCOPE_LABELS[k],
+              }))}
+            />
+            <select
+              aria-label="Quem/qual"
+              value={scopeId}
+              onChange={(e) => setScopeId(e.target.value)}
+              className={`${fieldCls} mt-2 w-full`}
+            >
+              <option value="">Selecione…</option>
+              {scopeOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3">
+            <Field label="Período">
+              <Segmented
+                ariaLabel="Período"
+                value={period}
+                onChange={setPeriod}
+                options={(Object.keys(GOAL_PERIOD_LABELS) as GoalPeriod[]).map((k) => ({
+                  key: k,
+                  label: GOAL_PERIOD_LABELS[k],
+                }))}
+              />
+            </Field>
+            <Field label="Alvo">
+              <input
+                aria-label="Alvo"
+                type="number"
+                min={1}
+                max={100000}
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                className={`${fieldCls} w-full tabular-nums`}
+              />
+            </Field>
+          </div>
+          {error && (
+            <p className="rounded-lg bg-red-500/10 p-2.5 text-xs text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
           <Button
-            size="sm"
+            className="w-full"
             disabled={!canCreate || createMut.isPending}
             onClick={() => createMut.mutate()}
           >
             {createMut.isPending ? (
-              <Loader2 size={13} className="animate-spin" />
+              <Loader2 size={14} className="animate-spin" />
             ) : (
-              <Plus size={13} />
+              <Plus size={14} />
             )}
             Criar meta
           </Button>
-        </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-      </section>
+        </Panel>
 
-      {/* Lista */}
-      {goalsQ.isLoading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 size={18} className="text-fg-muted animate-spin" />
-        </div>
-      ) : goalsQ.isError || !goalsQ.data ? (
-        <p className="text-fg-muted text-sm">Não foi possível carregar as metas.</p>
-      ) : goalsQ.data.length === 0 ? (
-        <p className="text-fg-muted text-sm">Nenhuma meta criada ainda.</p>
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {goalsQ.data.map((g) => (
-            <GoalRow
-              key={g.id}
-              goal={g}
-              onChanged={invalidate}
-              onDelete={async () => {
-                const ok = await confirm({
-                  title: 'Remover meta?',
-                  description: `"${g.name}" deixa de aparecer no painel.`,
-                  confirmLabel: 'Remover',
-                });
-                if (!ok) return;
-                await deleteGoal(g.id);
-                void invalidate();
-              }}
-            />
-          ))}
-        </ul>
-      )}
+        {/* Lista */}
+        <section className="flex min-w-0 flex-col gap-3">
+          <SectionHeading
+            description={
+              goalsQ.data && goalsQ.data.length > 0
+                ? `${goalsQ.data.filter((g) => g.isActive).length} ativa(s) de ${goalsQ.data.length}`
+                : undefined
+            }
+          >
+            Metas cadastradas
+          </SectionHeading>
+          {goalsQ.isLoading ? (
+            <div className="flex justify-center py-10">
+              <Spinner />
+            </div>
+          ) : goalsQ.isError || !goalsQ.data ? (
+            <p className="text-fg-muted text-sm">Não foi possível carregar as metas.</p>
+          ) : goalsQ.data.length === 0 ? (
+            <div className="border-border rounded-xl border border-dashed">
+              <EmptyState icon={<Target size={16} />} title="Nenhuma meta criada ainda." />
+            </div>
+          ) : (
+            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              {goalsQ.data.map((g) => (
+                <GoalRow
+                  key={g.id}
+                  goal={g}
+                  onChanged={invalidate}
+                  onDelete={async () => {
+                    const ok = await confirm({
+                      title: 'Remover meta?',
+                      description: `"${g.name}" deixa de aparecer no painel.`,
+                      confirmLabel: 'Remover',
+                    });
+                    if (!ok) return;
+                    await deleteGoal(g.id);
+                    void invalidate();
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-fg text-xs font-medium">{label}</span>
+      {children}
     </div>
   );
 }
@@ -264,18 +303,21 @@ function GoalRow({
     onError: (err) => notify.error(err instanceof ApiError ? err.message : 'Erro ao salvar.'),
   });
   return (
-    <li className={`flex flex-col gap-2 ${goal.isActive ? '' : 'opacity-60'}`}>
-      <GoalProgressCard goal={goal} />
-      <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
-        <label className="flex items-center gap-1">
+    <li
+      className={`border-border/70 bg-bg flex flex-col overflow-hidden rounded-xl border shadow-sm ${goal.isActive ? '' : 'opacity-60'}`}
+    >
+      <GoalProgressCard goal={goal} className="rounded-none border-0" />
+      <div className="border-border/60 bg-bg-subtle flex flex-wrap items-center gap-3 border-t px-4 py-2.5 text-xs">
+        <label className="flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"
+            className="accent-primary size-4"
             checked={goal.isActive}
             onChange={(e) => mut.mutate({ isActive: e.target.checked })}
           />
           Ativa
         </label>
-        <label className="flex items-center gap-1">
+        <label className="flex items-center gap-1.5">
           Alvo
           <input
             aria-label={`Alvo de ${goal.name}`}
@@ -284,25 +326,26 @@ function GoalRow({
             max={100000}
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            className={`${selectCls} w-20`}
+            className={`${fieldCls} h-8 w-20 tabular-nums`}
           />
         </label>
         {Number(target) !== goal.target && Number(target) >= 1 && (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => mut.mutate({ target: Number(target) })}
-            className="text-primary hover:underline"
           >
             Salvar alvo
-          </button>
+          </Button>
         )}
         <button
           type="button"
           onClick={onDelete}
-          className="text-fg-muted ml-auto hover:text-red-500"
+          className="text-fg-muted ml-auto grid size-8 place-items-center rounded-lg hover:bg-red-500/10 hover:text-red-500"
           aria-label={`Remover ${goal.name}`}
+          title="Remover meta"
         >
-          <Trash2 size={13} />
+          <Trash2 size={14} />
         </button>
       </div>
     </li>

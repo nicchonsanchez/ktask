@@ -4,8 +4,19 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, Trash2, Wand2 } from 'lucide-react';
-import { Button } from '@ktask/ui';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  PhoneCall,
+  Plus,
+  Shapes,
+  Trash2,
+  Wand2,
+} from 'lucide-react';
+import { Button, buttonVariants } from '@ktask/ui';
 import {
   canViewPerformanceReport,
   CONCLUSION_CATEGORIES,
@@ -26,6 +37,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { performanceQueries, saveBoardPerformanceConfig } from '@/lib/queries/performance';
 import { useNotify } from '@/components/ui/dialogs';
 import { startOfZonedDay } from '@/lib/performance-period';
+import { Spinner } from '@/components/performance/ui';
 
 /**
  * Doc 52 (D8) — "Configuração dos relatórios": tela central por fluxo.
@@ -41,8 +53,13 @@ const LEVEL_LABEL: Record<PerformanceConfigLevel, string> = {
 };
 const LEVEL_CLS: Record<PerformanceConfigLevel, string> = {
   NONE: 'text-fg-muted bg-bg-muted',
-  BASIC: 'text-sky-700 bg-sky-500/10',
-  FULL: 'text-emerald-700 bg-emerald-500/10',
+  BASIC: 'text-sky-700 bg-sky-500/10 dark:text-sky-400',
+  FULL: 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-400',
+};
+const LEVEL_DOT: Record<PerformanceConfigLevel, string> = {
+  NONE: 'bg-fg-subtle',
+  BASIC: 'bg-sky-500',
+  FULL: 'bg-emerald-500',
 };
 const CLASS_LABELS: Record<TransitionOverride['movementClass'], string> = {
   AVANCO: 'Avanço',
@@ -59,7 +76,7 @@ const STATUS_LABEL = {
 } as const;
 
 const selectCls =
-  'border-border bg-bg text-fg rounded-md border px-2 py-1 text-xs focus:outline-none';
+  'border-border bg-bg text-fg h-8 rounded-lg border px-2.5 text-xs transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
 const fmtDate = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(
     new Date(iso),
@@ -100,16 +117,18 @@ export default function ConfiguracaoRelatoriosPage() {
   }
 
   return (
-    <div className="container flex flex-col gap-4 py-5">
-      <div className="flex flex-col gap-1">
+    <div className="container flex flex-col gap-6 py-6">
+      <div className="flex flex-col gap-2">
         <Link
           href="/indicadores/desempenho"
-          className="text-fg-muted hover:text-fg inline-flex w-fit items-center gap-1 text-xs"
+          className="text-fg-muted hover:text-fg inline-flex w-fit items-center gap-1 text-xs font-medium"
         >
-          <ArrowLeft size={12} /> Desempenho da equipe
+          <ArrowLeft size={14} /> Desempenho da equipe
         </Link>
-        <h2 className="text-fg text-base font-semibold">Configuração dos relatórios</h2>
-        <p className="text-fg-muted max-w-3xl text-xs">
+        <h2 className="text-fg text-xl font-semibold tracking-tight">
+          Configuração dos relatórios
+        </h2>
+        <p className="text-fg-muted max-w-3xl text-sm">
           Para cada fluxo, escolha qual coluna representa &quot;finalizado&quot; nas análises. Isso
           não altera o quadro: nomes, colunas e a coluna Finalizado do Kanban continuam iguais. Na
           configuração avançada você define a ordem do funil para medir avanços e retrocessos.
@@ -118,57 +137,80 @@ export default function ConfiguracaoRelatoriosPage() {
 
       {listQ.isLoading ? (
         <div className="flex justify-center py-10">
-          <Loader2 size={18} className="text-fg-muted animate-spin" />
+          <Spinner />
         </div>
       ) : listQ.isError || !listQ.data ? (
         <p className="text-fg-muted text-sm">Não foi possível carregar os fluxos.</p>
       ) : (
-        <ul className="border-border/60 divide-border/40 divide-y rounded-lg border">
-          {listQ.data.map((b) => {
-            const open = selected === b.board.id;
-            return (
-              <li key={b.board.id}>
-                <button
-                  type="button"
-                  onClick={() => select(open ? null : b.board.id)}
-                  className="hover:bg-bg-muted/50 flex w-full flex-wrap items-center gap-2 px-3 py-2.5 text-left text-xs"
+        <>
+          <LevelSummary items={listQ.data.map((b) => b.level)} />
+          <ul className="flex flex-col gap-2">
+            {listQ.data.map((b) => {
+              const open = selected === b.board.id;
+              return (
+                <li
+                  key={b.board.id}
+                  className={`bg-bg overflow-hidden rounded-xl border transition-shadow ${
+                    open ? 'border-primary/40 shadow-md' : 'border-border/70 hover:shadow-sm'
+                  }`}
                 >
-                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <span
-                    aria-hidden
-                    className="inline-block size-2 rounded-full"
-                    style={{ backgroundColor: b.board.color ?? '#888' }}
-                  />
-                  <span className="text-fg min-w-0 flex-1 truncate font-medium">
-                    {b.board.name}
-                  </span>
-                  {b.area && (
-                    <span className="text-fg-muted">{PERFORMANCE_AREA_LABELS[b.area]}</span>
-                  )}
-                  {b.contactLoggingEnabled && (
-                    <span className="text-fg-muted hidden sm:inline">· Registro de contato</span>
-                  )}
-                  {b.conclusionLists.length > 0 && (
-                    <span className="text-fg-muted hidden max-w-[280px] truncate sm:inline">
-                      Finalizado: {b.conclusionLists.map((l) => l.name).join(', ')}
-                    </span>
-                  )}
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${LEVEL_CLS[b.level]}`}
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => select(open ? null : b.board.id)}
+                    className="hover:bg-bg-subtle/60 flex w-full items-center gap-3 px-4 py-3.5 text-left"
                   >
-                    {LEVEL_LABEL[b.level]}
-                  </span>
-                </button>
-                {open && (
-                  <BoardEditor
-                    boardId={b.board.id}
-                    timeZone={orgQ.data?.timezone || 'America/Sao_Paulo'}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    <span
+                      aria-hidden
+                      className="inline-block size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: b.board.color ?? '#888' }}
+                    />
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="text-fg truncate text-sm font-medium">{b.board.name}</span>
+                      <span className="text-fg-muted flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                        {b.area && (
+                          <span className="inline-flex items-center gap-1">
+                            <Shapes size={12} /> {PERFORMANCE_AREA_LABELS[b.area]}
+                          </span>
+                        )}
+                        {b.contactLoggingEnabled && (
+                          <span className="inline-flex items-center gap-1">
+                            <PhoneCall size={12} /> Registro de contato
+                          </span>
+                        )}
+                        {b.conclusionLists.length > 0 && (
+                          <span className="hidden max-w-[360px] items-center gap-1 truncate sm:inline-flex">
+                            <CheckCircle2 size={12} className="shrink-0" />
+                            <span className="truncate">
+                              Finalizado: {b.conclusionLists.map((l) => l.name).join(', ')}
+                            </span>
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${LEVEL_CLS[b.level]}`}
+                    >
+                      <span className={`size-1.5 rounded-full ${LEVEL_DOT[b.level]}`} />
+                      {LEVEL_LABEL[b.level]}
+                    </span>
+                    {open ? (
+                      <ChevronDown size={16} className="text-fg-muted shrink-0" />
+                    ) : (
+                      <ChevronRight size={16} className="text-fg-muted shrink-0" />
+                    )}
+                  </button>
+                  {open && (
+                    <BoardEditor
+                      boardId={b.board.id}
+                      timeZone={orgQ.data?.timezone || 'America/Sao_Paulo'}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );
@@ -240,13 +282,13 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
 
   if (q.isLoading) {
     return (
-      <div className="flex justify-center py-6">
-        <Loader2 size={16} className="text-fg-muted animate-spin" />
+      <div className="border-border/60 flex justify-center border-t py-8">
+        <Spinner />
       </div>
     );
   }
   if (q.isError || !q.data)
-    return <p className="text-fg-muted px-3 pb-3 text-xs">Não foi possível carregar.</p>;
+    return <p className="text-fg-muted px-4 pb-4 text-xs">Não foi possível carregar.</p>;
 
   const setCol = (id: string, patch: Partial<PerformanceColumnConfig>) =>
     setCols((s) => ({ ...s, [id]: { ...s[id]!, ...patch } }));
@@ -276,13 +318,17 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
     const c = cols[l.id];
     if (!c) return null;
     return (
-      <tr key={l.id}>
-        <td className="py-1.5 pr-2">
-          <span className="text-fg">{l.name}</span>
+      <tr key={l.id} className="hover:bg-bg-subtle/60">
+        <td className="py-2 pl-3 pr-2">
+          <span className="text-fg font-medium">{l.name}</span>
           {l.status !== 'ACTIVE' && (
             <span className="text-fg-subtle ml-1">({STATUS_LABEL[l.status]})</span>
           )}
-          {l.isFinalList && <span className="text-fg-subtle ml-1">(Finalizado do Kanban)</span>}
+          {l.isFinalList && (
+            <span className="bg-bg-muted text-fg-muted ml-2 rounded px-1.5 py-0.5 text-[10px]">
+              Finalizado do Kanban
+            </span>
+          )}
         </td>
         <td className="px-2">
           <select
@@ -368,10 +414,10 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
   const allForOverrides = [...active, ...old];
 
   return (
-    <div className="bg-bg-muted/30 flex flex-col gap-4 px-3 pb-4 pt-2 sm:px-8">
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <label className="flex items-center gap-1.5">
-          Área
+    <div className="border-border/60 flex flex-col gap-6 border-t px-4 py-5 sm:px-6">
+      <div className="grid gap-3 text-xs md:grid-cols-3">
+        <label className="border-border/70 flex flex-col gap-2 rounded-xl border p-3">
+          <span className="text-fg font-medium">Área</span>
           <select
             value={area}
             onChange={(e) => setArea(e.target.value as PerformanceArea | '')}
@@ -385,77 +431,76 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
             ))}
           </select>
         </label>
-        <label
-          className="flex items-center gap-1.5"
-          title="Mostra botões opcionais (Ligação, WhatsApp, E-mail, Reunião, Proposta...) na caixa de comentário dos cards deste fluxo. Nos outros fluxos nada muda."
-        >
-          <input
-            type="checkbox"
-            checked={contactLogging}
-            onChange={(e) => setContactLogging(e.target.checked)}
-          />
-          Registro de contato nos cards deste fluxo
-        </label>
-        <label className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={advanced}
-            onChange={(e) => setAdvanced(e.target.checked)}
-          />
-          Configuração avançada (ordem do funil, transferências)
-        </label>
-        {advanced && (
-          <button
-            type="button"
-            onClick={suggestOrder}
-            className="text-primary inline-flex items-center gap-1 hover:underline"
-            title="Preenche a ordem pela posição das colunas. Não define finalizado."
-          >
-            <Wand2 size={12} /> Sugerir ordem
-          </button>
-        )}
+        <OptionCard
+          checked={contactLogging}
+          onChange={setContactLogging}
+          title="Registro de contato nos cards deste fluxo"
+          description="Mostra botões opcionais (Ligação, WhatsApp, E-mail, Reunião, Proposta...) na caixa de comentário dos cards deste fluxo. Nos outros fluxos nada muda."
+        />
+        <OptionCard
+          checked={advanced}
+          onChange={setAdvanced}
+          title="Configuração avançada (ordem do funil, transferências)"
+          description="Define a ordem das colunas para medir avanços, retrocessos e transferências."
+        />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] text-xs">
-          <thead className="text-fg-muted text-left">
-            <tr>
-              <th className="py-1.5 pr-2 font-medium">Coluna</th>
-              <th className="px-2 font-medium">Finalizado nas análises</th>
-              {advanced && (
-                <>
-                  <th className="px-2 font-medium">Categoria</th>
-                  <th className="px-2 font-medium">Ordem</th>
-                  <th className="px-2 text-center font-medium">Contabilizar</th>
-                  <th className="px-2 text-center font-medium">Reunião agendada</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-border/40 divide-y">{active.map(renderRow)}</tbody>
-          {old.length > 0 && (
-            <tbody>
-              <tr>
-                <td colSpan={advanced ? 6 : 2} className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowOld((v) => !v)}
-                    className="text-fg-muted hover:text-fg inline-flex items-center gap-1"
-                  >
-                    {showOld ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    Colunas antigas que aparecem no histórico ({old.length})
-                  </button>
-                </td>
-              </tr>
-              {showOld && old.map(renderRow)}
-            </tbody>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-fg text-sm font-semibold">Colunas do fluxo</p>
+          {advanced && (
+            <button
+              type="button"
+              onClick={suggestOrder}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              title="Preenche a ordem pela posição das colunas. Não define finalizado."
+            >
+              <Wand2 size={14} /> Sugerir ordem
+            </button>
           )}
-        </table>
+        </div>
+
+        <div className="border-border/70 overflow-x-auto rounded-xl border">
+          <table className="w-full min-w-[480px] text-xs">
+            <thead className="bg-bg-subtle text-fg-muted border-border/60 border-b text-left text-[11px] uppercase tracking-wide">
+              <tr>
+                <th className="py-2.5 pl-3 pr-2 font-semibold">Coluna</th>
+                <th className="px-2 font-semibold">Finalizado nas análises</th>
+                {advanced && (
+                  <>
+                    <th className="px-2 font-semibold">Categoria</th>
+                    <th className="px-2 font-semibold">Ordem</th>
+                    <th className="px-2 text-center font-semibold">Contabilizar</th>
+                    <th className="px-2 text-center font-semibold">Reunião agendada</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-border/50 divide-y">{active.map(renderRow)}</tbody>
+            {old.length > 0 && (
+              <tbody>
+                <tr>
+                  <td colSpan={advanced ? 6 : 2} className="border-border/50 border-t px-3 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowOld((v) => !v)}
+                      className="text-fg-muted hover:text-fg inline-flex items-center gap-1 font-medium"
+                    >
+                      {showOld ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      Colunas antigas que aparecem no histórico ({old.length})
+                    </button>
+                  </td>
+                </tr>
+                {showOld && old.map(renderRow)}
+              </tbody>
+            )}
+          </table>
+        </div>
       </div>
 
       {advanced && (
         <div className="flex flex-col gap-2 text-xs">
-          <p className="text-fg font-medium">Exceções de transição</p>
+          <p className="text-fg text-sm font-semibold">Exceções de transição</p>
           <p className="text-fg-muted">
             Para caminhos que fogem da ordem (ex.: Finalizado → Marketing como Transferência).
           </p>
@@ -549,8 +594,8 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
         </div>
       )}
 
-      <div className="border-border/60 flex flex-col gap-2 border-t pt-3 text-xs">
-        <p className="text-fg font-medium">Vale a partir de</p>
+      <div className="bg-bg-subtle flex flex-col gap-3 rounded-xl p-4 text-xs">
+        <p className="text-fg text-sm font-semibold">Vale a partir de</p>
         <label className="flex items-center gap-1.5">
           <input type="radio" checked={vigencia === 'now'} onChange={() => setVigencia('now')} />
           Agora (o histórico anterior mantém a classificação que tinha)
@@ -583,10 +628,12 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
           placeholder="Observação desta versão (opcional)"
           className={`${selectCls} max-w-md`}
         />
-        {error && <p className="text-red-500">{error}</p>}
+        {error && (
+          <p className="rounded-lg bg-red-500/10 p-2.5 text-red-600 dark:text-red-400">{error}</p>
+        )}
         <div>
           <Button
-            size="sm"
+            size="md"
             onClick={() => mut.mutate()}
             disabled={mut.isPending || (vigencia === 'since' && !since)}
           >
@@ -597,11 +644,15 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
       </div>
 
       {q.data.versions.length > 0 && (
-        <div className="flex flex-col gap-1 text-xs">
-          <p className="text-fg font-medium">Histórico de versões</p>
-          <ul className="text-fg-muted flex flex-col gap-0.5">
+        <div className="flex flex-col gap-2 text-xs">
+          <p className="text-fg text-sm font-semibold">Histórico de versões</p>
+          <ul className="border-border/70 text-fg-muted ml-1 flex flex-col gap-2 border-l pl-4">
             {q.data.versions.map((v) => (
-              <li key={v.id}>
+              <li key={v.id} className="relative">
+                <span
+                  aria-hidden
+                  className="bg-primary/70 ring-bg absolute -left-[21px] top-1 size-2 rounded-full ring-4"
+                />
                 Vale desde {fmtDate(v.effectiveFrom)} · salva em {fmtDate(v.createdAt)} por{' '}
                 {v.createdBy?.name ?? '—'}
                 {v.note ? ` · ${v.note}` : ''}
@@ -610,6 +661,54 @@ function BoardEditor({ boardId, timeZone }: { boardId: string; timeZone: string 
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function OptionCard({
+  checked,
+  onChange,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+        checked ? 'border-primary/40 bg-primary/5' : 'border-border/70 hover:bg-bg-subtle'
+      }`}
+    >
+      <input
+        type="checkbox"
+        className="accent-primary mt-0.5 size-4 shrink-0"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="flex flex-col gap-1">
+        <span className="text-fg font-medium">{title}</span>
+        <span className="text-fg-muted leading-snug">{description}</span>
+      </span>
+    </label>
+  );
+}
+
+function LevelSummary({ items }: { items: PerformanceConfigLevel[] }) {
+  const count = (l: PerformanceConfigLevel) => items.filter((x) => x === l).length;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(['FULL', 'BASIC', 'NONE'] as const).map((l) => (
+        <span
+          key={l}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${LEVEL_CLS[l]}`}
+        >
+          <span className={`size-1.5 rounded-full ${LEVEL_DOT[l]}`} />
+          {LEVEL_LABEL[l]}: <span className="tabular-nums">{count(l)}</span>
+        </span>
+      ))}
     </div>
   );
 }
