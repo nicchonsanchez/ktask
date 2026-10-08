@@ -1,5 +1,10 @@
 import { api } from '@/lib/api-client';
-import type { OrgRole } from '@ktask/contracts';
+import type {
+  OrgRole,
+  ResponsibilityPreviewDto,
+  ResponsibilityTransferResultDto,
+  TransferResponsibilitiesInput,
+} from '@ktask/contracts';
 
 export interface MemberDetail {
   id: string;
@@ -30,6 +35,12 @@ export interface MemberActivityItem {
 }
 
 export const membersAdminQueries = {
+  /** Doc 55: previa das responsabilidades pendentes. */
+  responsibilities: (userId: string) => ({
+    queryKey: ['admin', 'members', userId, 'responsibilities'] as const,
+    queryFn: () =>
+      api.get<ResponsibilityPreviewDto>(`/api/v1/admin/members/${userId}/responsibilities`),
+  }),
   detail: (userId: string) => ({
     queryKey: ['admin', 'members', userId] as const,
     queryFn: () => api.get<MemberDetail>(`/api/v1/admin/members/${userId}`),
@@ -91,4 +102,12 @@ export function suspendMember(userId: string, reason: string) {
 
 export function unsuspendMember(userId: string) {
   return api.post(`/api/v1/admin/members/${userId}/unsuspend`);
+}
+
+/** Doc 55: transfere as responsabilidades pendentes para outro membro. */
+export function transferResponsibilities(userId: string, input: TransferResponsibilitiesInput) {
+  return api.post<ResponsibilityTransferResultDto>(
+    `/api/v1/admin/members/${userId}/responsibilities/transfer`,
+    input,
+  );
 }

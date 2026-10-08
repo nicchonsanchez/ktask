@@ -158,6 +158,12 @@ export function activityParts(a: ActivityNode): ActivityPart[] {
 
   switch (a.type) {
     case 'CARD_UPDATED': {
+      // Doc 55: transferencia de responsabilidades (lote feito pelo admin).
+      if (p.kind === 'responsibility_transfer') {
+        const from = typeof p.fromName === 'string' ? p.fromName : 'outra pessoa';
+        const to = typeof p.toName === 'string' ? p.toName : 'outra pessoa';
+        return ['transferiu as responsabilidades de ', { bold: from }, ' para ', { bold: to }];
+      }
       const fields = Array.isArray(p.fields) ? (p.fields as string[]) : [];
       if (fields.length === 0) return ['atualizou o card'];
 

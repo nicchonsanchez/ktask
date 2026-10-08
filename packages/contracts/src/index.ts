@@ -3,3 +3,4 @@ export * from './users';
 export * from './organizations';
 export * from './roles';
 export * from './performance';
+export * from './responsibility-transfer';

@@ -8,7 +8,13 @@ import type { TenantContext } from '@/common/tenant/tenant.types';
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator';
 import type { AuthenticatedRequestContext } from '@/modules/auth/auth.types';
 
+import {
+  TransferResponsibilitiesSchema,
+  type TransferResponsibilitiesInput,
+} from '@ktask/contracts';
+
 import { MembersAdminService } from './members-admin.service';
+import { ResponsibilityTransferService } from './responsibility-transfer.service';
 import {
   UpdateMemberSchema,
   SuspendMemberSchema,
@@ -28,13 +34,18 @@ import {
  *   POST  /v1/admin/members/:userId/force-password-reset
  *   POST  /v1/admin/members/:userId/suspend
  *   POST  /v1/admin/members/:userId/unsuspend
+ *   GET   /v1/admin/members/:userId/responsibilities           -> previa (doc 55)
+ *   POST  /v1/admin/members/:userId/responsibilities/transfer  -> transfere pendencias
  */
 @ApiTags('admin-members')
 @ApiBearerAuth()
 @UseGuards(TenantGuard)
 @Controller({ path: 'admin/members', version: '1' })
 export class MembersAdminController {
-  constructor(private readonly service: MembersAdminService) {}
+  constructor(
+    private readonly service: MembersAdminService,
+    private readonly transfers: ResponsibilityTransferService,
+  ) {}
 
   @Get(':userId')
   @ApiOperation({ summary: 'Detalhe completo do membro (modal admin)' })
@@ -124,5 +135,23 @@ export class MembersAdminController {
     @Param('userId') userId: string,
   ) {
     return this.service.unsuspend(actor.userId, org, userId);
+  }
+
+  @Get(':userId/responsibilities')
+  @ApiOperation({ summary: 'Previa das responsabilidades pendentes do membro (doc 55)' })
+  responsibilities(@CurrentOrg() org: TenantContext, @Param('userId') userId: string) {
+    return this.transfers.preview(org, userId);
+  }
+
+  @Post(':userId/responsibilities/transfer')
+  @ApiOperation({ summary: 'Transfere as responsabilidades pendentes para outro membro (doc 55)' })
+  transferResponsibilities(
+    @CurrentUser() actor: AuthenticatedRequestContext,
+    @CurrentOrg() org: TenantContext,
+    @Param('userId') userId: string,
+    @Body(new ZodValidationPipe(TransferResponsibilitiesSchema))
+    body: TransferResponsibilitiesInput,
+  ) {
+    return this.transfers.transfer(actor.userId, org, userId, body);
   }
 }

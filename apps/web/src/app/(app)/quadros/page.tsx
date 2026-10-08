@@ -294,6 +294,7 @@ function activityVerb(type: string, payload: Record<string, unknown>): string {
     if (kind.startsWith('approval.approved')) return 'aprovou';
     if (kind.startsWith('approval.rejected')) return 'reprovou';
     if (kind === 'privacy_changed') return 'mudou privacidade de';
+    if (kind === 'responsibility_transfer') return 'transferiu responsabilidades em';
     return 'editou';
   }
   return 'mexeu em';

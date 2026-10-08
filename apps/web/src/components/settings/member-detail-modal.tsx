@@ -36,8 +36,9 @@ import {
 import { updateMemberRole } from '@/lib/queries/members';
 import { useAuthStore } from '@/stores/auth-store';
 import { UserAvatar } from '@/components/user-avatar';
+import { MemberResponsibilitiesTab } from '@/components/settings/member-responsibilities-tab';
 
-type Tab = 'data' | 'security' | 'activity';
+type Tab = 'data' | 'security' | 'responsibilities' | 'activity';
 
 const ROLE_OPTIONS: OrgRole[] = ['ADMIN', 'GESTOR', 'MEMBER', 'GUEST'];
 
@@ -46,6 +47,7 @@ const ROLE_OPTIONS: OrgRole[] = ['ADMIN', 'GESTOR', 'MEMBER', 'GUEST'];
  * /configuracoes/membros. Tem 3 abas:
  *   - Dados: nome, email (com fluxo de confirmacao), phone, papel
  *   - Seguranca: forcar reset senha, ver 2FA, sessoes ativas, suspender
+ *   - Responsabilidades (doc 55): transferir pendencias para outro membro
  *   - Atividade: ultimas 30 actions
  *
  * Permissoes (do back-end):
@@ -162,6 +164,13 @@ export function MemberDetailModal({ userId, onClose }: { userId: string; onClose
                 active={tab === 'security'}
                 onClick={() => setTab('security')}
               />
+              {!isSelf && (
+                <TabBtn
+                  label="Responsabilidades"
+                  active={tab === 'responsibilities'}
+                  onClick={() => setTab('responsibilities')}
+                />
+              )}
               <TabBtn
                 label="Atividade"
                 active={tab === 'activity'}
@@ -175,6 +184,9 @@ export function MemberDetailModal({ userId, onClose }: { userId: string; onClose
               )}
               {tab === 'security' && (
                 <SecurityTab member={detailQ.data} canEdit={canEdit} onChanged={refresh} />
+              )}
+              {tab === 'responsibilities' && (
+                <MemberResponsibilitiesTab member={detailQ.data} canEdit={canEdit} />
               )}
               {tab === 'activity' && <ActivityTab userId={userId} />}
             </div>

@@ -152,6 +152,8 @@ enum ActivityType {
   MEMBER_SUSPENDED
   MEMBER_UNSUSPENDED
   MEMBER_REMOVED
+  /// Doc 55: transferencia em massa de responsabilidades pendentes entre membros.
+  MEMBER_RESPONSIBILITIES_TRANSFERRED
   /// Doc 52 (Fase 3): registro de contato comercial (CardInteraction).
   COMMERCIAL_ACTIVITY_LOGGED
   COMMERCIAL_ACTIVITY_UPDATED
