@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/cn';
 
 /**
- * Doc 52 (Fase 4, D10) / Doc 53 — cartao de progresso de uma meta. Mostra o
+ * Doc 52 (Fase 4, D10) / Doc 54 — cartao de progresso de uma meta. Mostra o
  * periodo atual com barra e os 3 periodos anteriores (cada um contra o alvo
  * que valia na epoca).
  */

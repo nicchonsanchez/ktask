@@ -1,4 +1,4 @@
-# 53 — Redesign visual do Desempenho da Equipe
+# 54 — Redesign visual do Desempenho da Equipe
 
 Branch: `feat/desempenho-redesign` (a partir de `main` f481bb1).
 Base funcional: doc 52 (já em produção). Pedido do Nicchon (07/10/2026): layout

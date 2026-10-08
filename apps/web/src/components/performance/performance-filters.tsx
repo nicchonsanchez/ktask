@@ -63,7 +63,7 @@ function FilterSelect({
   );
 }
 
-/** Doc 52/53 — barra de filtros do Desempenho da Equipe (spec §10). */
+/** Doc 52/54 — barra de filtros do Desempenho da Equipe (spec §10). */
 export function PerformanceFilters({
   value,
   onChange,

@@ -70,7 +70,7 @@ import {
 } from '@/components/performance/ui';
 
 /**
- * Doc 52 — aba "Desempenho da equipe" (spec §10–§13). Visual: doc 53.
+ * Doc 52 — aba "Desempenho da equipe" (spec §10–§13). Visual: doc 54.
  *
  * Responde "o que cada pessoa fez no período", com todo número clicável
  * (drill-down). So conta acoes humanas: automacao, sistema, aprovacao e
